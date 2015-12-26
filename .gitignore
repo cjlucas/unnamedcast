@@ -1,4 +1,7 @@
 pkg
 bin
-src/*
-!src/github.com/cjlucas
+!/src
+/src/*
+!/src/github.com
+/src/github.com/*
+!/src/github.com/cjlucas
