@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"encoding/xml"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -82,9 +83,16 @@ type JSONItem struct {
 	ImageURL        string        `json:"image_url"`
 }
 
-const RFC2822 = "Mon, 02 Jan 2006 15:04:05 MST"
+var pubDateFmts = []string{
+	"Mon, 02 Jan 2006 15:04:05 MST",
+	"Mon, 02 Jan 2006 15:04:05 -0700",
+}
 
 func parseDuration(duration string) time.Duration {
+	if duration == "" {
+		return time.Duration(0)
+	}
+
 	// Simple case, an integer in seconds
 	if val, err := strconv.ParseInt(duration, 0, 0); err == nil {
 		return time.Duration(val)
@@ -108,11 +116,13 @@ func parseDuration(duration string) time.Duration {
 }
 
 func parseDate(date string) time.Time {
-	t, err := time.Parse(RFC2822, date)
-	if err != nil {
-		panic(err)
+	for _, fmt := range pubDateFmts {
+		if t, err := time.Parse(fmt, date); err == nil {
+			return t
+		}
 	}
-	return t
+
+	panic(fmt.Sprintf("Could not parse date format: %s", date))
 }
 
 func main() {
