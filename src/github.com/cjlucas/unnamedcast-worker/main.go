@@ -94,7 +94,7 @@ func parseDuration(duration string) time.Duration {
 	}
 
 	// Simple case, an integer in seconds
-	if val, err := strconv.ParseInt(duration, 0, 0); err == nil {
+	if val, err := strconv.ParseInt(duration, 10, 0); err == nil {
 		return time.Duration(val)
 	}
 
@@ -103,7 +103,7 @@ func parseDuration(duration string) time.Duration {
 	secs := 0
 	curMultiplier := 1
 	for i := range split {
-		val, err := strconv.ParseInt(split[len(split)-i-1], 0, 0)
+		val, err := strconv.ParseInt(split[len(split)-i-1], 10, 0)
 		if err != nil {
 			panic(err)
 		}
