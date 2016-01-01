@@ -173,7 +173,14 @@ func main() {
 		panic(err)
 	} else {
 		r := bytes.NewReader(payload)
-		http.Post("http://localhost:8081/api/feed", "application/json", r)
+		url := "http://localhost:8081/api/feed"
+		resp, err := http.Post(url, "application/json", r)
+		// Read entire response to prevent broken pipe
+		ioutil.ReadAll(resp.Body)
+		defer resp.Body.Close()
+		if err != nil {
+			panic(err)
+		}
 	}
 
 }
