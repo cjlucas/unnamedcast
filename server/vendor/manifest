@@ -1,0 +1,74 @@
+{
+	"version": 0,
+	"dependencies": [
+		{
+			"importpath": "github.com/dustin/go-broadcast",
+			"repository": "https://github.com/dustin/go-broadcast",
+			"revision": "3bdf6d4a7164a50bc19d5f230e2981d87d2584f1",
+			"branch": "master"
+		},
+		{
+			"importpath": "github.com/gin-gonic/gin",
+			"repository": "https://github.com/gin-gonic/gin",
+			"revision": "52fcc5dbf6e94df33ad313858fb94b713e9d1b4a",
+			"branch": "master"
+		},
+		{
+			"importpath": "github.com/manucorporat/sse",
+			"repository": "https://github.com/manucorporat/sse",
+			"revision": "fe6ea2c8e398672518ef204bf0fbd9af858d0e15",
+			"branch": "master"
+		},
+		{
+			"importpath": "github.com/manucorporat/stats",
+			"repository": "https://github.com/manucorporat/stats",
+			"revision": "8f2d6ace262eba462e9beb552382c98be51d807b",
+			"branch": "master"
+		},
+		{
+			"importpath": "github.com/mattn/go-colorable",
+			"repository": "https://github.com/mattn/go-colorable",
+			"revision": "3dac7b4f76f6e17fb39b768b89e3783d16e237fe",
+			"branch": "master"
+		},
+		{
+			"importpath": "golang.org/x/crypto/bcrypt",
+			"repository": "https://go.googlesource.com/crypto",
+			"revision": "f18420efc3b4f8e9f3d51f6bd2476e92c46260e9",
+			"branch": "master",
+			"path": "/bcrypt"
+		},
+		{
+			"importpath": "golang.org/x/crypto/blowfish",
+			"repository": "https://go.googlesource.com/crypto",
+			"revision": "f18420efc3b4f8e9f3d51f6bd2476e92c46260e9",
+			"branch": "master",
+			"path": "/blowfish"
+		},
+		{
+			"importpath": "golang.org/x/net/context",
+			"repository": "https://go.googlesource.com/net",
+			"revision": "0cb26f788dd4625d1956c6fd97ffc4c90669d129",
+			"branch": "master",
+			"path": "/context"
+		},
+		{
+			"importpath": "gopkg.in/bluesuncorp/validator.v5",
+			"repository": "https://gopkg.in/bluesuncorp/validator.v5",
+			"revision": "d5acf1dac43705f8bfbb71d878e290e2bed3950b",
+			"branch": "master"
+		},
+		{
+			"importpath": "gopkg.in/mgo.v2",
+			"repository": "https://gopkg.in/mgo.v2",
+			"revision": "e30de8ac9ae3b30df7065f766c71f88bba7d4e49",
+			"branch": "v2"
+		},
+		{
+			"importpath": "gopkg.in/tomb.v2",
+			"repository": "https://gopkg.in/tomb.v2",
+			"revision": "14b3d72120e8d10ea6e6b7f87f7175734b1faab8",
+			"branch": "v2"
+		}
+	]
+}

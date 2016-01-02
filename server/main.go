@@ -2,15 +2,12 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
-	"io/ioutil"
 	"net/http"
 	"time"
 
+	"github.com/cjlucas/unnamedcast/server/vendor/gopkg.in/mgo.v2"
 	"github.com/gin-gonic/gin"
-	"github.com/gorilla/mux"
 
-	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 )
 
@@ -27,24 +24,6 @@ type Person struct {
 // }
 //
 var gSession *mgo.Session
-
-func AddPerson(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("AddPerson")
-	fmt.Printf("%#v\n", mux.Vars(r))
-
-	data, _ := ioutil.ReadAll(r.Body)
-	fmt.Println(string(data))
-
-	var p Person
-	json.Unmarshal(data, &p)
-
-	c := gSession.DB("test").C("people")
-
-	p.CreationTime = time.Now()
-	c.Insert(&p)
-
-	fmt.Println("Added that shit")
-}
 
 func FetchPersons(w http.ResponseWriter, r *http.Request) {
 	c := gSession.DB("test").C("people")
