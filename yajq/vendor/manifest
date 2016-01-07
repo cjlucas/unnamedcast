@@ -1,0 +1,17 @@
+{
+	"version": 0,
+	"dependencies": [
+		{
+			"importpath": "gopkg.in/bsm/ratelimit.v1",
+			"repository": "https://gopkg.in/bsm/ratelimit.v1",
+			"revision": "f14ad9c78b155f69b480cfa41cb655259baac260",
+			"branch": "v1"
+		},
+		{
+			"importpath": "gopkg.in/redis.v3",
+			"repository": "https://gopkg.in/redis.v3",
+			"revision": "aa0a9697d83d57be721f4ef8176d367c63873855",
+			"branch": "master"
+		}
+	]
+}
