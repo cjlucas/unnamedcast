@@ -51,7 +51,7 @@ func (q *Queue) buildKey(s ...string) string {
 	return strings.Join(s, ":")
 }
 
-func (q *Queue) incrJobId() (int, error) {
+func (q *Queue) incrJobID() (int, error) {
 	key := q.buildKey("cur_job_id")
 	conn := q.getConn()
 	defer q.putConn(conn)
@@ -60,7 +60,7 @@ func (q *Queue) incrJobId() (int, error) {
 }
 
 func (q *Queue) submitJob(j *Job) (*Job, error) {
-	id, err := q.incrJobId()
+	id, err := q.incrJobID()
 	if err != nil {
 		return nil, err
 	}
