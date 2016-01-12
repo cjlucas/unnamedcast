@@ -17,11 +17,17 @@ func TestSomething(t *testing.T) {
 		Name: "test",
 	})
 	j, err := q.SubmitDelayed(100, 5, time.Now())
-	fmt.Println(j, err)
+	fmt.Println("--before-- Got ID:", j.ID, err)
 
-	j, err = q.Wait()
-	fmt.Println(j, err)
+	for {
+		j, err = q.Wait()
+		fmt.Println("--after--- Got ID:", j.ID, err)
+		fmt.Println(j, err)
 
-	j.Logf("omgtest: %s", "hithere")
-	j.UpdateProgress(50)
+		time.Sleep(time.Second * 2)
+
+		q.Logf(j, "omgtest: %s", "hithere")
+		q.UpdateProgress(j, 50)
+		q.Done(j)
+	}
 }

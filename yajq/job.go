@@ -11,42 +11,31 @@ type Job struct {
 	ID             int
 	Delayed        bool
 	DelayedUntil   time.Time
-	Done           bool // TODO: done should not be public
+	done           bool
 	CreationTime   time.Time
 	CompletionTime time.Time
 	Priority       int
 	Payload        interface{}
 	Progress       int
 	Logs           []string
-	queue          *Queue
 }
 
-func (j *Job) key() string {
-	return j.queue.buildKey("jobs", strconv.Itoa(j.ID))
-}
+func (j *Job) asHash() map[string]string {
+	hash := map[string]string{
+		"id":              strconv.Itoa(int(j.ID)),
+		"delayed":         strconv.Itoa(btoi(j.Delayed)),
+		"delayed_until":   strconv.Itoa(int(j.DelayedUntil.Unix())),
+		"done":            strconv.Itoa(btoi(j.done)),
+		"creation_time":   strconv.Itoa(int(j.CreationTime.Unix())),
+		"completion_time": strconv.Itoa(int(j.CompletionTime.Unix())),
+		"priority":        strconv.Itoa(int(j.Priority)),
+	}
 
-func (j *Job) logKey() string {
-	return j.queue.buildKey("logs", strconv.Itoa(j.ID))
-}
+	if jsonPayload, err := json.Marshal(&j.Payload); err == nil {
+		hash["payload"] = string(jsonPayload)
+	}
 
-func (j *Job) UpdateProgress(progress int) error {
-	j.Progress = progress
-
-	conn := j.queue.getConn()
-	defer j.queue.putConn(conn)
-
-	_, err := conn.HSet(j.key(), "progress", strconv.Itoa(progress))
-	return err
-}
-
-func (j *Job) Logf(f string, vals ...interface{}) error {
-	s := fmt.Sprintf(f, vals...)
-
-	conn := j.queue.getConn()
-	defer j.queue.putConn(conn)
-
-	_, err := conn.RPush(j.logKey(), s)
-	return err
+	return hash
 }
 
 type jobUnmarshaller struct {
@@ -127,7 +116,7 @@ func unmarshalJob(c Conn, key string) (*Job, error) {
 		ID:             u.atoi(propMap["id"]),
 		Delayed:        u.atob(propMap["delayed"]),
 		DelayedUntil:   u.atot(propMap["delayed_until"]),
-		Done:           u.atob(propMap["done"]),
+		done:           u.atob(propMap["done"]),
 		CreationTime:   u.atot(propMap["creation_time"]),
 		CompletionTime: u.atot(propMap["completion_time"]),
 		Priority:       u.atoi(propMap["priority"]),

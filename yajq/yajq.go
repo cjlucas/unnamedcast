@@ -1,7 +1,6 @@
 package yajq
 
 import (
-	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -39,6 +38,14 @@ func (q *Queue) key(priority int) string {
 	return q.buildKey("queue", q.info.Name, strconv.Itoa(priority))
 }
 
+func (q *Queue) jobKey(j *Job) string {
+	return q.buildKey("jobs", strconv.Itoa(j.ID))
+}
+
+func (q *Queue) logKey(j *Job) string {
+	return q.buildKey("logs", strconv.Itoa(j.ID))
+}
+
 func (q *Queue) buildKey(s ...string) string {
 	s = append([]string{q.info.Prefix}, s...)
 	return strings.Join(s, ":")
@@ -58,32 +65,16 @@ func (q *Queue) submitJob(j *Job) (*Job, error) {
 		return nil, err
 	}
 
-	j.queue = q
 	j.ID = id
 	j.CreationTime = time.Now().UTC()
 
-	hashKeyValues := map[string]string{
-		"id":            strconv.Itoa(int(j.ID)),
-		"delayed":       strconv.Itoa(btoi(j.Delayed)),
-		"delayed_until": strconv.Itoa(int(j.DelayedUntil.Unix())),
-		"done":          strconv.Itoa(btoi(false)),
-		"creation_time": strconv.Itoa(int(j.CreationTime.Unix())),
-		"priority":      strconv.Itoa(int(j.Priority)),
-	}
-
-	if jsonPayload, err := json.Marshal(&j.Payload); err == nil {
-		hashKeyValues["payload"] = string(jsonPayload)
-	} else {
-		panic(err)
-	}
-
-	jobKey := j.key()
+	jobKey := q.jobKey(j)
 
 	conn := q.getConn()
 	defer q.putConn(conn)
 
 	// TODO: Should probably do some cleanup if an error was hit
-	for k, v := range hashKeyValues {
+	for k, v := range j.asHash() {
 		if _, err := conn.HSet(jobKey, k, v); err != nil {
 			return nil, err
 		}
@@ -124,6 +115,45 @@ func New(info *QueueInfo) *Queue {
 	}}
 
 	return &q
+}
+
+func (q *Queue) UpdateProgress(j *Job, progress int) error {
+	j.Progress = progress
+
+	conn := q.getConn()
+	defer q.putConn(conn)
+
+	_, err := conn.HSet(q.jobKey(j), "progress", strconv.Itoa(progress))
+	return err
+}
+
+func (q *Queue) Done(j *Job) error {
+	conn := q.getConn()
+	defer q.putConn(conn)
+
+	j.done = true
+	j.CompletionTime = time.Now().UTC()
+
+	hash := j.asHash()
+	fmt.Printf("%#v\n", hash)
+
+	for _, key := range []string{"done", "completion_time"} {
+		if _, err := conn.HSet(q.jobKey(j), key, hash[key]); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (q *Queue) Logf(j *Job, f string, vals ...interface{}) error {
+	s := fmt.Sprintf(f, vals...)
+
+	conn := q.getConn()
+	defer q.putConn(conn)
+
+	_, err := conn.RPush(q.logKey(j), s)
+	return err
 }
 
 func (q *Queue) Submit(priority int, payload interface{}) (*Job, error) {
@@ -174,7 +204,6 @@ func (q *Queue) Wait() (*Job, error) {
 	jobKey := results[1]
 
 	j, err := unmarshalJob(conn, jobKey)
-	j.queue = q
 
 	return j, nil
 }
