@@ -114,11 +114,12 @@ func unmarshalJob(c Conn, key string) (*Job, error) {
 	}
 
 	for _, prop := range jobProps {
-		if s, err := c.HGet(key, prop); err != nil {
+		s, err := c.HGet(key, prop)
+		if err != nil {
 			return nil, err
-		} else {
-			propMap[prop] = s
 		}
+
+		propMap[prop] = s
 	}
 
 	u := jobUnmarshaller{}
