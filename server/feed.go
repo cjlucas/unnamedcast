@@ -20,6 +20,7 @@ type Feed struct {
 	CreationTime     time.Time     `json:"creation_time"`
 	ModificationTime time.Time     `json:"modification_time"`
 	ImageURL         string        `json:"image_url"`
+	ITunesID         int           `json:"itunes_id"`
 
 	Category struct {
 		Name          string   `json:"name"`
@@ -113,11 +114,23 @@ func CreateFeed(c *gin.Context) {
 }
 
 func FindFeed(c *gin.Context) {
-	url := c.Query("url")
+	var query bson.M
+
+	for _, param := range []string{"url", "itunes_id"} {
+		if v := c.Query(param); v != "" {
+			query = bson.M{param: v}
+			break
+		}
+	}
+
+	if query == nil {
+		c.JSON(400, gin.H{"error": "invalid query parameter"})
+		return
+	}
 
 	var feed Feed
-	if err := feeds().Find(bson.M{"url": url}).One(&feed); err != nil {
-		c.JSON(400, gin.H{"error": "no results found"})
+	if err := feeds().Find(query).One(&feed); err != nil {
+		c.JSON(404, gin.H{"error": "no results found"})
 	} else {
 		c.JSON(200, &feed)
 	}

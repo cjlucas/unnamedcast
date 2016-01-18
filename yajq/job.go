@@ -16,6 +16,7 @@ type Job struct {
 	CompletionTime time.Time
 	Priority       int
 	Payload        interface{}
+	rawPayload     string
 	Progress       int
 	Logs           []string
 }
@@ -36,6 +37,10 @@ func (j *Job) asHash() map[string]string {
 	}
 
 	return hash
+}
+
+func (j *Job) UnmarshalPayload(v interface{}) error {
+	return json.Unmarshal([]byte(j.rawPayload), v)
 }
 
 type jobUnmarshaller struct {
@@ -121,6 +126,7 @@ func unmarshalJob(c Conn, key string) (*Job, error) {
 		CompletionTime: u.atot(propMap["completion_time"]),
 		Priority:       u.atoi(propMap["priority"]),
 		Payload:        u.parseJSON(propMap["payload"]),
+		rawPayload:     propMap["payload"],
 	}
 
 	if u.Err != nil {

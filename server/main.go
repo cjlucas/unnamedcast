@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/cjlucas/unnamedcast/server/vendor/gopkg.in/mgo.v2"
 	"github.com/gin-gonic/gin"
 
+	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 )
 
@@ -76,12 +76,12 @@ func main() {
 
 	api := g.Group("/api")
 
-	api.POST("/user", CreateUser)
+	api.POST("/users", CreateUser)
 	api.GET("/users/:id", RequireValidUserID, ReadUser)
 	api.PUT("/users/:id/feeds", RequireValidUserID, UpdateUserFeeds)
 	api.PUT("/users/:id/states", RequireValidUserID, UpdateUserItemStates)
 
-	api.POST("/feed", CreateFeed)
+	api.POST("/feeds", CreateFeed)
 	api.GET("/feeds/:id", RequireValidFeedID, ReadFeed)
 	api.GET("/feeds", FindFeed)
 	api.PUT("/feeds/:id/items", RequireValidFeedID, UpdateFeedItems)

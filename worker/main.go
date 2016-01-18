@@ -1,186 +1,96 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
-	"encoding/xml"
+	"flag"
 	"fmt"
-	"io/ioutil"
-	"net/http"
-	"os"
 	"strconv"
 	"strings"
-	"time"
+	"sync"
+
+	"github.com/cjlucas/unnamedcast/yajq"
 )
 
-type Channel struct {
-	Title  string `xml:"title"`
-	Author string `xml:"author"`
+const (
+	queueScrapeiTunesGenreList = "scrape-itunes-genre-list"
+	queueScrapeiTunesGenre     = "scrape-itunes-genre"
+	queueScrapeiTunesFeedList  = "scrape-itunes-feed-list"
+	queueUpdateFeed            = "update-feed"
+)
 
-	Image struct {
-		URL string `xml:"href,attr"`
-	} `xml:"image"`
-
-	Items []struct {
-		GUID   string `xml:"guid"`
-		Title  string `xml:"title"`
-		Link   string `xml:"link"`
-		Author string `xml:"author"`
-
-		Enclosure struct {
-			URL    string `xml:"url,attr"`
-			Length int    `xml:"length,attr"`
-			Type   string `xml:"type,attr"`
-		} `xml:"enclosure"`
-
-		// Format is RFC2822
-		PublicationDate string `xml:"pubDate"`
-
-		// Represented as an integer (in seconds) or HH:MM:SS, H:MM:SS, MM:SS, or M:SS
-		Duration string `xml:"duration"`
-
-		Image struct {
-			URL string `xml:"href,attr"`
-		} `xml:"image"`
-	} `xml:"item"`
-
-	Category struct {
-		Name          string `xml:"text,attr"`
-		Subcategories []struct {
-			Name string `xml:"text,attr"`
-		}
-	} `xml:"category"`
+type queueOpt struct {
+	Name       string
+	NumWorkers int
 }
 
-type RSSDoc struct {
-	XMLName xml.Name `xml:"rss"`
-	Channel Channel  `xml:"channel"`
+type queueOptList []queueOpt
+
+func (l *queueOptList) String() string {
+	return fmt.Sprintf("%#v", l)
 }
 
-type JSONFeed struct {
-	Title    string     `json:"title"`
-	URL      string     `json:"url"`
-	Author   string     `json:"author"`
-	Items    []JSONItem `json:"items"`
-	ImageURL string     `json:"image_url"`
-
-	Category struct {
-		Name          string   `json:"name"`
-		Subcategories []string `json:"subcategories"`
-	} `json:"category"`
-}
-
-type JSONItem struct {
-	GUID            string        `json:"guid"`
-	Link            string        `json:"link"`
-	Title           string        `json:"title"`
-	Description     string        `json:"description"`
-	URL             string        `json:"url"`
-	Author          string        `json:"author"`
-	Duration        time.Duration `json:"duration"`
-	Size            int           `json:"size"`
-	PublicationTime time.Time     `json:"publication_time"`
-	ImageURL        string        `json:"image_url"`
-}
-
-var pubDateFmts = []string{
-	"Mon, 02 Jan 2006 15:04:05 MST",
-	"Mon, 02 Jan 2006 15:04:05 -0700",
-}
-
-func parseDuration(duration string) time.Duration {
-	if duration == "" {
-		return time.Duration(0)
+func (l *queueOptList) Set(s string) error {
+	// format: name[:num_workers]
+	split := strings.Split(s, ":")
+	q := queueOpt{
+		Name:       split[0],
+		NumWorkers: 1,
 	}
 
-	// Simple case, an integer in seconds
-	if val, err := strconv.ParseInt(duration, 10, 0); err == nil {
-		return time.Duration(val)
-	}
-
-	// parse HH:MM:SS format backwards with incrementing multiplier
-	split := strings.Split(duration, ":")
-	secs := 0
-	curMultiplier := 1
-	for i := range split {
-		val, err := strconv.ParseInt(split[len(split)-i-1], 10, 0)
+	if len(split) == 2 {
+		i, err := strconv.Atoi(split[1])
 		if err != nil {
-			panic(err)
+			return err
 		}
-
-		secs += int(val) * curMultiplier
-		curMultiplier *= 60
+		q.NumWorkers = i
 	}
 
-	return time.Duration(secs)
+	*l = append(*l, q)
+	return nil
 }
 
-func parseDate(date string) time.Time {
-	for _, fmt := range pubDateFmts {
-		if t, err := time.Parse(fmt, date); err == nil {
-			return t
+func runQueueWorker(wg *sync.WaitGroup, q *yajq.Queue, w Worker) {
+	defer wg.Done()
+
+	for {
+		j, err := q.Wait()
+		if err != nil {
+			fmt.Println("Error occured while waiting for job:", err)
+			continue
+		}
+		if w != nil {
+			if err := w.Work(q, j); err != nil {
+				fmt.Printf("Job %d: Failed with error: %s\n", j.ID, err)
+			} else {
+				fmt.Printf("Job #%d: Done\n", j.ID)
+				q.Done(j)
+			}
 		}
 	}
-
-	panic(fmt.Sprintf("Could not parse date format: %s", date))
 }
 
 func main() {
-	fp, _ := os.Open("/Users/chris/Downloads/rss.xml")
-	defer fp.Close()
+	var queueList queueOptList
+	flag.Var(&queueList, "q", "Usage goes here")
+	flag.Parse()
 
-	var rss RSSDoc
-	data, err := ioutil.ReadAll(fp)
-	if err != nil {
-		panic(err)
+	yajq.Submit(queueScrapeiTunesGenreList, 0, nil)
+
+	var wg sync.WaitGroup
+
+	handlers := map[string]Worker{
+		queueScrapeiTunesGenreList: &ScrapeiTunesGenreListWorker{},
+		queueScrapeiTunesGenre:     &ScrapeiTunesGenreWorker{},
+		queueScrapeiTunesFeedList:  &ScrapeiTunesFeedListWorker{},
+		queueUpdateFeed:            &UpdateFeedWorker{},
 	}
 
-	if err := xml.Unmarshal(data, &rss); err != nil {
-		panic(err)
-	}
-
-	channel := rss.Channel
-	var feed JSONFeed
-	feed.Items = make([]JSONItem, len(channel.Items))
-
-	feed.Title = channel.Title
-	feed.ImageURL = channel.Image.URL
-	feed.Author = channel.Author
-	for i, item := range channel.Items {
-		jsonItem := &feed.Items[i]
-
-		jsonItem.GUID = item.GUID
-		jsonItem.Title = item.Title
-		jsonItem.Author = item.Author
-		jsonItem.URL = item.Enclosure.URL
-		jsonItem.Size = item.Enclosure.Length
-		jsonItem.PublicationTime = parseDate(item.PublicationDate)
-		jsonItem.Duration = parseDuration(item.Duration)
-		jsonItem.ImageURL = item.Image.URL
-		jsonItem.Link = item.Link
-	}
-
-	feed.Category.Name = channel.Category.Name
-	feed.Category.Subcategories = make(
-		[]string,
-		len(channel.Category.Subcategories))
-
-	for _, c := range channel.Category.Subcategories {
-		feed.Category.Subcategories = append(feed.Category.Subcategories, c.Name)
-	}
-
-	if payload, err := json.Marshal(&feed); err != nil {
-		panic(err)
-	} else {
-		r := bytes.NewReader(payload)
-		url := "http://localhost:8081/api/feed"
-		resp, err := http.Post(url, "application/json", r)
-		// Read entire response to prevent broken pipe
-		ioutil.ReadAll(resp.Body)
-		defer resp.Body.Close()
-		if err != nil {
-			panic(err)
+	for _, opt := range queueList {
+		for i := 0; i < opt.NumWorkers; i++ {
+			wg.Add(1)
+			fmt.Println(opt.Name, i)
+			go runQueueWorker(&wg, yajq.GetQueue(opt.Name), handlers[opt.Name])
 		}
 	}
 
+	wg.Wait()
 }
