@@ -6,22 +6,22 @@ import (
 	"regexp"
 	"strconv"
 
+	"github.com/cjlucas/unnamedcast/koda"
 	"github.com/cjlucas/unnamedcast/worker/api"
 	"github.com/cjlucas/unnamedcast/worker/itunes"
 	"github.com/cjlucas/unnamedcast/worker/rss"
-	"github.com/cjlucas/unnamedcast/yajq"
 )
 
 var iTunesIDRegexp = regexp.MustCompile(`/id(\d+)`)
 
 type Worker interface {
-	Work(q *yajq.Queue, j *yajq.Job) error
+	Work(q *koda.Queue, j *koda.Job) error
 }
 
 type ScrapeiTunesGenreListWorker struct {
 }
 
-func (w *ScrapeiTunesGenreListWorker) Work(q *yajq.Queue, j *yajq.Job) error {
+func (w *ScrapeiTunesGenreListWorker) Work(q *koda.Queue, j *koda.Job) error {
 	var payload struct {
 		URL string `json:url`
 	}
@@ -35,7 +35,7 @@ func (w *ScrapeiTunesGenreListWorker) Work(q *yajq.Queue, j *yajq.Job) error {
 	}
 
 	for _, genreURL := range p.GenreURLs() {
-		job, err := yajq.Submit(queueScrapeiTunesGenre, 0, map[string]string{
+		job, err := koda.Submit(queueScrapeiTunesGenre, 0, map[string]string{
 			"url": genreURL,
 		})
 
@@ -56,7 +56,7 @@ type ScrapeiTunesGenrePayload struct {
 	URL string `json:url`
 }
 
-func (w *ScrapeiTunesGenreWorker) Work(q *yajq.Queue, j *yajq.Job) error {
+func (w *ScrapeiTunesGenreWorker) Work(q *koda.Queue, j *koda.Job) error {
 	var payload ScrapeiTunesGenrePayload
 	if err := j.UnmarshalPayload(&payload); err != nil {
 		return err
@@ -74,7 +74,7 @@ func (w *ScrapeiTunesGenreWorker) Work(q *yajq.Queue, j *yajq.Job) error {
 		}
 
 		for _, url := range page.PaginationPageList() {
-			_, err := yajq.Submit(queueScrapeiTunesFeedList, 0, ScrapeiTunesFeedListPayload{
+			_, err := koda.Submit(queueScrapeiTunesFeedList, 0, ScrapeiTunesFeedListPayload{
 				URL: url,
 			})
 			if err != nil {
@@ -93,7 +93,7 @@ type ScrapeiTunesFeedListPayload struct {
 	URL string `json:url`
 }
 
-func (w *ScrapeiTunesFeedListWorker) Work(q *yajq.Queue, j *yajq.Job) error {
+func (w *ScrapeiTunesFeedListWorker) Work(q *koda.Queue, j *koda.Job) error {
 	var payload ScrapeiTunesFeedListPayload
 	if err := j.UnmarshalPayload(&payload); err != nil {
 		return err
@@ -124,7 +124,7 @@ func (w *ScrapeiTunesFeedListWorker) Work(q *yajq.Queue, j *yajq.Job) error {
 				continue
 			}
 
-			_, err = yajq.Submit(queueUpdateFeed, 0, &UpdateFeedPayload{
+			_, err = koda.Submit(queueUpdateFeed, 0, &UpdateFeedPayload{
 				URL:      feedURL,
 				ITunesID: int(id),
 			})
@@ -184,7 +184,7 @@ func rssDocumentToAPIPayload(doc *rss.Document) (*api.Feed, error) {
 	return &feed, nil
 }
 
-func (w *UpdateFeedWorker) Work(q *yajq.Queue, j *yajq.Job) error {
+func (w *UpdateFeedWorker) Work(q *koda.Queue, j *koda.Job) error {
 	var payload UpdateFeedPayload
 	if err := j.UnmarshalPayload(&payload); err != nil {
 		return err

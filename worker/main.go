@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/cjlucas/unnamedcast/yajq"
+	"github.com/cjlucas/unnamedcast/koda"
 )
 
 const (
@@ -48,7 +48,7 @@ func (l *queueOptList) Set(s string) error {
 	return nil
 }
 
-func runQueueWorker(wg *sync.WaitGroup, q *yajq.Queue, w Worker) {
+func runQueueWorker(wg *sync.WaitGroup, q *koda.Queue, w Worker) {
 	defer wg.Done()
 
 	for {
@@ -73,7 +73,7 @@ func main() {
 	flag.Var(&queueList, "q", "Usage goes here")
 	flag.Parse()
 
-	yajq.Submit(queueScrapeiTunesGenreList, 0, nil)
+	koda.Submit(queueScrapeiTunesGenreList, 0, nil)
 
 	var wg sync.WaitGroup
 
@@ -88,7 +88,7 @@ func main() {
 		for i := 0; i < opt.NumWorkers; i++ {
 			wg.Add(1)
 			fmt.Println(opt.Name, i)
-			go runQueueWorker(&wg, yajq.GetQueue(opt.Name), handlers[opt.Name])
+			go runQueueWorker(&wg, koda.GetQueue(opt.Name), handlers[opt.Name])
 		}
 	}
 
