@@ -1,4 +1,4 @@
-package yajq
+package koda
 
 import (
 	"fmt"
@@ -41,7 +41,7 @@ func NewClient(opts *Options) *Client {
 	}
 
 	if opts.Prefix == "" {
-		opts.Prefix = "yajq"
+		opts.Prefix = "koda"
 	}
 
 	if opts.ConnFactory == nil {

@@ -1,11 +1,11 @@
-package yajq_test
+package koda_test
 
 import (
 	"fmt"
 	"testing"
 	"time"
 
-	"github.com/cjlucas/unnamedcast/yajq"
+	"github.com/cjlucas/unnamedcast/koda"
 )
 
 type blah struct {
@@ -13,7 +13,7 @@ type blah struct {
 }
 
 func TestSomething(t *testing.T) {
-	q := yajq.New(&yajq.QueueInfo{
+	q := koda.New(&koda.QueueInfo{
 		Name: "test",
 	})
 	j, err := q.SubmitDelayed(100, 5, time.Now())

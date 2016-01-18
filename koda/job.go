@@ -1,4 +1,4 @@
-package yajq
+package koda
 
 import (
 	"encoding/json"
