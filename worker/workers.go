@@ -13,128 +13,113 @@ import (
 )
 
 var iTunesIDRegexp = regexp.MustCompile(`/id(\d+)`)
+var iTunesFeedURLRegexp = regexp.MustCompile(`https?://itunes.apple.com`)
 
 type Worker interface {
 	Work(q *koda.Queue, j *koda.Job) error
 }
 
-type ScrapeiTunesGenreListWorker struct {
+type ScrapeiTunesFeeds struct {
 }
 
-func (w *ScrapeiTunesGenreListWorker) Work(q *koda.Queue, j *koda.Job) error {
-	var payload struct {
-		URL string `json:url`
-	}
-	if err := j.UnmarshalPayload(&payload); err != nil {
-		return err
-	}
+func (w *ScrapeiTunesFeeds) scrapeGenre(url string) ([]string, error) {
+	var feedListURLs []string
 
-	p, err := itunes.NewGenreListPage()
+	urls, err := itunes.AlphabetPageListForFeedListPage(url)
 	if err != nil {
-		return err
-	}
-
-	for _, genreURL := range p.GenreURLs() {
-		job, err := koda.Submit(queueScrapeiTunesGenre, 0, map[string]string{
-			"url": genreURL,
-		})
-
-		if err != nil {
-			return err
-		}
-
-		q.Log(j, fmt.Sprintf("Added job to parse url: %s (id: %d)", genreURL, job.ID))
-	}
-
-	return nil
-}
-
-type ScrapeiTunesGenreWorker struct {
-}
-
-type ScrapeiTunesGenrePayload struct {
-	URL string `json:url`
-}
-
-func (w *ScrapeiTunesGenreWorker) Work(q *koda.Queue, j *koda.Job) error {
-	var payload ScrapeiTunesGenrePayload
-	if err := j.UnmarshalPayload(&payload); err != nil {
-		return err
-	}
-
-	urls, err := itunes.AlphabetPageListForFeedListPage(payload.URL)
-	if err != nil {
-		return err
+		return nil, err
 	}
 
 	for _, url := range urls {
 		page, err := itunes.NewFeedListPage(url)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		for _, url := range page.PaginationPageList() {
-			_, err := koda.Submit(queueScrapeiTunesFeedList, 0, ScrapeiTunesFeedListPayload{
-				URL: url,
-			})
-			if err != nil {
-				return err
-			}
+			feedListURLs = append(feedListURLs, url)
 		}
 	}
 
-	return nil
+	return feedListURLs, nil
 }
 
-type ScrapeiTunesFeedListWorker struct {
-}
-
-type ScrapeiTunesFeedListPayload struct {
-	URL string `json:url`
-}
-
-func (w *ScrapeiTunesFeedListWorker) Work(q *koda.Queue, j *koda.Job) error {
-	var payload ScrapeiTunesFeedListPayload
-	if err := j.UnmarshalPayload(&payload); err != nil {
-		return err
+func (w *ScrapeiTunesFeeds) scrapeFeedList(url string) ([]string, error) {
+	page, err := itunes.NewFeedListPage(url)
+	if err != nil {
+		return nil, err
 	}
 
-	page, err := itunes.NewFeedListPage(payload.URL)
+	return page.FeedURLs(), nil
+}
+
+func (w *ScrapeiTunesFeeds) Work(q *koda.Queue, j *koda.Job) error {
+	fmt.Println("Fetching the genres...")
+	page, err := itunes.NewGenreListPage()
 	if err != nil {
 		return err
 	}
 
-	for _, url := range page.FeedURLs() {
-		matches := iTunesIDRegexp.FindStringSubmatch(url)
-		if len(matches) < 2 {
-			fmt.Println("No iTunes ID found in url:", url)
-			continue
-		}
-
-		id, err := strconv.ParseInt(matches[1], 10, 0)
+	var feedListURLs []string
+	for _, url := range page.GenreURLs() {
+		fmt.Println("Scraping genre URL:", url)
+		urls, err := w.scrapeGenre(url)
 		if err != nil {
-			fmt.Println("Could not parse iTunes ID:", id)
-			continue
+			return err
 		}
 
-		if exists, err := api.FeedExistsWithiTunesID(int(id)); !exists && err == nil {
-			feedURL, err := itunes.ResolveiTunesFeedURL(url)
-			if err != nil {
-				fmt.Println("Failed to resolve rss feed for url:", url)
+		for _, url := range urls {
+			feedListURLs = append(feedListURLs, url)
+		}
+	}
+
+	fmt.Printf("Now scraping %d feed list urls\n", len(feedListURLs))
+
+	// Scan through all feed list pages and add feed url to map
+	// (Map is used to prune duplicate urls)
+	itunesIDFeedURLMap := make(map[int]string)
+	for _, url := range feedListURLs {
+		fmt.Println("Scraping feed list:", url)
+		urls, err := w.scrapeFeedList(url)
+		if err != nil {
+			return err
+		}
+
+		for _, url := range urls {
+			matches := iTunesIDRegexp.FindStringSubmatch(url)
+			if len(matches) < 2 {
+				fmt.Println("No ID match found for url", url)
 				continue
 			}
 
-			_, err = koda.Submit(queueUpdateFeed, 0, &UpdateFeedPayload{
-				URL:      feedURL,
-				ITunesID: int(id),
-			})
+			id, err := strconv.ParseInt(matches[1], 10, 0)
 			if err != nil {
-				q.Log(j, fmt.Sprintf("Failed to add update feed job"))
+				fmt.Println("Could not parse id:", matches[1])
 				continue
 			}
-			// fmt.Println("Added update feed job for url:", url)
+
+			itunesIDFeedURLMap[int(id)] = url
+		}
+	}
+
+	fmt.Printf("Found %d feeds\n", len(itunesIDFeedURLMap))
+
+	for id, url := range itunesIDFeedURLMap {
+		exists, err := api.FeedExistsWithiTunesID(id)
+		if exists {
+			continue
 		} else if err != nil {
 			return err
+		}
+
+		_, err = koda.Submit(queueUpdateFeed, 0, &UpdateFeedPayload{
+			URL:      url,
+			ITunesID: id,
+		})
+
+		if err != nil {
+			j.Logf("Failed to add update feed job")
+			continue
 		}
 	}
 
@@ -190,7 +175,16 @@ func (w *UpdateFeedWorker) Work(q *koda.Queue, j *koda.Job) error {
 		return err
 	}
 
-	resp, err := http.Get(payload.URL)
+	url := payload.URL
+	if iTunesFeedURLRegexp.MatchString(url) {
+		feedURL, err := itunes.ResolveiTunesFeedURL(url)
+		if err != nil {
+			return fmt.Errorf("Error occurred while resolving iTunes URL: %s", err)
+		}
+		url = feedURL
+	}
+
+	resp, err := http.Get(url)
 	if err != nil {
 		return err
 	}
@@ -206,7 +200,8 @@ func (w *UpdateFeedWorker) Work(q *koda.Queue, j *koda.Job) error {
 		return err
 	}
 
-	if feed.ITunesID != 0 {
+	feed.URL = payload.URL
+	if payload.ITunesID != 0 {
 		feed.ITunesID = payload.ITunesID
 	}
 

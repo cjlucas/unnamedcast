@@ -13,14 +13,6 @@ type Queue struct {
 	client *Client
 }
 
-func (q *Queue) getConn() Conn {
-	return q.client.connPool.Get().(Conn)
-}
-
-func (q *Queue) putConn(c Conn) {
-	q.client.connPool.Put(c)
-}
-
 func (q *Queue) key(priority int) string {
 	return q.client.buildKey("queue", q.name, strconv.Itoa(priority))
 }
@@ -35,8 +27,8 @@ func (q *Queue) logKey(j *Job) string {
 
 func (q *Queue) incrJobID() (int, error) {
 	key := q.client.buildKey("cur_job_id")
-	conn := q.getConn()
-	defer q.putConn(conn)
+	conn := q.client.getConn()
+	defer q.client.putConn(conn)
 	val, err := conn.Incr(key)
 	return int(val), err
 }
@@ -49,11 +41,13 @@ func (q *Queue) submitJob(j *Job) (*Job, error) {
 
 	j.ID = id
 	j.CreationTime = time.Now().UTC()
+	j.Queue = q
+	j.Client = q.client
 
 	jobKey := q.jobKey(j)
 
-	conn := q.getConn()
-	defer q.putConn(conn)
+	conn := q.client.getConn()
+	defer q.client.putConn(conn)
 
 	// TODO: Should probably do some cleanup if an error was hit
 	for k, v := range j.asHash() {
@@ -72,36 +66,10 @@ func (q *Queue) submitJob(j *Job) (*Job, error) {
 func (q *Queue) UpdateProgress(j *Job, progress int) error {
 	j.Progress = progress
 
-	conn := q.getConn()
-	defer q.putConn(conn)
+	conn := q.client.getConn()
+	defer q.client.putConn(conn)
 
 	_, err := conn.HSet(q.jobKey(j), "progress", strconv.Itoa(progress))
-	return err
-}
-
-func (q *Queue) Done(j *Job) error {
-	conn := q.getConn()
-	defer q.putConn(conn)
-
-	j.done = true
-	j.CompletionTime = time.Now().UTC()
-
-	hash := j.asHash()
-
-	for _, key := range []string{"done", "completion_time"} {
-		if _, err := conn.HSet(q.jobKey(j), key, hash[key]); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (q *Queue) Log(j *Job, log string) error {
-	conn := q.getConn()
-	defer q.putConn(conn)
-
-	_, err := conn.RPush(q.logKey(j), log)
 	return err
 }
 
@@ -123,8 +91,8 @@ func (q *Queue) SubmitDelayed(priority int, payload interface{}, t time.Time) (*
 }
 
 func (q *Queue) Wait() (*Job, error) {
-	conn := q.getConn()
-	defer q.putConn(conn)
+	conn := q.client.getConn()
+	defer q.client.putConn(conn)
 
 	queues := make([]string, maxPriority-minPriority+1)
 	for i := minPriority; i <= maxPriority; i++ {
@@ -139,6 +107,8 @@ func (q *Queue) Wait() (*Job, error) {
 	jobKey := results[1]
 
 	j, err := unmarshalJob(conn, jobKey)
+	j.Queue = q
+	j.Client = q.client
 
 	return j, nil
 }

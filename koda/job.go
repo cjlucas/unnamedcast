@@ -19,6 +19,8 @@ type Job struct {
 	rawPayload     string
 	Progress       int
 	Logs           []string
+	Queue          *Queue
+	Client         *Client
 }
 
 func (j *Job) asHash() map[string]string {
@@ -41,6 +43,34 @@ func (j *Job) asHash() map[string]string {
 
 func (j *Job) UnmarshalPayload(v interface{}) error {
 	return json.Unmarshal([]byte(j.rawPayload), v)
+}
+
+func (j *Job) Done() error {
+	conn := j.Client.getConn()
+	defer j.Client.putConn(conn)
+
+	j.done = true
+	j.CompletionTime = time.Now().UTC()
+
+	hash := j.asHash()
+
+	for _, key := range []string{"done", "completion_time"} {
+		if _, err := conn.HSet(j.Queue.jobKey(j), key, hash[key]); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (j *Job) Logf(s string, args ...interface{}) error {
+	log := fmt.Sprintf(s, args...)
+
+	conn := j.Client.getConn()
+	defer j.Client.putConn(conn)
+
+	_, err := conn.RPush(j.Queue.logKey(j), log)
+	return err
 }
 
 type jobUnmarshaller struct {

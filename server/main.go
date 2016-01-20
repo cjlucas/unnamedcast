@@ -72,6 +72,23 @@ func main() {
 
 	gSession = session
 
+	err = feeds().EnsureIndex(mgo.Index{
+		Key:      []string{"url"},
+		Unique:   true,
+		DropDups: true,
+	})
+
+	if err != nil {
+		panic(err)
+	}
+
+	err = feeds().EnsureIndex(mgo.Index{
+		Key: []string{"itunes_id"},
+	})
+	if err != nil {
+		panic(err)
+	}
+
 	g := gin.Default()
 
 	api := g.Group("/api")

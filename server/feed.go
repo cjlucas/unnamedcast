@@ -13,33 +13,33 @@ import (
 
 type Feed struct {
 	ID               bson.ObjectId `bson:"_id,omitempty" json:"id"`
-	Title            string        `json:"title"`
-	URL              string        `json:"url"`
-	Author           string        `json:"author"`
-	Items            []Item        `json:"items"`
-	CreationTime     time.Time     `json:"creation_time"`
-	ModificationTime time.Time     `json:"modification_time"`
-	ImageURL         string        `json:"image_url"`
-	ITunesID         int           `json:"itunes_id"`
+	Title            string        `json:"title" bson:"title"`
+	URL              string        `json:"url" bson:"url"`
+	Author           string        `json:"author" bson:"author"`
+	Items            []Item        `json:"items" bson:"items"`
+	CreationTime     time.Time     `json:"creation_time" bson:"creation_time"`
+	ModificationTime time.Time     `json:"modification_time" bson:"modification_time"`
+	ImageURL         string        `json:"image_url" bson:"image_url"`
+	ITunesID         int           `json:"itunes_id" bson:"itunes_id"`
 
 	Category struct {
-		Name          string   `json:"name"`
-		Subcategories []string `json:"subcategories"`
+		Name          string   `json:"name" bson:"name"`
+		Subcategories []string `json:"subcategories" bson:"subcategories"`
 	} `json:"category"`
 }
 
 type Item struct {
-	GUID             string        `json:"guid"`
-	Link             string        `json:"link"`
-	Title            string        `json:"title"`
-	URL              string        `json:"url"`
-	Author           string        `json:"author"`
-	Description      string        `json:"description"`
-	Duration         time.Duration `json:"duration"`
-	Size             int           `json:"size"`
-	PublicationTime  time.Time     `json:"publication_time"`
-	ModificationTime time.Time     `json:"modification_time"`
-	ImageURL         string        `json:"image_url"`
+	GUID             string        `json:"guid" bson:"guid"`
+	Link             string        `json:"link" bson:"link"`
+	Title            string        `json:"title" bson:"title"`
+	URL              string        `json:"url" bson:"url"`
+	Author           string        `json:"author" bson:"author"`
+	Description      string        `json:"description" bson:"description"`
+	Duration         time.Duration `json:"duration" bson:"duration"`
+	Size             int           `json:"size" bson:"size"`
+	PublicationTime  time.Time     `json:"publication_time" bson:"publication_time"`
+	ModificationTime time.Time     `json:"modification_time" bson:"modification_time"`
+	ImageURL         string        `json:"image_url" bson:"image_url"`
 }
 
 func ItemsEqual(a, b *Item) bool {
@@ -107,7 +107,7 @@ func CreateFeed(c *gin.Context) {
 	}
 
 	if err := feeds().Insert(&feed); err != nil {
-		c.JSON(500, gin.H{"error": "could not insert feed"})
+		c.JSON(500, gin.H{"error": err})
 	} else {
 		c.JSON(200, &feed)
 	}

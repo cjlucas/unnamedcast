@@ -68,6 +68,14 @@ func (c *Client) GetQueue(name string) *Queue {
 	}
 }
 
+func (c *Client) getConn() Conn {
+	return c.connPool.Get().(Conn)
+}
+
+func (c *Client) putConn(conn Conn) {
+	c.connPool.Put(conn)
+}
+
 func (c *Client) buildKey(s ...string) string {
 	s = append([]string{c.opts.Prefix}, s...)
 	return strings.Join(s, ":")

@@ -11,10 +11,8 @@ import (
 )
 
 const (
-	queueScrapeiTunesGenreList = "scrape-itunes-genre-list"
-	queueScrapeiTunesGenre     = "scrape-itunes-genre"
-	queueScrapeiTunesFeedList  = "scrape-itunes-feed-list"
-	queueUpdateFeed            = "update-feed"
+	queueScrapeiTunesFeeds = "scrape-itunes-feeds"
+	queueUpdateFeed        = "update-feed"
 )
 
 type queueOpt struct {
@@ -57,14 +55,13 @@ func runQueueWorker(wg *sync.WaitGroup, q *koda.Queue, w Worker) {
 			fmt.Println("Error occured while waiting for job:", err)
 			continue
 		}
-		if w != nil {
-			if err := w.Work(q, j); err != nil {
-				fmt.Printf("Job %d: Failed with error: %s\n", j.ID, err)
-			} else {
-				fmt.Printf("Job #%d: Done\n", j.ID)
-				q.Done(j)
-			}
+
+		if err := w.Work(q, j); err != nil {
+			fmt.Printf("Job %d: Failed with error: %s\n", j.ID, err)
+			continue
 		}
+		fmt.Printf("Job #%d: Done\n", j.ID)
+		j.Done()
 	}
 }
 
@@ -73,22 +70,24 @@ func main() {
 	flag.Var(&queueList, "q", "Usage goes here")
 	flag.Parse()
 
-	koda.Submit(queueScrapeiTunesGenreList, 0, nil)
+	koda.Submit(queueScrapeiTunesFeeds, 0, nil)
 
 	var wg sync.WaitGroup
 
 	handlers := map[string]Worker{
-		queueScrapeiTunesGenreList: &ScrapeiTunesGenreListWorker{},
-		queueScrapeiTunesGenre:     &ScrapeiTunesGenreWorker{},
-		queueScrapeiTunesFeedList:  &ScrapeiTunesFeedListWorker{},
-		queueUpdateFeed:            &UpdateFeedWorker{},
+		queueScrapeiTunesFeeds: &ScrapeiTunesFeeds{},
+		queueUpdateFeed:        &UpdateFeedWorker{},
 	}
 
 	for _, opt := range queueList {
 		for i := 0; i < opt.NumWorkers; i++ {
 			wg.Add(1)
 			fmt.Println(opt.Name, i)
-			go runQueueWorker(&wg, koda.GetQueue(opt.Name), handlers[opt.Name])
+			worker := handlers[opt.Name]
+			if worker == nil {
+				panic(fmt.Sprintf("No worker found for queue: %s", opt.Name))
+			}
+			go runQueueWorker(&wg, koda.GetQueue(opt.Name), worker)
 		}
 	}
 

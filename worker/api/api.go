@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -50,15 +51,23 @@ func PostFeed(feed *Feed) error {
 	if err != nil {
 		return err
 	}
-	// Read entire response to prevent broken pipe
-	ioutil.ReadAll(resp.Body)
 	defer resp.Body.Close()
+
+	// Read entire response to prevent broken pipe
+	data, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("Received unexpected status code with body: %s", data)
+	}
 
 	return nil
 }
 
-func FeedExistsWithiTunesID(id int) (bool, error) {
-	url := fmt.Sprintf("http://localhost:8081/api/feeds?itunes_id=%d", id)
+func feedExistsWithKey(key, value string) (bool, error) {
+	url := fmt.Sprintf("http://localhost:8081/api/feeds?%s=%s", key, value)
 	resp, err := httpClient.Get(url)
 	if err != nil {
 		return false, err
@@ -67,4 +76,12 @@ func FeedExistsWithiTunesID(id int) (bool, error) {
 	ioutil.ReadAll(resp.Body)
 
 	return resp.StatusCode == 200, nil
+}
+
+func FeedExistsWithURL(url string) (bool, error) {
+	return feedExistsWithKey("url", url)
+}
+
+func FeedExistsWithiTunesID(id int) (bool, error) {
+	return feedExistsWithKey("itunes_id", strconv.Itoa(id))
 }

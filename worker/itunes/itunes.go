@@ -12,6 +12,10 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
+var alphabetList = strings.Split("ABCDEFGHIJKLMNOPQRSTUVWXYZ*", "")
+var itunesRssFeedRegexp = regexp.MustCompile(`"feedUrl":"(https?:\/\/[^"]*)`)
+var httpClient = http.Client{}
+
 func allSelections(s *goquery.Selection) []*goquery.Selection {
 	var out []*goquery.Selection
 	s.Each(func(i int, s *goquery.Selection) {
@@ -19,10 +23,6 @@ func allSelections(s *goquery.Selection) []*goquery.Selection {
 	})
 	return out
 }
-
-var alphabetList = strings.Split("ABCDEFGHIJKLMNOPQRSTUVWXYZ#", "")
-var itunesRssFeedRegexp = regexp.MustCompile(`"feedUrl":"(https?:\/\/[^"]*)`)
-var httpClient = http.Client{}
 
 func AlphabetPageListForFeedListPage(urlStr string) ([]string, error) {
 	url, err := url.Parse(urlStr)
@@ -48,16 +48,13 @@ func itunesHTTPGetRequest(url string) (*http.Request, error) {
 		return nil, err
 	}
 
-	req.Header.Set("Connection", "Close")
 	req.Header.Set("User-Agent", "iTunes/12.3.2.0")
 
 	return req, nil
 }
 
 func docFromHTTPReq(req *http.Request) (*goquery.Document, error) {
-	c := http.Client{}
-
-	resp, err := c.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -89,6 +86,7 @@ func (p *goqueryHelper) findSelections(selector string) []*goquery.Selection {
 
 type FeedListPage struct {
 	goqueryHelper
+	URL string
 }
 
 func NewFeedListPage(url string) (*FeedListPage, error) {
@@ -97,20 +95,36 @@ func NewFeedListPage(url string) (*FeedListPage, error) {
 		return nil, err
 	}
 
-	return &FeedListPage{
-		goqueryHelper{
-			d: doc,
-		},
-	}, nil
+	page := &FeedListPage{URL: url}
+	page.goqueryHelper.d = doc
+
+	return page, nil
 }
 
 func (p *FeedListPage) PaginationPageList() []string {
-	var out []string
+	// Map is a workaround to handle both sets of pagination lists
+	// This is needed because the :first psuedo-class is not supported
+	urls := make(map[string]string)
 
 	for _, s := range p.findSelections(".paginate li a") {
-		if href, ok := s.Attr("href"); ok {
-			out = append(out, href)
+		text := s.Text()
+		if text == "Previous" || text == "Next" {
+			continue
 		}
+		if href, ok := s.Attr("href"); ok {
+			urls[text] = href
+		}
+	}
+
+	var out []string
+
+	for _, v := range urls {
+		out = append(out, v)
+	}
+
+	// If page has no pagination links, just return this page's URL
+	if len(out) == 0 {
+		return []string{p.URL}
 	}
 
 	return out
