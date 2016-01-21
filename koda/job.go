@@ -19,6 +19,7 @@ type Job struct {
 	rawPayload     string
 	Progress       int
 	Logs           []string
+	NumAttempts    int
 	Queue          *Queue
 	Client         *Client
 }
@@ -32,6 +33,7 @@ func (j *Job) asHash() map[string]string {
 		"creation_time":   strconv.Itoa(int(j.CreationTime.Unix())),
 		"completion_time": strconv.Itoa(int(j.CompletionTime.Unix())),
 		"priority":        strconv.Itoa(int(j.Priority)),
+		"num_attemps":     strconv.Itoa(int(j.NumAttempts)),
 	}
 
 	if jsonPayload, err := json.Marshal(&j.Payload); err == nil {

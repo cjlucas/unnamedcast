@@ -13,10 +13,9 @@ type blah struct {
 }
 
 func TestSomething(t *testing.T) {
-	q := koda.New(&koda.QueueInfo{
-		Name: "test",
-	})
-	j, err := q.SubmitDelayed(100, 5, time.Now())
+	q := koda.GetQueue("test")
+
+	j, err := q.SubmitDelayed(nil, 5*time.Hour)
 	fmt.Println("--before-- Got ID:", j.ID, err)
 
 	for {
@@ -26,8 +25,7 @@ func TestSomething(t *testing.T) {
 
 		time.Sleep(time.Second * 2)
 
-		q.Logf(j, "omgtest: %s", "hithere")
-		q.UpdateProgress(j, 50)
-		q.Done(j)
+		j.Logf("omgtest: %s", "hithere")
+		j.Done()
 	}
 }
