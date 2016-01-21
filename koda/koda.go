@@ -81,10 +81,10 @@ func (q *Queue) Submit(priority int, payload interface{}) (*Job, error) {
 	})
 }
 
-func (q *Queue) SubmitDelayed(priority int, payload interface{}, t time.Time) (*Job, error) {
+func (q *Queue) SubmitDelayed(priority int, payload interface{}, d time.Duration) (*Job, error) {
 	return q.submitJob(&Job{
 		Delayed:      true,
-		DelayedUntil: t.UTC(),
+		DelayedUntil: time.Now().Add(d).UTC(),
 		Priority:     priority,
 		Payload:      payload,
 	})

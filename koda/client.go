@@ -89,6 +89,6 @@ func Submit(queue string, priority int, payload interface{}) (*Job, error) {
 	return defaultClient.GetQueue(queue).Submit(priority, payload)
 }
 
-func SubmitDelayed(queue string, priority int, payload interface{}, t time.Time) (*Job, error) {
-	return defaultClient.GetQueue(queue).SubmitDelayed(priority, payload, t)
+func SubmitDelayed(queue string, priority int, payload interface{}, d time.Duration) (*Job, error) {
+	return defaultClient.GetQueue(queue).SubmitDelayed(priority, payload, d)
 }
