@@ -148,18 +148,64 @@ func (q *Queue) Wait() (*Job, error) {
 		queues[i] = q.key(i)
 	}
 
-	results, err := conn.BRPop(0, queues...)
-	if err != nil {
-		return nil, err
-	}
+	delayedQueueKey := q.delayedKey()
 
-	jobKey := results[1]
+	var jobKey string
+	for {
+		results, err := conn.BRPop(1*time.Second, queues...)
+		if err != nil && !conn.IsNilError(err) {
+			return nil, err
+		}
+
+		if len(results) > 1 {
+			jobKey = results[1]
+			break
+		}
+
+		results, err = conn.ZRangeByScore(delayedQueueKey, &ZRangeByScoreOpts{
+			Min:          0,
+			Max:          timeAsFloat(time.Now().UTC()),
+			MinInclusive: true,
+			MaxInclusive: true,
+			Offset:       0,
+			Count:        1,
+		})
+
+		if err != nil {
+			return nil, err
+		}
+
+		if len(results) > 0 {
+			jobKey = results[0]
+			numRemoved, err := conn.ZRem(delayedQueueKey, jobKey)
+			if err != nil {
+				return nil, err
+			}
+
+			// NOTE: To prevent a race condition in which multiple clients
+			// would get the same job key via ZRangeByScore, as the clients
+			// race to remove the job key, the "winner" is the one to successfully
+			// remove the key, all other clients should continue waiting for a job
+			//
+			// Although this solution is logically correct, it could cause
+			// thrashing if meeting the race condition is a common occurance.
+			// So, an alternate solution may be necessary.
+			if numRemoved == 0 {
+				continue
+			}
+		}
+
+	}
 
 	if _, err := conn.HIncr(jobKey, "num_attempts"); err != nil {
 		return nil, err
 	}
 
 	j, err := unmarshalJob(conn, jobKey)
+	if err != nil {
+		return nil, err
+	}
+
 	j.Queue = q
 	j.Client = q.client
 

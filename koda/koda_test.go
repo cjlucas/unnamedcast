@@ -15,11 +15,14 @@ type blah struct {
 func TestSomething(t *testing.T) {
 	q := koda.GetQueue("test")
 
-	j, err := q.SubmitDelayed(nil, 5*time.Hour)
+	j, err := q.SubmitDelayed(nil, 2*time.Second)
 	fmt.Println("--before-- Got ID:", j.ID, err)
 
 	for {
 		j, err = q.Wait()
+		if err != nil {
+			panic(err)
+		}
 		fmt.Println("--after--- Got ID:", j.ID, err)
 		fmt.Println(j, err)
 
