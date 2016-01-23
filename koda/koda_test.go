@@ -26,9 +26,10 @@ func TestSomething(t *testing.T) {
 		fmt.Println("--after--- Got ID:", j.ID, err)
 		fmt.Println(j, err)
 
-		time.Sleep(time.Second * 2)
+		// time.Sleep(time.Second * 2)
 
 		j.Logf("omgtest: %s", "hithere")
-		j.Done()
+		j.Kill()
+		// j.Done()
 	}
 }

@@ -44,7 +44,7 @@ func (q *Queue) jobKey(j *Job) string {
 }
 
 func (q *Queue) logKey(j *Job) string {
-	return q.client.buildKey("logs", strconv.Itoa(j.ID))
+	return q.client.buildKey("logs", strconv.Itoa(j.ID), strconv.Itoa(j.NumAttempts))
 }
 
 func (q *Queue) incrJobID(c Conn) (int, error) {
@@ -79,25 +79,31 @@ func (q *Queue) UpdateProgress(j *Job, progress int) error {
 	return q.persistJob(j, conn, "progress")
 }
 
+func (q *Queue) addJobToQueue(j *Job, conn Conn) error {
+	_, err := conn.LPush(q.key(j.Priority), q.jobKey(j))
+	return err
+}
+
 func (q *Queue) Submit(payload interface{}, priority int) (*Job, error) {
 	conn := q.client.getConn()
 	defer q.client.putConn(conn)
 
 	j := &Job{
 		Payload:  payload,
-		Delayed:  false,
 		Priority: priority,
+		State:    Queued,
 	}
 
 	if err := q.persistNewJob(j, conn); err != nil {
 		return nil, err
 	}
 
-	if _, err := conn.LPush(q.key(j.Priority), q.jobKey(j)); err != nil {
-		return nil, err
-	}
+	return j, q.addJobToQueue(j, conn)
+}
 
-	return j, nil
+func (q *Queue) addJobToDelayedQueue(j *Job, conn Conn) error {
+	_, err := conn.ZAddNX(q.delayedKey(), timeAsFloat(j.DelayedUntil), q.jobKey(j))
+	return err
 }
 
 func (q *Queue) SubmitDelayed(payload interface{}, d time.Duration) (*Job, error) {
@@ -106,37 +112,37 @@ func (q *Queue) SubmitDelayed(payload interface{}, d time.Duration) (*Job, error
 
 	j := &Job{
 		Payload:      payload,
-		Delayed:      true,
 		DelayedUntil: time.Now().Add(d).UTC(),
+		State:        Queued,
 	}
 
 	if err := q.persistNewJob(j, conn); err != nil {
 		return nil, err
 	}
 
-	if _, err := conn.ZAddNX(q.delayedKey(), timeAsFloat(j.DelayedUntil), q.jobKey(j)); err != nil {
-		return nil, err
-	}
-
-	return j, nil
+	return j, q.addJobToDelayedQueue(j, conn)
 }
 
 func (q *Queue) Retry(j *Job, d time.Duration) error {
 	conn := q.client.getConn()
 	defer q.client.putConn(conn)
 
-	j.Delayed = true
 	j.DelayedUntil = time.Now().UTC().Add(d)
 
-	if err := q.persistJob(j, conn, "delayed", "delayed_until"); err != nil {
+	if err := q.persistJob(j, conn, "delayed_until"); err != nil {
 		return err
 	}
 
-	if _, err := conn.ZAddNX(q.delayedKey(), timeAsFloat(j.DelayedUntil), q.jobKey(j)); err != nil {
-		return err
-	}
+	return q.addJobToDelayedQueue(j, conn)
+}
 
-	return nil
+func (q *Queue) Kill(j *Job) error {
+	conn := q.client.getConn()
+	defer q.client.putConn(conn)
+
+	j.State = Dead
+
+	return q.persistJob(j, conn, "state")
 }
 
 func (q *Queue) Wait() (*Job, error) {
@@ -189,16 +195,15 @@ func (q *Queue) Wait() (*Job, error) {
 			//
 			// Although this solution is logically correct, it could cause
 			// thrashing if meeting the race condition is a common occurance.
-			// So, an alternate solution may be necessary.
+			// So, an alternate solution may be necessary. Of which a Lua
+			// script that performs the zrangebyscore and zrem atomically
 			if numRemoved == 0 {
 				continue
+			} else {
+				break
 			}
 		}
 
-	}
-
-	if _, err := conn.HIncr(jobKey, "num_attempts"); err != nil {
-		return nil, err
 	}
 
 	j, err := unmarshalJob(conn, jobKey)
@@ -206,8 +211,10 @@ func (q *Queue) Wait() (*Job, error) {
 		return nil, err
 	}
 
+	j.State = Working
+	j.NumAttempts++
 	j.Queue = q
 	j.Client = q.client
 
-	return j, nil
+	return j, q.persistJob(j, conn)
 }

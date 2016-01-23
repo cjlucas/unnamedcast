@@ -7,11 +7,37 @@ import (
 	"time"
 )
 
+type JobState int
+
+const (
+	Initial  JobState = 0
+	Queued            = 1
+	Working           = 2
+	Finished          = 3
+	Dead              = 4
+)
+
+func (s JobState) String() string {
+	switch s {
+	case Initial:
+		return "Initial"
+	case Queued:
+		return "Queued"
+	case Working:
+		return "Working"
+	case Finished:
+		return "Finished"
+	case Dead:
+		return "Dead"
+	default:
+		panic(fmt.Sprintf("Unknown state: %d", s))
+	}
+}
+
 type Job struct {
 	ID             int
-	Delayed        bool
+	State          JobState
 	DelayedUntil   time.Time
-	done           bool
 	CreationTime   time.Time
 	CompletionTime time.Time
 	Priority       int
@@ -27,13 +53,12 @@ type Job struct {
 func (j *Job) asHash() map[string]string {
 	hash := map[string]string{
 		"id":              strconv.Itoa(int(j.ID)),
-		"delayed":         strconv.Itoa(btoi(j.Delayed)),
+		"state":           strconv.Itoa(int(j.State)),
 		"delayed_until":   strconv.Itoa(int(j.DelayedUntil.Unix())),
-		"done":            strconv.Itoa(btoi(j.done)),
 		"creation_time":   strconv.Itoa(int(j.CreationTime.Unix())),
 		"completion_time": strconv.Itoa(int(j.CompletionTime.Unix())),
 		"priority":        strconv.Itoa(int(j.Priority)),
-		"num_attemps":     strconv.Itoa(int(j.NumAttempts)),
+		"num_attempts":    strconv.Itoa(int(j.NumAttempts)),
 	}
 
 	if jsonPayload, err := json.Marshal(&j.Payload); err == nil {
@@ -47,12 +72,13 @@ func (j *Job) UnmarshalPayload(v interface{}) error {
 	return json.Unmarshal([]byte(j.rawPayload), v)
 }
 
-func (j *Job) Done() error {
+func (j *Job) Finish() error {
 	conn := j.Client.getConn()
 	defer j.Client.putConn(conn)
 
-	j.done = true
 	j.CompletionTime = time.Now().UTC()
+
+	return j.Queue.persistJob(j, conn, "completion_time")
 
 	hash := j.asHash()
 
@@ -63,6 +89,14 @@ func (j *Job) Done() error {
 	}
 
 	return nil
+}
+
+func (j *Job) Retry(d time.Duration) error {
+	return j.Queue.Retry(j, d)
+}
+
+func (j *Job) Kill() error {
+	return j.Queue.Kill(j)
 }
 
 func (j *Job) Logf(s string, args ...interface{}) error {
@@ -131,12 +165,12 @@ func unmarshalJob(c Conn, key string) (*Job, error) {
 	propMap := make(map[string]string)
 	jobProps := []string{
 		"id",
-		"delayed",
+		"state",
 		"delayed_until",
-		"done",
 		"creation_time",
 		"priority",
 		"payload",
+		"num_attempts",
 	}
 
 	for _, prop := range jobProps {
@@ -151,14 +185,14 @@ func unmarshalJob(c Conn, key string) (*Job, error) {
 	u := jobUnmarshaller{}
 	job := Job{
 		ID:             u.atoi(propMap["id"]),
-		Delayed:        u.atob(propMap["delayed"]),
+		State:          JobState(u.atoi(propMap["state"])),
 		DelayedUntil:   u.atot(propMap["delayed_until"]),
-		done:           u.atob(propMap["done"]),
 		CreationTime:   u.atot(propMap["creation_time"]),
 		CompletionTime: u.atot(propMap["completion_time"]),
 		Priority:       u.atoi(propMap["priority"]),
 		Payload:        u.parseJSON(propMap["payload"]),
 		rawPayload:     propMap["payload"],
+		NumAttempts:    u.atoi(propMap["num_attempts"]),
 	}
 
 	if u.Err != nil {
