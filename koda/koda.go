@@ -216,5 +216,5 @@ func (q *Queue) Wait() (*Job, error) {
 	j.Queue = q
 	j.Client = q.client
 
-	return j, q.persistJob(j, conn)
+	return j, q.persistJob(j, conn, "state", "num_attempts")
 }

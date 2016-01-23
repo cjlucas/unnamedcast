@@ -1,11 +1,11 @@
 package koda
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"time"
 
-	"gopkg.in/mgo.v2/bson"
 	"gopkg.in/redis.v3"
 )
 
@@ -67,8 +67,8 @@ func (j *Job) asHash() map[string]string {
 		return hash
 	}
 
-	if bsonPayload, err := bson.Marshal(j.Payload); err == nil {
-		hash["payload"] = string(bsonPayload)
+	if jsonPayload, err := json.Marshal(j.Payload); err == nil {
+		hash["payload"] = string(jsonPayload)
 	} else {
 		fmt.Println("ERROR", err)
 	}
@@ -77,7 +77,7 @@ func (j *Job) asHash() map[string]string {
 }
 
 func (j *Job) UnmarshalPayload(v interface{}) error {
-	return bson.Unmarshal([]byte(j.rawPayload), v)
+	return json.Unmarshal([]byte(j.rawPayload), v)
 }
 
 func (j *Job) Finish() error {
@@ -153,7 +153,7 @@ func (u *jobUnmarshaller) parseBSON(s string) interface{} {
 	}
 
 	var val interface{}
-	if err := bson.Unmarshal([]byte(s), &val); err != nil {
+	if err := json.Unmarshal([]byte(s), &val); err != nil {
 		u.Err = err
 	}
 
