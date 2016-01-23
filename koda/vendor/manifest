@@ -8,6 +8,13 @@
 			"branch": "v1"
 		},
 		{
+			"importpath": "gopkg.in/mgo.v2/bson",
+			"repository": "https://gopkg.in/mgo.v2",
+			"revision": "03c9f3ee4c14c8e51ee521a6a7d0425658dd6f64",
+			"branch": "v2",
+			"path": "/bson"
+		},
+		{
 			"importpath": "gopkg.in/redis.v3",
 			"repository": "https://gopkg.in/redis.v3",
 			"revision": "aa0a9697d83d57be721f4ef8176d367c63873855",

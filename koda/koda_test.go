@@ -15,7 +15,7 @@ type blah struct {
 func TestSomething(t *testing.T) {
 	q := koda.GetQueue("test")
 
-	j, err := q.SubmitDelayed(nil, 2*time.Second)
+	j, err := q.SubmitDelayed(2*time.Second, 5)
 	fmt.Println("--before-- Got ID:", j.ID, err)
 
 	for {

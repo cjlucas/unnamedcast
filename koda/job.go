@@ -1,10 +1,12 @@
 package koda
 
 import (
-	"encoding/json"
 	"fmt"
 	"strconv"
 	"time"
+
+	"gopkg.in/mgo.v2/bson"
+	"gopkg.in/redis.v3"
 )
 
 type JobState int
@@ -61,15 +63,21 @@ func (j *Job) asHash() map[string]string {
 		"num_attempts":    strconv.Itoa(int(j.NumAttempts)),
 	}
 
-	if jsonPayload, err := json.Marshal(&j.Payload); err == nil {
-		hash["payload"] = string(jsonPayload)
+	if j.Payload == nil {
+		return hash
+	}
+
+	if bsonPayload, err := bson.Marshal(j.Payload); err == nil {
+		hash["payload"] = string(bsonPayload)
+	} else {
+		fmt.Println("ERROR", err)
 	}
 
 	return hash
 }
 
 func (j *Job) UnmarshalPayload(v interface{}) error {
-	return json.Unmarshal([]byte(j.rawPayload), v)
+	return bson.Unmarshal([]byte(j.rawPayload), v)
 }
 
 func (j *Job) Finish() error {
@@ -139,13 +147,13 @@ func (u *jobUnmarshaller) atob(s string) bool {
 	return val
 }
 
-func (u *jobUnmarshaller) parseJSON(s string) interface{} {
+func (u *jobUnmarshaller) parseBSON(s string) interface{} {
 	if u.Err != nil || s == "" {
 		return nil
 	}
 
 	var val interface{}
-	if err := json.Unmarshal([]byte(s), &val); err != nil {
+	if err := bson.Unmarshal([]byte(s), &val); err != nil {
 		u.Err = err
 	}
 
@@ -175,7 +183,10 @@ func unmarshalJob(c Conn, key string) (*Job, error) {
 
 	for _, prop := range jobProps {
 		s, err := c.HGet(key, prop)
-		if err != nil {
+		// TODO: expose IsNilError to this function
+		if err == redis.Nil {
+			continue
+		} else if err != nil {
 			return nil, err
 		}
 
@@ -190,7 +201,7 @@ func unmarshalJob(c Conn, key string) (*Job, error) {
 		CreationTime:   u.atot(propMap["creation_time"]),
 		CompletionTime: u.atot(propMap["completion_time"]),
 		Priority:       u.atoi(propMap["priority"]),
-		Payload:        u.parseJSON(propMap["payload"]),
+		Payload:        u.parseBSON(propMap["payload"]),
 		rawPayload:     propMap["payload"],
 		NumAttempts:    u.atoi(propMap["num_attempts"]),
 	}
