@@ -19,13 +19,6 @@
 			"revision": "76365a41624aa608f888301bf60fabecaf928b5a",
 			"branch": "master",
 			"path": "/html"
-		},
-		{
-			"importpath": "gopkg.in/mgo.v2/bson",
-			"repository": "https://gopkg.in/mgo.v2",
-			"revision": "03c9f3ee4c14c8e51ee521a6a7d0425658dd6f64",
-			"branch": "v2",
-			"path": "/bson"
 		}
 	]
 }
