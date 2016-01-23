@@ -84,7 +84,7 @@ func (q *Queue) addJobToQueue(j *Job, conn Conn) error {
 	return err
 }
 
-func (q *Queue) Submit(payload interface{}, priority int) (*Job, error) {
+func (q *Queue) Submit(priority int, payload interface{}) (*Job, error) {
 	conn := q.client.getConn()
 	defer q.client.putConn(conn)
 
@@ -106,7 +106,7 @@ func (q *Queue) addJobToDelayedQueue(j *Job, conn Conn) error {
 	return err
 }
 
-func (q *Queue) SubmitDelayed(payload interface{}, d time.Duration) (*Job, error) {
+func (q *Queue) SubmitDelayed(d time.Duration, payload interface{}) (*Job, error) {
 	conn := q.client.getConn()
 	defer q.client.putConn(conn)
 
