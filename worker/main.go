@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/cjlucas/unnamedcast/koda"
 )
@@ -14,6 +15,8 @@ const (
 	queueScrapeiTunesFeeds = "scrape-itunes-feeds"
 	queueUpdateFeed        = "update-feed"
 )
+
+const MaxAttempts = 10
 
 type queueOpt struct {
 	Name       string
@@ -56,12 +59,21 @@ func runQueueWorker(wg *sync.WaitGroup, q *koda.Queue, w Worker) {
 			continue
 		}
 
+		fmt.Printf("Job %d: Dequeued\n", j.ID)
+
 		if err := w.Work(q, j); err != nil {
 			fmt.Printf("Job %d: Failed with error: %s\n", j.ID, err)
+			if j.NumAttempts == MaxAttempts {
+				fmt.Printf("Job %d: Max attempts reached, killing job\n", j.ID)
+				j.Kill()
+			} else {
+				fmt.Printf("Job %d: Failed on attempt %d, will retry\n", j.ID, j.NumAttempts)
+				j.Retry(5 * time.Minute)
+			}
 			continue
 		}
-		fmt.Printf("Job #%d: Done\n", j.ID)
-		j.Done()
+		fmt.Printf("Job %d: Done\n", j.ID)
+		j.Finish()
 	}
 }
 
