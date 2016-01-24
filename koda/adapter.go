@@ -22,6 +22,7 @@ type Conn interface {
 	Incr(key string) (int, error)
 	HIncr(key, field string) (int, error)
 	HGet(key, field string) (string, error)
+	HGetAll(key string) ([]string, error)
 	HSet(key, field, value string) (bool, error)
 	RPush(key string, value ...string) (int, error)
 	LPush(key string, value ...string) (int, error)
@@ -29,6 +30,7 @@ type Conn interface {
 	ZAddNX(key string, score float64, member string) (int, error)
 	ZRem(key string, members ...string) (int, error)
 	ZRangeByScore(key string, opt *ZRangeByScoreOpts) ([]string, error)
+	Scan(cursor int, match string, count int) (int, []string, error)
 	Close() error
 }
 
@@ -53,6 +55,10 @@ func (r *GoRedisAdapter) HIncr(key, field string) (int, error) {
 
 func (r *GoRedisAdapter) HGet(key, field string) (string, error) {
 	return r.R.HGet(key, field).Result()
+}
+
+func (r *GoRedisAdapter) HGetAll(key string) ([]string, error) {
+	return r.R.HGetAll(key).Result()
 }
 
 func (r *GoRedisAdapter) HSet(key, field, value string) (bool, error) {
@@ -107,6 +113,12 @@ func (r *GoRedisAdapter) ZRangeByScore(key string, opt *ZRangeByScoreOpts) ([]st
 	})
 
 	return cmd.Val(), cmd.Err()
+}
+
+func (r *GoRedisAdapter) Scan(cursor int, match string, count int) (int, []string, error) {
+	cmd := r.R.Scan(int64(cursor), match, int64(count))
+	offset, results := cmd.Val()
+	return int(offset), results, cmd.Err()
 }
 
 func (r *GoRedisAdapter) Close() error {

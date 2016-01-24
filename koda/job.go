@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"strconv"
 	"time"
-
-	"gopkg.in/redis.v3"
 )
 
 type JobState int
@@ -61,10 +59,6 @@ func (j *Job) asHash() map[string]string {
 		"completion_time": strconv.Itoa(int(j.CompletionTime.Unix())),
 		"priority":        strconv.Itoa(int(j.Priority)),
 		"num_attempts":    strconv.Itoa(int(j.NumAttempts)),
-	}
-
-	if j.Payload == nil {
-		return hash
 	}
 
 	if jsonPayload, err := json.Marshal(j.Payload); err == nil {
@@ -147,7 +141,7 @@ func (u *jobUnmarshaller) atob(s string) bool {
 	return val
 }
 
-func (u *jobUnmarshaller) parseBSON(s string) interface{} {
+func (u *jobUnmarshaller) parseJSON(s string) interface{} {
 	if u.Err != nil || s == "" {
 		return nil
 	}
@@ -171,26 +165,13 @@ func (u *jobUnmarshaller) atot(s string) time.Time {
 
 func unmarshalJob(c Conn, key string) (*Job, error) {
 	propMap := make(map[string]string)
-	jobProps := []string{
-		"id",
-		"state",
-		"delayed_until",
-		"creation_time",
-		"priority",
-		"payload",
-		"num_attempts",
+	results, err := c.HGetAll(key)
+	if err != nil {
+		return nil, err
 	}
 
-	for _, prop := range jobProps {
-		s, err := c.HGet(key, prop)
-		// TODO: expose IsNilError to this function
-		if err == redis.Nil {
-			continue
-		} else if err != nil {
-			return nil, err
-		}
-
-		propMap[prop] = s
+	for i := 0; i < len(results); i += 2 {
+		propMap[results[i]] = results[i+1]
 	}
 
 	u := jobUnmarshaller{}
@@ -201,7 +182,7 @@ func unmarshalJob(c Conn, key string) (*Job, error) {
 		CreationTime:   u.atot(propMap["creation_time"]),
 		CompletionTime: u.atot(propMap["completion_time"]),
 		Priority:       u.atoi(propMap["priority"]),
-		Payload:        u.parseBSON(propMap["payload"]),
+		Payload:        u.parseJSON(propMap["payload"]),
 		rawPayload:     propMap["payload"],
 		NumAttempts:    u.atoi(propMap["num_attempts"]),
 	}
