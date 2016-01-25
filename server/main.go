@@ -72,22 +72,25 @@ func main() {
 
 	gSession = session
 
-	err = feeds().EnsureIndex(mgo.Index{
+	ensureIndex := func(c *mgo.Collection, idx mgo.Index) {
+		if err := c.EnsureIndex(idx); err != nil {
+			panic(err)
+		}
+	}
+
+	ensureIndex(feeds(), mgo.Index{
 		Key:      []string{"url"},
 		Unique:   true,
 		DropDups: true,
 	})
 
-	if err != nil {
-		panic(err)
-	}
-
-	err = feeds().EnsureIndex(mgo.Index{
+	ensureIndex(feeds(), mgo.Index{
 		Key: []string{"itunes_id"},
 	})
-	if err != nil {
-		panic(err)
-	}
+
+	ensureIndex(feeds(), mgo.Index{
+		Key: []string{"modification_time"},
+	})
 
 	g := gin.Default()
 
@@ -95,6 +98,7 @@ func main() {
 
 	api.POST("/users", CreateUser)
 	api.GET("/users/:id", RequireValidUserID, ReadUser)
+	api.GET("/users/:id/feeds", RequireValidUserID, GetUserFeeds)
 	api.PUT("/users/:id/feeds", RequireValidUserID, UpdateUserFeeds)
 	api.PUT("/users/:id/states", RequireValidUserID, UpdateUserItemStates)
 
