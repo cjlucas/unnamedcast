@@ -200,7 +200,7 @@ func (w *UpdateFeedWorker) Work(q *koda.Queue, j *koda.Job) error {
 		return err
 	}
 
-	feed.URL = payload.URL
+	feed.URL = url
 	if payload.ITunesID != 0 {
 		feed.ITunesID = payload.ITunesID
 	}
