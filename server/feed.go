@@ -43,6 +43,10 @@ type Item struct {
 	ImageURL         string        `json:"image_url" bson:"image_url"`
 }
 
+func (f *Feed) Update(other *Feed) {
+	f.Title = other.Title
+}
+
 func ItemsEqual(a, b *Item) bool {
 	return a.GUID == b.GUID &&
 		a.Title == b.Title &&
@@ -55,7 +59,7 @@ func feeds() *mgo.Collection {
 	return gSession.DB("test").C("feeds")
 }
 
-func loadFeed(idHex string, lastSyncTime time.Duration) *Feed {
+func loadFeed(idHex string) *Feed {
 	if !bson.IsObjectIdHex(idHex) {
 		return nil
 	}
@@ -79,7 +83,7 @@ func loadFeed(idHex string, lastSyncTime time.Duration) *Feed {
 
 func RequireValidFeedID(c *gin.Context) {
 	id := c.Param("id")
-	feed := loadFeed(id, 0)
+	feed := loadFeed(id)
 
 	if feed == nil {
 		c.JSON(400, gin.H{"error": "invalid id"})
@@ -203,6 +207,6 @@ func UpdateFeedItems(c *gin.Context) {
 	if err := feeds().Update(bson.M{"_id": feed.ID}, &feed); err != nil {
 		c.JSON(400, gin.H{"error": "could not update feed"})
 	} else {
-		c.JSON(200, loadFeed(feed.ID.Hex(), 0))
+		c.JSON(200, loadFeed(feed.ID.Hex()))
 	}
 }
