@@ -1,9 +1,7 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -41,10 +39,6 @@ type Item struct {
 	PublicationTime  time.Time     `json:"publication_time" bson:"publication_time"`
 	ModificationTime time.Time     `json:"modification_time" bson:"modification_time"`
 	ImageURL         string        `json:"image_url" bson:"image_url"`
-}
-
-func (f *Feed) Update(other *Feed) {
-	f.Title = other.Title
 }
 
 func ItemsEqual(a, b *Item) bool {
@@ -94,11 +88,8 @@ func RequireValidFeedID(c *gin.Context) {
 }
 
 func CreateFeed(c *gin.Context) {
-	// TODO: Create index for url
 	var feed Feed
-	rawBody, _ := ioutil.ReadAll(c.Request.Body)
-
-	if err := json.Unmarshal(rawBody, &feed); err != nil {
+	if err := c.Bind(&feed); err != nil {
 		c.JSON(500, gin.H{"error": "could not unmarshal payload"})
 		return
 	}
@@ -173,11 +164,9 @@ func generateGUIDToItemMap(items []Item) map[string]*Item {
 
 func UpdateFeedItems(c *gin.Context) {
 	feed := c.MustGet("feed").(*Feed)
-	rawBody, _ := ioutil.ReadAll(c.Request.Body)
-
 	var body []Item
 
-	if err := json.Unmarshal(rawBody, &body); err != nil {
+	if err := c.Bind(&body); err != nil {
 		c.JSON(500, gin.H{"error": "error reading body"})
 		return
 	}
