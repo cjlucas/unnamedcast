@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"time"
 
@@ -107,7 +108,7 @@ func CreateFeed(c *gin.Context) {
 	}
 
 	if err := feeds().Insert(&feed); err != nil {
-		c.JSON(500, gin.H{"error": err})
+		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to insert: %s", err)})
 	} else {
 		c.JSON(200, &feed)
 	}
@@ -138,6 +139,22 @@ func FindFeed(c *gin.Context) {
 
 func ReadFeed(c *gin.Context) {
 	feed := c.MustGet("feed").(*Feed)
+	c.JSON(200, &feed)
+}
+
+func UpdateFeed(c *gin.Context) {
+	feedID := c.MustGet("feed").(*Feed).ID
+
+	var feed Feed
+	if err := c.Bind(&feed); err != nil {
+		c.AbortWithError(500, err)
+	}
+	fmt.Println(feed)
+
+	if err := feeds().Update(bson.M{"_id": feedID}, &feed); err != nil {
+		c.AbortWithError(500, err)
+	}
+
 	c.JSON(200, &feed)
 }
 

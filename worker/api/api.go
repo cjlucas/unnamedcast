@@ -13,6 +13,7 @@ import (
 var httpClient = http.Client{}
 
 type Feed struct {
+	ID       string `json:"id,omitempty"`
 	Title    string `json:"title"`
 	URL      string `json:"url"`
 	Author   string `json:"author"`
@@ -84,4 +85,29 @@ func FeedExistsWithURL(url string) (bool, error) {
 
 func FeedExistsWithiTunesID(id int) (bool, error) {
 	return feedExistsWithKey("itunes_id", strconv.Itoa(id))
+}
+
+func FeedForURL(feedURL string) (*Feed, error) {
+	url := fmt.Sprintf("http://localhost:8081/api/feeds?url=%s", feedURL)
+	resp, err := httpClient.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	data, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var feeds []Feed
+	if err := json.Unmarshal(data, &feeds); err != nil {
+		return nil, err
+	}
+
+	if len(feeds) == 0 {
+		return nil, nil
+	}
+
+	return &feeds[0], nil
 }
