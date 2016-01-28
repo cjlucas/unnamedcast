@@ -3,18 +3,7 @@ package main
 import (
 	"fmt"
 	"reflect"
-
-	"gopkg.in/mgo.v2"
 )
-
-type Model struct {
-	C     *mgo.Collection
-	dirty bool
-}
-
-func (m *Model) isDirty() bool {
-	return m.dirty
-}
 
 // CopyModel copies all the fields from m2 into m1 excluding any fields
 // specified by ignoredFields. A boolean is returned representing whether
