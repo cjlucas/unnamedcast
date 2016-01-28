@@ -106,7 +106,6 @@ func main() {
 	api.GET("/feeds/:id", RequireValidFeedID, ReadFeed)
 	api.GET("/feeds", FindFeed)
 	api.PUT("/feeds/:id", RequireValidFeedID, UpdateFeed)
-	api.PUT("/feeds/:id/items", RequireValidFeedID, UpdateFeedItems)
 
 	g.Run(":8081")
 }

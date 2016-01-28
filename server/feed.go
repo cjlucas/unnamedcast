@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -41,12 +40,60 @@ type Item struct {
 	ImageURL         string        `json:"image_url" bson:"image_url"`
 }
 
-func ItemsEqual(a, b *Item) bool {
-	return a.GUID == b.GUID &&
-		a.Title == b.Title &&
-		a.Description == b.Description &&
-		a.Duration == b.Duration &&
-		a.Size == b.Size
+func generateGUIDToItemMap(items []Item) map[string]*Item {
+	guidMap := make(map[string]*Item)
+	for i := range items {
+		guidMap[items[i].GUID] = &items[i]
+	}
+
+	return guidMap
+}
+
+func (f *Feed) Create() error {
+	f.CreationTime = time.Now().UTC()
+	return feeds().Insert(&f)
+}
+
+func (f *Feed) Update(new *Feed) error {
+	ignoredFields := []string{"ID", "Items", "CreationTime", "ModificationTime"}
+	// Ignore Category if both are equal in the case where both subcats are 0 len
+	// This is necessary due to how DeepEqual and JSON/BSON unmarshalling work.
+	// BSON unmarshalling will still make the slice even if there is no subcat,
+	// while JSON's unmarshaller will leave it as nil. This causes a problem
+	// with DeepEqual as it does not consider slice of len 0 and nil to be equal.
+	//
+	// An alternative solution would be to override the behavior of BSON
+	// unmarshalling for category using the bson.Setter interface to mimic
+	// the behavior of JSON's unmarshaller.
+	if len(f.Category.Subcategories) == 0 &&
+		len(new.Category.Subcategories) == 0 &&
+		f.Category.Name == new.Category.Name {
+		ignoredFields = append(ignoredFields, "Category")
+	}
+	didChange := CopyModel(f, new, ignoredFields...)
+	itemGUIDMap := generateGUIDToItemMap(f.Items)
+
+	for i := range new.Items {
+		item := &new.Items[i]
+		if origItem := itemGUIDMap[item.GUID]; origItem != nil {
+			// If Item already existed, copy the new feed data over
+			if CopyModel(origItem, item, "ModificationTime") {
+				origItem.ModificationTime = time.Now().UTC()
+				didChange = true
+			}
+		} else {
+			// If Item is new, append it to the Item list
+			item.ModificationTime = time.Now().UTC()
+			f.Items = append(f.Items, *item)
+			didChange = true
+		}
+	}
+
+	if didChange {
+		f.ModificationTime = time.Now().UTC()
+	}
+
+	return feeds().Update(bson.M{"_id": f.ID}, &f)
 }
 
 func feeds() *mgo.Collection {
@@ -61,6 +108,7 @@ func loadFeed(idHex string) *Feed {
 	var feed Feed
 	err := feeds().FindId(bson.ObjectIdHex(idHex)).One(&feed)
 
+	// TODO: reconsider swallowing this error
 	if err != nil {
 		return nil
 	}
@@ -94,19 +142,12 @@ func CreateFeed(c *gin.Context) {
 		return
 	}
 
-	feed.ID = bson.NewObjectId()
-	feed.CreationTime = time.Now().UTC()
-	feed.ModificationTime = feed.CreationTime
-
-	for i := range feed.Items {
-		feed.Items[i].ModificationTime = time.Now().UTC()
+	if err := feed.Create(); err != nil {
+		c.AbortWithError(500, err)
+		return
 	}
 
-	if err := feeds().Insert(&feed); err != nil {
-		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to insert: %s", err)})
-	} else {
-		c.JSON(200, &feed)
-	}
+	c.JSON(200, &feed)
 }
 
 func FindFeed(c *gin.Context) {
@@ -138,64 +179,18 @@ func ReadFeed(c *gin.Context) {
 }
 
 func UpdateFeed(c *gin.Context) {
-	feedID := c.MustGet("feed").(*Feed).ID
-
-	var feed Feed
-	if err := c.Bind(&feed); err != nil {
-		c.AbortWithError(500, err)
-	}
-	fmt.Println(feed)
-
-	if err := feeds().Update(bson.M{"_id": feedID}, &feed); err != nil {
-		c.AbortWithError(500, err)
-	}
-
-	c.JSON(200, &feed)
-}
-
-func generateGUIDToItemMap(items []Item) map[string]*Item {
-	guidMap := make(map[string]*Item)
-	for i := range items {
-		guidMap[items[i].GUID] = &items[i]
-	}
-
-	return guidMap
-}
-
-func UpdateFeedItems(c *gin.Context) {
 	feed := c.MustGet("feed").(*Feed)
-	var body []Item
 
-	if err := c.Bind(&body); err != nil {
-		c.JSON(500, gin.H{"error": "error reading body"})
+	var bodyFeed Feed
+	if err := c.Bind(&bodyFeed); err != nil {
+		c.AbortWithError(500, err)
 		return
 	}
 
-	curItemsMap := generateGUIDToItemMap(feed.Items)
-
-	// Update modification time (if necessary)
-	itemsModified := false
-	for i := range body {
-		item := &body[i]
-		curItem := curItemsMap[item.GUID]
-
-		if curItem == nil || !ItemsEqual(item, curItem) {
-			item.ModificationTime = time.Now().UTC()
-			itemsModified = true
-		} else if curItem != nil {
-			item.ModificationTime = curItem.ModificationTime
-		}
+	if err := feed.Update(&bodyFeed); err != nil {
+		c.AbortWithError(500, err)
+		return
 	}
 
-	if itemsModified {
-		feed.ModificationTime = time.Now().UTC()
-	}
-
-	feed.Items = body
-
-	if err := feeds().Update(bson.M{"_id": feed.ID}, &feed); err != nil {
-		c.JSON(400, gin.H{"error": "could not update feed"})
-	} else {
-		c.JSON(200, loadFeed(feed.ID.Hex()))
-	}
+	c.JSON(200, &feed)
 }
