@@ -1,8 +1,6 @@
 package main
 
 import (
-	"encoding/json"
-	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -19,49 +17,7 @@ type Person struct {
 	ModificationTime time.Time
 }
 
-// type Thing struct {
-// 	Balls []map[string]int
-// }
-//
 var gSession *mgo.Session
-
-func FetchPersons(w http.ResponseWriter, r *http.Request) {
-	c := gSession.DB("test").C("people")
-
-	var people []Person
-	c.Find(nil).All(&people)
-
-	p, _ := json.Marshal(people)
-
-	w.Write(p)
-
-	// fmt.Println("hi")
-	//
-	// c := gSession.DB("test").C("blah")
-	//
-	// var p []Thing
-	//
-	// c.Find(nil).All(&p)
-	//
-	// fmt.Printf("%#v\n", p)
-	//
-	// pipeData := bson.M{
-	// 	"$project": bson.M{
-	// 		"balls": bson.M{
-	// 			"$filter": bson.M{
-	// 				"input": "$balls",
-	// 				"as":    "item",
-	// 				"cond":  bson.M{"$gte": []interface{}{"$$item.count", 2}},
-	// 			},
-	// 		},
-	// 	},
-	// }
-	//
-	// var people []Thing
-	//
-	// c.Pipe([]bson.M{pipeData}).All(&people)
-	// fmt.Printf("%#v\n", people)
-}
 
 func main() {
 	session, err := mgo.Dial("localhost")
