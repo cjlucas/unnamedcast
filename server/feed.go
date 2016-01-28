@@ -130,6 +130,7 @@ func RequireValidFeedID(c *gin.Context) {
 	if feed == nil {
 		c.JSON(400, gin.H{"error": "invalid id"})
 		c.Abort()
+		return
 	} else {
 		c.Set("feed", feed)
 	}
