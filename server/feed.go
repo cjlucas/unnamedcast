@@ -51,11 +51,13 @@ func generateGUIDToItemMap(items []Item) map[string]*Item {
 
 func (f *Feed) Create() error {
 	f.CreationTime = time.Now().UTC()
-	return feeds().Insert(&f)
+	f.ModificationTime = f.CreationTime
+	return feeds().Insert(f)
 }
 
 func (f *Feed) Update(new *Feed) error {
 	ignoredFields := []string{"ID", "Items", "CreationTime", "ModificationTime"}
+
 	// Ignore Category if both are equal in the case where both subcats are 0 len
 	// This is necessary due to how DeepEqual and JSON/BSON unmarshalling work.
 	// BSON unmarshalling will still make the slice even if there is no subcat,
@@ -70,6 +72,7 @@ func (f *Feed) Update(new *Feed) error {
 		f.Category.Name == new.Category.Name {
 		ignoredFields = append(ignoredFields, "Category")
 	}
+
 	didChange := CopyModel(f, new, ignoredFields...)
 	itemGUIDMap := generateGUIDToItemMap(f.Items)
 
@@ -93,7 +96,7 @@ func (f *Feed) Update(new *Feed) error {
 		f.ModificationTime = time.Now().UTC()
 	}
 
-	return feeds().Update(bson.M{"_id": f.ID}, &f)
+	return feeds().Update(bson.M{"_id": f.ID}, f)
 }
 
 func feeds() *mgo.Collection {

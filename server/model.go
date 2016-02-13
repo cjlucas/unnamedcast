@@ -7,9 +7,14 @@ import (
 
 // CopyModel copies all the fields from m2 into m1 excluding any fields
 // specified by ignoredFields. A boolean is returned representing whether
-// any data has changed in m1 as a result of the copy.
+// any data has changed in m1 as a result of the copy. If either m1 or m2
+// is nil, No merge will be attempted and false will be returned
 func CopyModel(m1, m2 interface{}, ignoredFields ...string) bool {
 	changed := false
+
+	if m1 == nil || m2 == nil {
+		return false
+	}
 
 	isIgnoredField := func(name string) bool {
 		for _, s := range ignoredFields {

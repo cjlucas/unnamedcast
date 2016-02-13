@@ -1,21 +1,10 @@
 package main
 
 import (
-	"time"
-
 	"github.com/gin-gonic/gin"
 
 	"gopkg.in/mgo.v2"
-	"gopkg.in/mgo.v2/bson"
 )
-
-type Person struct {
-	ID               bson.ObjectId `bson:"_id,omitempty" json:"id"`
-	Name             string        `json:"name"`
-	Title            string        `json:"title"`
-	CreationTime     time.Time
-	ModificationTime time.Time
-}
 
 var gSession *mgo.Session
 
@@ -33,6 +22,11 @@ func main() {
 			panic(err)
 		}
 	}
+
+	ensureIndex(users(), mgo.Index{
+		Key:    []string{"username"},
+		Unique: true,
+	})
 
 	ensureIndex(feeds(), mgo.Index{
 		Key:      []string{"url"},
@@ -56,7 +50,7 @@ func main() {
 	api.GET("/users/:id", RequireValidUserID, ReadUser)
 	api.GET("/users/:id/feeds", RequireValidUserID, GetUserFeeds)
 	api.PUT("/users/:id/feeds", RequireValidUserID, UpdateUserFeeds)
-	api.PUT("/users/:id/states", RequireValidUserID, UpdateUserItemStates)
+	api.PUT("/users/:id/states", RequireValidUserID, UpdateUserItemState)
 
 	api.POST("/feeds", CreateFeed)
 	api.GET("/feeds/:id", RequireValidFeedID, ReadFeed)

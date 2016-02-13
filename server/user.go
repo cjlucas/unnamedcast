@@ -1,9 +1,6 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
-	"io/ioutil"
 	"strings"
 	"time"
 
@@ -20,15 +17,30 @@ import (
 type ItemState struct {
 	FeedID   bson.ObjectId `json:"feed_id"`
 	ItemGUID string        `json:"item_guid"`
-	Position time.Duration `json:"position"` // 0 if item not in progress
+	Position time.Duration `json:"position"` // 0 if item is unplayed
 }
 
 type User struct {
-	ID         bson.ObjectId   `bson:"_id,omitempty" json:"id"`
-	Username   string          `json:"name"`
-	Password   string          `json:"-"` // encrypted
-	FeedIDs    []bson.ObjectId `json:"feeds"`
-	ItemStates []ItemState     `json:"states"`
+	ID               bson.ObjectId   `bson:"_id,omitempty" json:"id"`
+	Username         string          `json:"username"`
+	Password         string          `json:"-"` // encrypted
+	FeedIDs          []bson.ObjectId `json:"feeds"`
+	ItemStates       []ItemState     `json:"states"`
+	CreationTime     time.Time       `json:"creation_time"`
+	ModificationTime time.Time       `json:"modification_time"`
+}
+
+func (u *User) Create() error {
+	u.CreationTime = time.Now().UTC()
+	u.ModificationTime = u.CreationTime
+	return users().Insert(u)
+}
+
+func (u *User) Update(new *User) error {
+	if new == nil || CopyModel(u, new, "ID", "Username", "Password") {
+		u.ModificationTime = time.Now().UTC()
+	}
+	return users().Update(bson.M{"_id": u.ID}, u)
 }
 
 func users() *mgo.Collection {
@@ -41,6 +53,7 @@ func loadUser(idHex string) *User {
 	}
 
 	var user User
+	// TODO: no error checking
 	users().FindId(bson.ObjectIdHex(idHex)).One(&user)
 
 	return &user
@@ -59,15 +72,15 @@ func RequireValidUserID(c *gin.Context) {
 }
 
 func CreateUser(c *gin.Context) {
-	username := strings.TrimSpace(c.Query("name"))
-	password := strings.TrimSpace(c.Query("pass"))
+	username := strings.TrimSpace(c.Query("username"))
+	password := strings.TrimSpace(c.Query("password"))
 
 	if username == "" || password == "" {
 		c.JSON(400, gin.H{"error": "missing required parameter(s)"})
 		return
 	}
 
-	passwdEnc, err := bcrypt.GenerateFromPassword(
+	passwdEnc, _ := bcrypt.GenerateFromPassword(
 		[]byte(password),
 		bcrypt.DefaultCost,
 	)
@@ -78,15 +91,12 @@ func CreateUser(c *gin.Context) {
 		Password: string(passwdEnc),
 	}
 
-	err = users().Insert(&user)
-
-	fmt.Println("after insert", user.ID)
-
-	if err != nil {
-		c.JSON(400, gin.H{"error": err})
-	} else {
-		c.JSON(200, gin.H{"user": user})
+	if err := user.Create(); err != nil {
+		c.AbortWithError(500, err)
+		return
 	}
+
+	c.JSON(200, &user)
 }
 
 func ReadUser(c *gin.Context) {
@@ -141,62 +151,49 @@ func GetUserFeeds(c *gin.Context) {
 
 func UpdateUserFeeds(c *gin.Context) {
 	user := c.MustGet("user").(*User)
-	rawBody, _ := ioutil.ReadAll(c.Request.Body)
+	var body []bson.ObjectId
 
-	var body struct {
-		FeedsIDs []bson.ObjectId `json:"feeds"`
-	}
-
-	if err := json.Unmarshal(rawBody, &body); err != nil {
+	if err := c.Bind(&body); err != nil {
 		c.JSON(400, gin.H{"error": "invalid body"})
 		return
 	}
 
-	userHasFeed := func(id bson.ObjectId) bool {
-		for i := range user.FeedIDs {
-			if user.FeedIDs[i] == id {
-				return true
-			}
-		}
-
-		return false
+	user.FeedIDs = body
+	if err := user.Update(nil); err != nil {
+		c.AbortWithError(500, err)
+		return
 	}
 
-	for i := range body.FeedsIDs {
-		if !userHasFeed(body.FeedsIDs[i]) {
-			user.FeedIDs = append(user.FeedIDs, body.FeedsIDs[i])
-		}
-	}
-
-	err := users().Update(bson.M{"_id": user.ID}, bson.M{
-		"feedids": user.FeedIDs,
-	})
-
-	if err != nil {
-		c.JSON(400, gin.H{"error": "could not update user"})
-	} else {
-		c.JSON(200, &user)
-	}
+	c.JSON(200, user)
 }
 
-func UpdateUserItemStates(c *gin.Context) {
+func UpdateUserItemState(c *gin.Context) {
 	user := c.MustGet("user").(*User)
-	rawBody, _ := ioutil.ReadAll(c.Request.Body)
 
-	var body struct {
-		States []ItemState `json:"states"`
-	}
+	var body ItemState
 
-	if err := json.Unmarshal(rawBody, &body); err != nil {
+	if err := c.Bind(&body); err != nil {
 		c.JSON(400, gin.H{"error": "invalid body"})
 		return
 	}
 
-	user.ItemStates = body.States
-
-	if err := users().Update(bson.M{"_id": user.ID}, &user); err != nil {
-		c.JSON(400, gin.H{"error": "could not update user"})
-	} else {
-		c.JSON(200, &user)
+	found := false
+	for i, s := range user.ItemStates {
+		if s.ItemGUID == body.ItemGUID && s.FeedID == body.FeedID {
+			user.ItemStates[i] = body
+			found = true
+			break
+		}
 	}
+
+	if !found {
+		user.ItemStates = append(user.ItemStates, body)
+	}
+
+	if err := user.Update(nil); err != nil {
+		c.AbortWithError(500, err)
+		return
+	}
+
+	c.JSON(200, &user)
 }

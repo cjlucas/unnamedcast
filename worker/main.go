@@ -82,7 +82,11 @@ func main() {
 	flag.Var(&queueList, "q", "Usage goes here")
 	flag.Parse()
 
-	koda.Submit(queueScrapeiTunesFeeds, 0, nil)
+	// koda.Submit(queueScrapeiTunesFeeds, 0, nil)
+
+	koda.Submit(queueUpdateFeed, 0, &UpdateFeedPayload{
+		URL: "http://home.cjlucas.net:4567/feed/561e6369c874725575000265",
+	})
 
 	var wg sync.WaitGroup
 
