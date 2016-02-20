@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/json"
+	"io/ioutil"
 	"strings"
 	"time"
 
@@ -41,6 +43,10 @@ func (u *User) Update(new *User) error {
 		u.ModificationTime = time.Now().UTC()
 	}
 	return users().Update(bson.M{"_id": u.ID}, u)
+}
+
+func (u *User) FindByName(username string) error {
+	return users().Find(bson.M{"username": username}).One(u)
 }
 
 func users() *mgo.Collection {
@@ -151,14 +157,16 @@ func GetUserFeeds(c *gin.Context) {
 
 func UpdateUserFeeds(c *gin.Context) {
 	user := c.MustGet("user").(*User)
-	var body []bson.ObjectId
 
-	if err := c.Bind(&body); err != nil {
+	body, _ := ioutil.ReadAll(c.Request.Body)
+	var ids []bson.ObjectId
+
+	if err := json.Unmarshal(body, &ids); err != nil {
 		c.JSON(400, gin.H{"error": "invalid body"})
 		return
 	}
 
-	user.FeedIDs = body
+	user.FeedIDs = ids
 	if err := user.Update(nil); err != nil {
 		c.AbortWithError(500, err)
 		return
