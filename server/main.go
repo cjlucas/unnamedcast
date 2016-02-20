@@ -1,12 +1,78 @@
 package main
 
 import (
+	"errors"
+	"strconv"
+	"strings"
+
+	"golang.org/x/crypto/bcrypt"
+
 	"github.com/gin-gonic/gin"
 
 	"gopkg.in/mgo.v2"
+	"gopkg.in/mgo.v2/bson"
 )
 
 var gSession *mgo.Session
+
+func SearchFeeds(c *gin.Context) {
+	var limit int
+	if limitStr := c.Query("limit"); limitStr == "" {
+		limit = 50
+	} else if i, err := strconv.Atoi(limitStr); err != nil {
+		c.AbortWithError(500, errors.New("Error parsing limit"))
+		return
+	} else {
+		limit = i
+	}
+
+	query := c.Query("q")
+	if query == "" {
+		c.AbortWithError(400, errors.New("No query given"))
+		return
+	}
+
+	q := feeds().Find(bson.M{
+		"$text": bson.M{"$search": query},
+	})
+
+	q.Select(bson.M{
+		"score":     bson.M{"$meta": "textScore"},
+		"title":     1,
+		"category":  1,
+		"image_url": 1,
+	}).Sort("$textScore:score").Limit(limit)
+
+	var results []Feed
+	if err := q.All(&results); err != nil {
+		c.AbortWithError(500, err)
+	}
+
+	c.JSON(200, results)
+}
+
+func UserLogin(c *gin.Context) {
+	username := strings.TrimSpace(c.Query("username"))
+	password := strings.TrimSpace(c.Query("password"))
+
+	if username == "" || password == "" {
+		c.JSON(400, gin.H{"error": "missing required parameter(s)"})
+		return
+	}
+
+	var user User
+	if err := user.FindByName(username); err != nil {
+		c.JSON(400, gin.H{"error": "user not found"})
+		return
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
+		c.JSON(401, gin.H{"error": "incorrect password"})
+		return
+	}
+
+	c.JSON(200, &user)
+}
 
 func main() {
 	session, err := mgo.Dial("localhost")
@@ -43,6 +109,9 @@ func main() {
 	})
 
 	g := gin.Default()
+
+	g.GET("/search_feeds", SearchFeeds)
+	g.GET("/login", UserLogin)
 
 	api := g.Group("/api")
 
