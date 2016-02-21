@@ -48,6 +48,10 @@ func SearchFeeds(c *gin.Context) {
 		c.AbortWithError(500, err)
 	}
 
+	if results == nil {
+		results = make([]Feed, 0)
+	}
+
 	c.JSON(200, results)
 }
 
