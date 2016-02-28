@@ -13,13 +13,15 @@ import (
 var httpClient = http.Client{}
 
 type Feed struct {
-	ID       string `json:"id,omitempty"`
-	Title    string `json:"title"`
-	URL      string `json:"url"`
-	Author   string `json:"author"`
-	Items    []Item `json:"items"`
-	ImageURL string `json:"image_url"`
-	ITunesID int    `json:"itunes_id"`
+	ID                string `json:"id,omitempty"`
+	Title             string `json:"title"`
+	URL               string `json:"url"`
+	Author            string `json:"author"`
+	Items             []Item `json:"items"`
+	ImageURL          string `json:"image_url"`
+	ITunesID          int    `json:"itunes_id"`
+	ITunesReviewCount int    `json:"itunes_review_count"`
+	ITunesRatingCount int    `json:"itunes_rating_count"`
 
 	Category struct {
 		Name          string   `json:"name"`

@@ -79,13 +79,18 @@ func runQueueWorker(wg *sync.WaitGroup, q *koda.Queue, w Worker) {
 
 func main() {
 	var queueList queueOptList
-	flag.Var(&queueList, "q", "Usage goes here")
+	flag.Var(&queueList, "q", "queueName[:numWorkers]")
 	flag.Parse()
 
 	// koda.Submit(queueScrapeiTunesFeeds, 0, nil)
 
+	// koda.Submit(queueUpdateFeed, 0, &UpdateFeedPayload{
+	// 	URL: "http://home.cjlucas.net:4567/feed/561e6369c874725575000265",
+	// })
+
 	koda.Submit(queueUpdateFeed, 0, &UpdateFeedPayload{
-		URL: "http://home.cjlucas.net:4567/feed/561e6369c874725575000265",
+		URL:      "https://itunes.apple.com/us/podcast/the-talk-show-with-john-gruber/id528458508",
+		ITunesID: 528458508,
 	})
 
 	var wg sync.WaitGroup

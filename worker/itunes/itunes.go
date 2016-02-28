@@ -1,6 +1,7 @@
 package itunes
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -11,6 +12,11 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 )
+
+type ReviewStats struct {
+	ReviewCount int `json:"totalNumberOfReviews"`
+	RatingCount int `json:"ratingCount"`
+}
 
 var alphabetList = strings.Split("ABCDEFGHIJKLMNOPQRSTUVWXYZ*", "")
 var itunesRssFeedRegexp = regexp.MustCompile(`"feedUrl":"(https?:\/\/[^"]*)`)
@@ -195,4 +201,27 @@ func ResolveiTunesFeedURL(url string) (string, error) {
 	}
 
 	return "", errors.New("No match for feed url found in response body")
+}
+
+func FetchReviewStats(itunesID int) (*ReviewStats, error) {
+	url := fmt.Sprintf("https://itunes.apple.com/us/customer-reviews/id%d?dataOnly=true&displayable-kind=4", itunesID)
+	req, err := itunesHTTPGetRequest(url)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	defer resp.Body.Close()
+	data, _ := ioutil.ReadAll(resp.Body)
+
+	stats := ReviewStats{}
+	if err := json.Unmarshal(data, &stats); err != nil {
+		return nil, err
+	}
+
+	return &stats, nil
 }

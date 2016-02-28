@@ -176,7 +176,8 @@ func (w *UpdateFeedWorker) Work(q *koda.Queue, j *koda.Job) error {
 	}
 
 	url := payload.URL
-	if iTunesFeedURLRegexp.MatchString(url) {
+	isiTunesURL := iTunesFeedURLRegexp.MatchString(url)
+	if isiTunesURL {
 		feedURL, err := itunes.ResolveiTunesFeedURL(url)
 		if err != nil {
 			return fmt.Errorf("Error occurred while resolving iTunes URL: %s", err)
@@ -203,6 +204,14 @@ func (w *UpdateFeedWorker) Work(q *koda.Queue, j *koda.Job) error {
 	feed.URL = url
 	if payload.ITunesID != 0 {
 		feed.ITunesID = payload.ITunesID
+
+		stats, err := itunes.FetchReviewStats(payload.ITunesID)
+		if err != nil {
+			fmt.Printf("Failed to fetch review stats for feed, will continue\n")
+		} else {
+			feed.ITunesReviewCount = stats.ReviewCount
+			feed.ITunesRatingCount = stats.RatingCount
+		}
 	}
 
 	return api.PostFeed(feed)
