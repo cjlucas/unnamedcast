@@ -119,6 +119,7 @@ func main() {
 
 	api := g.Group("/api")
 
+	api.GET("/users", FindAllUsers)
 	api.POST("/users", CreateUser)
 	api.GET("/users/:id", RequireValidUserID, ReadUser)
 	api.GET("/users/:id/feeds", RequireValidUserID, GetUserFeeds)

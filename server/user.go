@@ -77,6 +77,16 @@ func RequireValidUserID(c *gin.Context) {
 	}
 }
 
+func FindAllUsers(c *gin.Context) {
+	var out []User
+	if err := users().Find(nil).All(&out); err != nil {
+		c.AbortWithError(500, err)
+		return
+	}
+
+	c.JSON(200, &out)
+}
+
 func CreateUser(c *gin.Context) {
 	username := strings.TrimSpace(c.Query("username"))
 	password := strings.TrimSpace(c.Query("password"))
