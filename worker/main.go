@@ -14,9 +14,10 @@ import (
 const (
 	queueScrapeiTunesFeeds = "scrape-itunes-feeds"
 	queueUpdateFeed        = "update-feed"
+	queueUpdateUserFeeds   = "update-user-feeds"
 )
 
-const MaxAttempts = 10
+const MaxAttempts = 5
 
 type queueOpt struct {
 	Name       string
@@ -85,19 +86,17 @@ func main() {
 	// koda.Submit(queueScrapeiTunesFeeds, 0, nil)
 
 	// koda.Submit(queueUpdateFeed, 0, &UpdateFeedPayload{
-	// 	URL: "http://home.cjlucas.net:4567/feed/561e6369c874725575000265",
+	// 	FeedID: "56d5c158c87472028649f39a",
 	// })
-
-	koda.Submit(queueUpdateFeed, 0, &UpdateFeedPayload{
-		URL:      "https://itunes.apple.com/us/podcast/the-talk-show-with-john-gruber/id528458508",
-		ITunesID: 528458508,
-	})
+	//
+	koda.Submit(queueUpdateUserFeeds, 0, nil)
 
 	var wg sync.WaitGroup
 
 	handlers := map[string]Worker{
 		queueScrapeiTunesFeeds: &ScrapeiTunesFeeds{},
 		queueUpdateFeed:        &UpdateFeedWorker{},
+		queueUpdateUserFeeds:   &UpdateUserFeedsWorker{},
 	}
 
 	for _, opt := range queueList {

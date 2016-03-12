@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -54,6 +56,8 @@ func (w *ScrapeiTunesFeeds) scrapeFeedList(url string) ([]string, error) {
 }
 
 func (w *ScrapeiTunesFeeds) Work(q *koda.Queue, j *koda.Job) error {
+	const numURLResolvers = 10
+
 	fmt.Println("Fetching the genres...")
 	page, err := itunes.NewGenreListPage()
 	if err != nil {
@@ -104,17 +108,82 @@ func (w *ScrapeiTunesFeeds) Work(q *koda.Queue, j *koda.Job) error {
 
 	fmt.Printf("Found %d feeds\n", len(itunesIDFeedURLMap))
 
-	for id, url := range itunesIDFeedURLMap {
+	// Remove feeds that are already in the database
+	for id := range itunesIDFeedURLMap {
 		exists, err := api.FeedExistsWithiTunesID(id)
-		if exists {
-			continue
-		} else if err != nil {
-			return err
+		if err != nil {
+			return fmt.Errorf("Error while checking if feed exists:", err)
 		}
 
+		if exists {
+			delete(itunesIDFeedURLMap, id)
+		}
+	}
+
+	// Spin up workers to resolve all itunes feed urls
+
+	type urlResolverResponse struct {
+		ITunesID int
+		URL      string
+		Err      error
+	}
+
+	urlResolverInChan := make(chan int, len(itunesIDFeedURLMap))
+	urlResolverOutChan := make(chan urlResolverResponse, len(itunesIDFeedURLMap))
+
+	work := func(in <-chan int, out chan<- urlResolverResponse) {
+		for {
+			itunesID, ok := <-in
+			if !ok {
+				break
+			}
+
+			url := itunesIDFeedURLMap[itunesID]
+
+			url, err := itunes.ResolveiTunesFeedURL(url)
+			out <- urlResolverResponse{
+				ITunesID: itunesID,
+				URL:      url,
+				Err:      err,
+			}
+		}
+	}
+
+	for id := range itunesIDFeedURLMap {
+		urlResolverInChan <- id
+	}
+
+	close(urlResolverInChan)
+
+	for i := 0; i < numURLResolvers; i++ {
+		go work(urlResolverInChan, urlResolverOutChan)
+	}
+
+	for i := 0; i < len(itunesIDFeedURLMap); i++ {
+		resp, ok := <-urlResolverOutChan
+		if !ok {
+			panic("Out channel seems to have closed. This should never happen")
+		}
+
+		fmt.Printf("Resolved url %d of %d\n", i+1, len(itunesIDFeedURLMap))
+
+		if resp.Err != nil {
+			fmt.Println("Error occured when attempting to resolve feed url, will continue. Error: ", resp.Err)
+			continue
+		}
+
+		feed := &api.Feed{URL: resp.URL, ITunesID: resp.ITunesID}
+
+		feed, err = api.CreateFeed(feed)
+		if err != nil {
+			fmt.Println("Could not create feed:", err)
+			continue
+		}
+
+		fmt.Printf("#%v\n", feed)
+
 		_, err = koda.Submit(queueUpdateFeed, 0, &UpdateFeedPayload{
-			URL:      url,
-			ITunesID: id,
+			FeedID: feed.ID,
 		})
 
 		if err != nil {
@@ -123,6 +192,8 @@ func (w *ScrapeiTunesFeeds) Work(q *koda.Queue, j *koda.Job) error {
 		}
 	}
 
+	close(urlResolverOutChan)
+
 	return nil
 }
 
@@ -130,8 +201,104 @@ type UpdateFeedWorker struct {
 }
 
 type UpdateFeedPayload struct {
-	URL      string `json:url`
-	ITunesID int    `json:itunes_id`
+	FeedID string `json:"feed_id"`
+}
+
+func (w *UpdateFeedWorker) mergeFeeds(feed *api.Feed, rssFeed *api.Feed) *api.Feed {
+	rssFeed.ID = feed.ID
+	rssFeed.ITunesID = feed.ITunesID
+	rssFeed.URL = feed.URL
+	rssFeed.ITunesReviewCount = feed.ITunesReviewCount
+	rssFeed.ITunesRatingCount = feed.ITunesRatingCount
+
+	// Update items while preserving items that are no longer present in the
+	// current RSS document
+	guidMap := make(map[string]*api.Item)
+	for i := range feed.Items {
+		guidMap[feed.Items[i].GUID] = &feed.Items[i]
+	}
+
+	for i := range rssFeed.Items {
+		guidMap[rssFeed.Items[i].GUID] = &rssFeed.Items[i]
+	}
+
+	rssFeed.Items = rssFeed.Items[len(rssFeed.Items):]
+	for _, i := range guidMap {
+		rssFeed.Items = append(rssFeed.Items, *i)
+	}
+
+	return rssFeed
+}
+
+func (w *UpdateFeedWorker) Work(q *koda.Queue, j *koda.Job) error {
+	var payload UpdateFeedPayload
+	if err := j.UnmarshalPayload(&payload); err != nil {
+		return err
+	}
+
+	id := payload.FeedID
+	feed, err := api.GetFeed(id)
+	if err != nil {
+		return err
+	}
+
+	resp, err := http.Get(feed.URL)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	doc, err := rss.ParseFeed(resp.Body)
+	if err != nil {
+		return err
+	}
+
+	rawFeed, err := rssDocumentToAPIPayload(doc)
+	if err != nil {
+		return err
+	}
+
+	feed = w.mergeFeeds(feed, rawFeed)
+
+	if feed.ITunesID != 0 {
+		stats, err := itunes.FetchReviewStats(feed.ITunesID)
+		if err != nil {
+			fmt.Printf("Failed to fetch review stats for feed, will continue\n")
+		} else {
+			feed.ITunesReviewCount = stats.ReviewCount
+			feed.ITunesRatingCount = stats.RatingCount
+		}
+	}
+
+	fmt.Printf("%+v\n", feed)
+
+	return api.UpdateFeed(feed)
+}
+
+type UpdateUserFeedsWorker struct{}
+
+func (w *UpdateUserFeedsWorker) Work(q *koda.Queue, j *koda.Job) error {
+	var users []api.User
+	resp, err := http.Get("http://localhost:8081/api/users")
+	if err != nil {
+		return err
+	}
+
+	defer resp.Body.Close()
+	data, _ := ioutil.ReadAll(resp.Body)
+
+	if err := json.Unmarshal(data, &users); err != nil {
+		return err
+	}
+
+	for i := range users {
+		feedIDs := users[i].FeedIDs
+		for _, id := range feedIDs {
+			koda.Submit(queueUpdateFeed, 0, &UpdateFeedPayload{FeedID: id})
+		}
+	}
+
+	return nil
 }
 
 func rssDocumentToAPIPayload(doc *rss.Document) (*api.Feed, error) {
@@ -167,52 +334,4 @@ func rssDocumentToAPIPayload(doc *rss.Document) (*api.Feed, error) {
 	}
 
 	return &feed, nil
-}
-
-func (w *UpdateFeedWorker) Work(q *koda.Queue, j *koda.Job) error {
-	var payload UpdateFeedPayload
-	if err := j.UnmarshalPayload(&payload); err != nil {
-		return err
-	}
-
-	url := payload.URL
-	isiTunesURL := iTunesFeedURLRegexp.MatchString(url)
-	if isiTunesURL {
-		feedURL, err := itunes.ResolveiTunesFeedURL(url)
-		if err != nil {
-			return fmt.Errorf("Error occurred while resolving iTunes URL: %s", err)
-		}
-		url = feedURL
-	}
-
-	resp, err := http.Get(url)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	doc, err := rss.ParseFeed(resp.Body)
-	if err != nil {
-		return err
-	}
-
-	feed, err := rssDocumentToAPIPayload(doc)
-	if err != nil {
-		return err
-	}
-
-	feed.URL = url
-	if payload.ITunesID != 0 {
-		feed.ITunesID = payload.ITunesID
-
-		stats, err := itunes.FetchReviewStats(payload.ITunesID)
-		if err != nil {
-			fmt.Printf("Failed to fetch review stats for feed, will continue\n")
-		} else {
-			feed.ITunesReviewCount = stats.ReviewCount
-			feed.ITunesRatingCount = stats.RatingCount
-		}
-	}
-
-	return api.PostFeed(feed)
 }

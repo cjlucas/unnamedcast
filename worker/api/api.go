@@ -5,12 +5,21 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"strconv"
 	"time"
 )
 
 var httpClient = http.Client{}
+
+type User struct {
+	ID               string    `json:"id"`
+	Username         string    `json:"username"`
+	FeedIDs          []string  `json:"feeds"`
+	CreationTime     time.Time `json:"creation_time"`
+	ModificationTime time.Time `json:"modification_time"`
+}
 
 type Feed struct {
 	ID                string `json:"id,omitempty"`
@@ -42,16 +51,48 @@ type Item struct {
 	ImageURL        string        `json:"image_url"`
 }
 
-func PostFeed(feed *Feed) error {
+func GetFeed(feedID string) (*Feed, error) {
+	url := fmt.Sprintf("http://localhost:8081/api/feeds/%s", feedID)
+	resp, err := httpClient.Get(url)
+	if err != nil {
+		return nil, err
+	}
+
+	defer resp.Body.Close()
+	data, _ := ioutil.ReadAll(resp.Body)
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("failed to get feed (code: %d)", resp.StatusCode)
+	}
+
+	var feed Feed
+	if err := json.Unmarshal(data, &feed); err != nil {
+		return nil, err
+	}
+
+	return &feed, nil
+}
+
+func UpdateFeed(feed *Feed) error {
 	payload, err := json.Marshal(&feed)
 	if err != nil {
 		return err
 	}
 
 	r := bytes.NewReader(payload)
-	url := "http://localhost:8081/api/feeds"
-	resp, err := httpClient.Post(url, "application/json", r)
+	url := fmt.Sprintf("http://localhost:8081/api/feeds/%s", feed.ID)
+	req, err := http.NewRequest("PUT", url, r)
 	if err != nil {
+		return err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		if err, ok := err.(*net.DNSError); ok {
+			panic(fmt.Sprintf("TURNS OUT IT IS A DNS error: %s", err))
+		}
 		return err
 	}
 	defer resp.Body.Close()
@@ -67,6 +108,34 @@ func PostFeed(feed *Feed) error {
 	}
 
 	return nil
+}
+
+func CreateFeed(feed *Feed) (*Feed, error) {
+	payload, err := json.Marshal(&feed)
+	if err != nil {
+		return nil, err
+	}
+
+	r := bytes.NewReader(payload)
+	apiURL := "http://localhost:8081/api/feeds"
+	resp, err := httpClient.Post(apiURL, "application/json", r)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	// Read entire response to prevent broken pipe
+	data, _ := ioutil.ReadAll(resp.Body)
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("Received unexpected status code with body: %s", data)
+	}
+
+	if err := json.Unmarshal(data, feed); err != nil {
+		return nil, err
+	}
+
+	return feed, nil
 }
 
 func feedExistsWithKey(key, value string) (bool, error) {
