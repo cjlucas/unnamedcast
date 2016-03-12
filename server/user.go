@@ -33,6 +33,7 @@ type User struct {
 }
 
 func (u *User) Create() error {
+	u.ID = bson.NewObjectId()
 	u.CreationTime = time.Now().UTC()
 	u.ModificationTime = u.CreationTime
 	return users().Insert(u)
@@ -70,11 +71,11 @@ func RequireValidUserID(c *gin.Context) {
 	user := loadUser(id)
 
 	if user == nil {
-		c.JSON(400, gin.H{"error": "invalid id"})
-		c.Abort()
-	} else {
-		c.Set("user", user)
+		c.AbortWithStatus(404)
+		return
 	}
+
+	c.Set("user", user)
 }
 
 func FindAllUsers(c *gin.Context) {

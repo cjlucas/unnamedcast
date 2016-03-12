@@ -2,12 +2,15 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/cjlucas/unnamedcast/koda"
 	"github.com/gin-gonic/gin"
+	"github.com/robfig/cron"
 
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
@@ -79,6 +82,14 @@ func UserLogin(c *gin.Context) {
 }
 
 func main() {
+	c := cron.New()
+	c.AddFunc("@hourly", func() {
+		fmt.Println("Updating user feeds")
+		koda.Submit("update-user-feeds", 0, nil)
+	})
+
+	c.Start()
+
 	session, err := mgo.Dial("localhost")
 	if err != nil {
 		panic(err)

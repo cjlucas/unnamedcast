@@ -52,6 +52,7 @@ func generateGUIDToItemMap(items []Item) map[string]*Item {
 }
 
 func (f *Feed) Create() error {
+	f.ID = bson.NewObjectId()
 	f.CreationTime = time.Now().UTC()
 	f.ModificationTime = f.CreationTime
 	return feeds().Insert(f)
@@ -133,12 +134,11 @@ func RequireValidFeedID(c *gin.Context) {
 	feed := loadFeed(id)
 
 	if feed == nil {
-		c.JSON(400, gin.H{"error": "invalid id"})
-		c.Abort()
+		c.AbortWithStatus(404)
 		return
-	} else {
-		c.Set("feed", feed)
 	}
+
+	c.Set("feed", feed)
 }
 
 func CreateFeed(c *gin.Context) {
