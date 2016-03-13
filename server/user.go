@@ -19,7 +19,7 @@ import (
 type ItemState struct {
 	FeedID   bson.ObjectId `json:"feed_id"`
 	ItemGUID string        `json:"item_guid"`
-	Position time.Duration `json:"position"` // 0 if item is unplayed
+	Position float64       `json:"position"` // 0 if item is unplayed
 }
 
 type User struct {
@@ -121,6 +121,11 @@ func ReadUser(c *gin.Context) {
 	c.JSON(200, user)
 }
 
+func GetUserItemStates(c *gin.Context) {
+	user := c.MustGet("user").(*User)
+	c.JSON(200, user.ItemStates)
+}
+
 func GetUserFeeds(c *gin.Context) {
 	user := c.MustGet("user").(*User)
 
@@ -186,33 +191,23 @@ func UpdateUserFeeds(c *gin.Context) {
 	c.JSON(200, user)
 }
 
-func UpdateUserItemState(c *gin.Context) {
+func UpdateUserItemStates(c *gin.Context) {
 	user := c.MustGet("user").(*User)
 
-	var body ItemState
+	var states []ItemState
+	body, _ := ioutil.ReadAll(c.Request.Body)
 
-	if err := c.Bind(&body); err != nil {
-		c.JSON(400, gin.H{"error": "invalid body"})
+	if err := json.Unmarshal(body, &states); err != nil {
+		c.AbortWithError(400, err)
 		return
 	}
 
-	found := false
-	for i, s := range user.ItemStates {
-		if s.ItemGUID == body.ItemGUID && s.FeedID == body.FeedID {
-			user.ItemStates[i] = body
-			found = true
-			break
-		}
-	}
-
-	if !found {
-		user.ItemStates = append(user.ItemStates, body)
-	}
+	user.ItemStates = states
 
 	if err := user.Update(nil); err != nil {
 		c.AbortWithError(500, err)
 		return
 	}
 
-	c.JSON(200, &user)
+	c.JSON(200, &user.ItemStates)
 }

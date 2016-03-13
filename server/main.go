@@ -135,7 +135,8 @@ func main() {
 	api.GET("/users/:id", RequireValidUserID, ReadUser)
 	api.GET("/users/:id/feeds", RequireValidUserID, GetUserFeeds)
 	api.PUT("/users/:id/feeds", RequireValidUserID, UpdateUserFeeds)
-	api.PUT("/users/:id/states", RequireValidUserID, UpdateUserItemState)
+	api.GET("/users/:id/states", RequireValidUserID, GetUserItemStates)
+	api.PUT("/users/:id/states", RequireValidUserID, UpdateUserItemStates)
 
 	api.POST("/feeds", CreateFeed)
 	api.GET("/feeds/:id", RequireValidFeedID, ReadFeed)
