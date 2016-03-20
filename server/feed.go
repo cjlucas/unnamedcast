@@ -81,6 +81,14 @@ func (f *Feed) Update(new *Feed) error {
 
 	for i := range new.Items {
 		item := &new.Items[i]
+		// Time needs to be UTC because CopyModel will detect
+		// a change if the time zones don't match.
+		//
+		// An alternate solution would be require UTC for all times, everywhere.
+		// This would have to be done at a choke point like the JSON/BSON
+		// [un]marshallers
+		item.PublicationTime = item.PublicationTime.UTC()
+
 		if origItem := itemGUIDMap[item.GUID]; origItem != nil {
 			// If Item already existed, copy the new feed data over
 			if CopyModel(origItem, item, "ModificationTime") {
