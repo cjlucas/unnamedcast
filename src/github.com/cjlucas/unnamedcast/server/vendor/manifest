@@ -32,6 +32,13 @@
 			"branch": "master"
 		},
 		{
+			"importpath": "github.com/robfig/cron",
+			"repository": "https://github.com/robfig/cron",
+			"revision": "32d9c273155a0506d27cf73dd1246e86a470997e",
+			"branch": "master",
+			"notests": true
+		},
+		{
 			"importpath": "golang.org/x/crypto/bcrypt",
 			"repository": "https://go.googlesource.com/crypto",
 			"revision": "f18420efc3b4f8e9f3d51f6bd2476e92c46260e9",
