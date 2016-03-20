@@ -1,6 +1,7 @@
 package koda
 
 import (
+	"net"
 	"strconv"
 	"time"
 )
@@ -160,7 +161,11 @@ func (q *Queue) Wait() (*Job, error) {
 	for {
 		results, err := conn.BRPop(1*time.Second, queues...)
 		if err != nil && !conn.IsNilError(err) {
-			return nil, err
+			if err, ok := err.(net.Error); ok && err.Temporary() {
+				// TODO(clucas): In backoff algorithm may be appropriate here
+				time.Sleep(5 * time.Second)
+				continue
+			}
 		}
 
 		if len(results) > 1 {
