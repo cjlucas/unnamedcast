@@ -10,13 +10,13 @@
 		{
 			"importpath": "github.com/gin-gonic/gin",
 			"repository": "https://github.com/gin-gonic/gin",
-			"revision": "52fcc5dbf6e94df33ad313858fb94b713e9d1b4a",
+			"revision": "3d002e382355cafc15d706b92899b1961d5b79e9",
 			"branch": "master"
 		},
 		{
 			"importpath": "github.com/manucorporat/sse",
 			"repository": "https://github.com/manucorporat/sse",
-			"revision": "fe6ea2c8e398672518ef204bf0fbd9af858d0e15",
+			"revision": "ee05b128a739a0fb76c7ebd3ae4810c1de808d6d",
 			"branch": "master"
 		},
 		{
@@ -28,7 +28,7 @@
 		{
 			"importpath": "github.com/mattn/go-colorable",
 			"repository": "https://github.com/mattn/go-colorable",
-			"revision": "3dac7b4f76f6e17fb39b768b89e3783d16e237fe",
+			"revision": "9cbef7c35391cca05f15f8181dc0b18bc9736dbb",
 			"branch": "master"
 		},
 		{
@@ -41,34 +41,28 @@
 		{
 			"importpath": "golang.org/x/crypto/bcrypt",
 			"repository": "https://go.googlesource.com/crypto",
-			"revision": "f18420efc3b4f8e9f3d51f6bd2476e92c46260e9",
+			"revision": "c197bcf24cde29d3f73c7b4ac6fd41f4384e8af6",
 			"branch": "master",
 			"path": "/bcrypt"
 		},
 		{
 			"importpath": "golang.org/x/crypto/blowfish",
 			"repository": "https://go.googlesource.com/crypto",
-			"revision": "f18420efc3b4f8e9f3d51f6bd2476e92c46260e9",
+			"revision": "c197bcf24cde29d3f73c7b4ac6fd41f4384e8af6",
 			"branch": "master",
 			"path": "/blowfish"
 		},
 		{
 			"importpath": "golang.org/x/net/context",
 			"repository": "https://go.googlesource.com/net",
-			"revision": "0cb26f788dd4625d1956c6fd97ffc4c90669d129",
+			"revision": "9d8ef8d73b53840886e4a772c72f2b7d396cb37c",
 			"branch": "master",
 			"path": "/context"
 		},
 		{
-			"importpath": "gopkg.in/bluesuncorp/validator.v5",
-			"repository": "https://gopkg.in/bluesuncorp/validator.v5",
-			"revision": "d5acf1dac43705f8bfbb71d878e290e2bed3950b",
-			"branch": "master"
-		},
-		{
 			"importpath": "gopkg.in/mgo.v2",
 			"repository": "https://gopkg.in/mgo.v2",
-			"revision": "e30de8ac9ae3b30df7065f766c71f88bba7d4e49",
+			"revision": "b6e2fa371e64216a45e61072a96d4e3859f169da",
 			"branch": "v2"
 		},
 		{
