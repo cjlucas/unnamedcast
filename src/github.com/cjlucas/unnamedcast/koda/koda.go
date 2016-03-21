@@ -166,6 +166,8 @@ func (q *Queue) Wait() (*Job, error) {
 				time.Sleep(5 * time.Second)
 				continue
 			}
+
+			return nil, err
 		}
 
 		if len(results) > 1 {
