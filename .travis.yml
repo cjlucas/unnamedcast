@@ -1,8 +1,4 @@
-language: go
 go:
-  - 1.5
-
-before_install:
-  - make
+  - 1.6
 
 script: cd src/github.com/cjlucas/unnamedcast; go list ./... | grep -v vendor | xargs go test -v
