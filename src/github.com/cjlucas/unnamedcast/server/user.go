@@ -128,47 +128,7 @@ func GetUserItemStates(c *gin.Context) {
 
 func GetUserFeeds(c *gin.Context) {
 	user := c.MustGet("user").(*User)
-
-	const syncTokenKey = "X-Sync-Token"
-	query := bson.M{
-		"_id": bson.M{
-			"$in": user.FeedIDs,
-		},
-	}
-
-	token, err := DecodeSyncToken(c.Request.Header.Get(syncTokenKey))
-	if err == nil {
-		query["modification_time"] = bson.M{"$gt": token.SyncTime()}
-	}
-
-	var feedList []Feed
-	if err := feeds().Find(query).All(&feedList); err != nil {
-		c.JSON(404, gin.H{"error": "no results found"})
-		return
-	}
-
-	if feedList == nil {
-		feedList = make([]Feed, 0)
-	}
-
-	// Filter items by modification time
-	// NOTE: This can be optimized by using an aggregate with $filter
-	syncTime := token.SyncTime()
-	for i := range feedList {
-		feed := &feedList[i]
-
-		var items []Item
-		for i := range feed.Items {
-			item := &feed.Items[i]
-			if item.ModificationTime.After(syncTime) {
-				items = append(items, *item)
-			}
-		}
-		feed.Items = items
-	}
-
-	c.Header(syncTokenKey, GenerateSyncToken())
-	c.JSON(200, &feedList)
+	c.JSON(200, &user.FeedIDs)
 }
 
 func UpdateUserFeeds(c *gin.Context) {
