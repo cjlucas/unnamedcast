@@ -123,6 +123,10 @@ func main() {
 		Key: []string{"modification_time"},
 	})
 
+	ensureIndex(feeds(), mgo.Index{
+		Key: []string{"$text:title"},
+	})
+
 	g := gin.Default()
 
 	g.GET("/search_feeds", SearchFeeds)
