@@ -4,6 +4,6 @@ go:
   - 1.6
 
 before_install:
-  - mv $TRAVIS_BUILD_DIR/* $GOPATH/
+  - cp -rv $TRAVIS_BUILD_DIR/* $GOPATH/
 
 script: make test
