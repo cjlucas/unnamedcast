@@ -1,7 +1,9 @@
+language:go
+
 go:
   - 1.6
 
 before_install:
-  - export GOPATH=$TRAVIS_BUILD_DIR
+  - mv $TRAVIS_BUILD_DIR/* $GOPATH/
 
-script: cd src/github.com/cjlucas/unnamedcast; go list ./... | grep -v vendor | xargs go test -v
+script: make test
