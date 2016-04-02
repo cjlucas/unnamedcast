@@ -1,0 +1,8 @@
+language: go
+go:
+  - 1.5
+
+before_install:
+  - make
+
+script: go list ./... | grep -v vendor | xargs go test -v
