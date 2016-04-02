@@ -5,4 +5,4 @@ go:
 before_install:
   - make
 
-script: go list ./... | grep -v vendor | xargs go test -v
+script: cd src/github.com/cjlucas/unnamedcast; go list ./... | grep -v vendor | xargs go test -v
