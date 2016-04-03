@@ -189,6 +189,27 @@ func FindFeed(c *gin.Context) {
 
 func ReadFeed(c *gin.Context) {
 	feed := c.MustGet("feed").(*Feed)
+
+	if v := c.Query("items_modified_since"); v != "" {
+		t, err := time.Parse(time.RFC3339, v)
+		if err != nil {
+			c.AbortWithError(500, err)
+			return
+		}
+
+		// Filter items by modification time
+		// NOTE: This can be optimized by using an aggregate with $filter
+		var items []Item
+		for i := range feed.Items {
+			item := &feed.Items[i]
+			if item.ModificationTime.After(t) {
+				items = append(items, *item)
+			}
+		}
+
+		feed.Items = items
+	}
+
 	c.JSON(200, &feed)
 }
 
