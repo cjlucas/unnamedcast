@@ -204,6 +204,32 @@ type UpdateFeedPayload struct {
 	FeedID string `json:"feed_id"`
 }
 
+func (w *UpdateFeedWorker) guidItemsMap(items []api.Item) map[string]*api.Item {
+	guidMap := make(map[string]*api.Item)
+
+	for i := range items {
+		item := &items[i]
+		guidMap[item.GUID] = item
+	}
+
+	return guidMap
+}
+
+func (w *UpdateFeedWorker) findNewItems(oldFeed, newFeed *api.Feed) []api.Item {
+	var newItems []api.Item
+
+	oldMap := w.guidItemsMap(oldFeed.Items)
+	newMap := w.guidItemsMap(newFeed.Items)
+
+	for guid, item := range newMap {
+		if _, ok := oldMap[guid]; !ok {
+			newItems = append(newItems, *item)
+		}
+	}
+
+	return newItems
+}
+
 func (w *UpdateFeedWorker) mergeFeeds(feed *api.Feed, rssFeed *api.Feed) *api.Feed {
 	rssFeed.ID = feed.ID
 	rssFeed.ITunesID = feed.ITunesID
@@ -258,6 +284,8 @@ func (w *UpdateFeedWorker) Work(q *koda.Queue, j *koda.Job) error {
 		return err
 	}
 
+	newItems := w.findNewItems(feed, rawFeed)
+
 	feed = w.mergeFeeds(feed, rawFeed)
 
 	if feed.ITunesID != 0 {
@@ -270,9 +298,32 @@ func (w *UpdateFeedWorker) Work(q *koda.Queue, j *koda.Job) error {
 		}
 	}
 
-	fmt.Printf("%+v\n", feed)
+	if err := api.UpdateFeed(feed); err != nil {
+		return err
+	}
 
-	return api.UpdateFeed(feed)
+	users, err := api.GetFeedsUsers(feed.ID)
+	if err != nil {
+		return err
+	}
+
+	for i := range users {
+		user := &users[i]
+		for j := range newItems {
+			user.ItemStates = append(user.ItemStates, api.ItemState{
+				FeedID:   feed.ID,
+				ItemGUID: newItems[j].GUID,
+				Position: 0,
+			})
+		}
+
+		if err := api.PutItemStates(user.ID, user.ItemStates); err != nil {
+			fmt.Println("Error saving states. Will continue:", err)
+			continue
+		}
+	}
+
+	return nil
 }
 
 type UpdateUserFeedsWorker struct{}
