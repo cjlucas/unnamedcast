@@ -109,6 +109,11 @@ func main() {
 		Unique: true,
 	})
 
+	ensureIndex(users(), mgo.Index{
+		Key:    []string{"feedids"},
+		Unique: true,
+	})
+
 	ensureIndex(feeds(), mgo.Index{
 		Key:      []string{"url"},
 		Unique:   true,
@@ -144,6 +149,7 @@ func main() {
 
 	api.POST("/feeds", CreateFeed)
 	api.GET("/feeds/:id", RequireValidFeedID, ReadFeed)
+	api.GET("/feeds/:id/users", RequireValidFeedID, GetFeedsUsers)
 	api.GET("/feeds", FindFeed)
 	api.PUT("/feeds/:id", RequireValidFeedID, UpdateFeed)
 

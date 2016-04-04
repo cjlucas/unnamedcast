@@ -229,3 +229,21 @@ func UpdateFeed(c *gin.Context) {
 
 	c.JSON(200, &feed)
 }
+
+func GetFeedsUsers(c *gin.Context) {
+	feed := c.MustGet("feed").(*Feed)
+	var user []User
+
+	query := bson.M{
+		"feedids": bson.M{
+			"$in": []bson.ObjectId{feed.ID},
+		},
+	}
+
+	if err := users().Find(query).All(&user); err != nil {
+		c.AbortWithError(500, err)
+		return
+	}
+
+	c.JSON(200, &user)
+}
