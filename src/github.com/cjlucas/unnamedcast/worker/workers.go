@@ -302,6 +302,12 @@ func (w *UpdateFeedWorker) Work(q *koda.Queue, j *koda.Job) error {
 		return err
 	}
 
+	// Update user's item states to include new items.
+	// Bail if there are no new items.
+	if len(newItems) == 0 {
+		return nil
+	}
+
 	users, err := api.GetFeedsUsers(feed.ID)
 	if err != nil {
 		return err
