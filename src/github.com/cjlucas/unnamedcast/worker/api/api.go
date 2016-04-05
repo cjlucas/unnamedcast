@@ -14,11 +14,18 @@ import (
 var httpClient = http.Client{}
 
 type User struct {
-	ID               string    `json:"id"`
-	Username         string    `json:"username"`
-	FeedIDs          []string  `json:"feeds"`
-	CreationTime     time.Time `json:"creation_time"`
-	ModificationTime time.Time `json:"modification_time"`
+	ID               string      `json:"id"`
+	Username         string      `json:"username"`
+	FeedIDs          []string    `json:"feeds"`
+	ItemStates       []ItemState `json:"states"`
+	CreationTime     time.Time   `json:"creation_time"`
+	ModificationTime time.Time   `json:"modification_time"`
+}
+
+type ItemState struct {
+	FeedID   string  `json:"feed_id"`
+	ItemGUID string  `json:"item_guid"`
+	Position float64 `json:"position"` // 0 if item is unplayed
 }
 
 type Feed struct {
@@ -181,4 +188,46 @@ func FeedForURL(feedURL string) (*Feed, error) {
 	}
 
 	return &feeds[0], nil
+}
+
+func GetFeedsUsers(feedID string) ([]User, error) {
+	url := fmt.Sprintf("http://localhost:8081/api/feeds/%s/users", feedID)
+	resp, err := httpClient.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	data, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var users []User
+	if err := json.Unmarshal(data, &users); err != nil {
+		return nil, err
+	}
+
+	return users, nil
+}
+
+func PutItemStates(userID string, states []ItemState) error {
+	data, err := json.Marshal(states)
+	if err != nil {
+		return err
+	}
+
+	url := fmt.Sprintf("http://localhost:8081/api/users/%s/states", userID)
+	r := bytes.NewReader(data)
+	req, err := http.NewRequest("PUT", url, r)
+	if err != nil {
+		return err
+	}
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	resp.Body.Close()
+	return nil
 }
