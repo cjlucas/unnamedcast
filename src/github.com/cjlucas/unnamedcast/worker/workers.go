@@ -318,7 +318,7 @@ func (w *UpdateFeedWorker) Work(q *koda.Queue, j *koda.Job) error {
 		}
 
 		if err := api.PutItemStates(user.ID, user.ItemStates); err != nil {
-			fmt.Println("Error saving states. Will continue:", err)
+			fmt.Println("Error saving states (will continue):", err)
 			continue
 		}
 	}
