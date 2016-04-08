@@ -1,4 +1,8 @@
 go:
   - 1.6
 
-script: GOPATH=`pwd` make localTest
+env:
+  - GOPATH="${TRAVIS_BUILD_DIR}"
+
+script:
+  - echo $GOPATH
