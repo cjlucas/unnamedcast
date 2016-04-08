@@ -1,4 +1,4 @@
 go:
   - 1.6
 
-script: make localTest
+script: GOPATH=`pwd` make localTest
