@@ -6,26 +6,32 @@ TAGNAME = $(BRANCH)
 default: all
 
 all: server koda worker
+deps: serverDeps kodaDeps workerDeps
 
-server: gvt koda
-	cd src/github.com/cjlucas/unnamedcast/server; gvt restore
-	cd src/github.com/cjlucas/unnamedcast/server; go get -fix
-
-koda: gvt
-	cd src/github.com/cjlucas/unnamedcast/koda; gvt restore
-	cd src/github.com/cjlucas/unnamedcast/koda; go get -fix
-
-worker: gvt koda
-	cd src/github.com/cjlucas/unnamedcast/worker; gvt restore
-	cd src/github.com/cjlucas/unnamedcast/worker; go get -fix
+fix:
+	@cd src/github.com/cjlucas/unnamedcast/server; go get -fix
+	@cd src/github.com/cjlucas/unnamedcast/worker; go get -fix
+	@cd src/github.com/cjlucas/unnamedcast/koda; go get -fix
 
 gvt:
 	go get -u github.com/FiloSottile/gvt
 	gvt restore
 
+serverDeps: gvt
+	cd src/github.com/cjlucas/unnamedcast/server; gvt restore
+
+kodaDeps: gvt
+	cd src/github.com/cjlucas/unnamedcast/koda; gvt restore
+
+workerDeps: gvt
+	cd src/github.com/cjlucas/unnamedcast/worker; gvt restore
+
+server: serverDeps
+koda: kodaDeps
+worker: workerDeps
+
 clean:
 	rm -rf pkg bin build
-	rm -rf src/github.com/cjlucas/unnamedcast/*/vendor/*/
 
 localUnittest:
 	@cd src/github.com/cjlucas/unnamedcast; go list ./... | grep -v vendor | xargs go test
@@ -34,7 +40,7 @@ localTest:
 	@cd src/github.com/cjlucas/unnamedcast; go list ./... | grep -v vendor | xargs -i go test {} -integration
 
 unittest: docker
-	@docker run $(IMGNAME) make localUnitTest
+	@docker run $(IMGNAME):$(TAGNAME) make localUnittest
 
 test: dockerCompose
 	@docker-compose -f tools/docker-compose.yml run app make localTest

@@ -1,8 +1,6 @@
 bin
 pkg
 build
-**/vendor/**
-!**/vendor/manifest
 
 src/*
 !src/github.com

@@ -6,4 +6,4 @@ ENV PATH $PATH:/app/bin
 
 COPY . /app/
 WORKDIR /app/
-RUN make
+RUN make fix
