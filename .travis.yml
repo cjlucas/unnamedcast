@@ -2,10 +2,9 @@ go:
   - 1.6
 
 env:
-  - GOPATH="${TRAVIS_BUILD_DIR}"
+  - GOPATH="${TRAVIS_BUILD_DIR}" PATH=${PATH}:${GOPATH}/bin
 
 script:
-  - export PATH=$PATH:$GOPATH/bin
   - echo $PATH
   - make deps
   - make fix
