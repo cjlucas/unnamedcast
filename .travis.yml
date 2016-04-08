@@ -3,9 +3,9 @@ go:
 
 env:
   - GOPATH="${TRAVIS_BUILD_DIR}"
-  - PATH="PATH:${GOPATH}/bin"
 
 script:
+  - export PATH=$PATH:$GOPATH/bin
   - echo $PATH
   - make deps
   - make fix
