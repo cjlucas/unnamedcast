@@ -33,8 +33,8 @@ worker: workerDeps
 localUnittest:
 	@cd src/github.com/cjlucas/unnamedcast; go list ./... | grep -v vendor | xargs go test
 
-localTest:
-	@cd src/github.com/cjlucas/unnamedcast; go list ./... | grep -v vendor | xargs -i go test {} -integration
+# TODO: figure out a good method for executing integration tests
+localTest: localUnittest
 
 unittest: docker
 	@docker run $(IMGNAME):$(TAGNAME) make localUnittest
