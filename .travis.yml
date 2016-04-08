@@ -3,11 +3,9 @@ language: go
 go:
   - 1.6
 
-env:
-  - GOPATH="${TRAVIS_BUILD_DIR}" PATH=${PATH}:${GOPATH}/bin
-
 script:
-  - cd $GOPATH
+  - export GOPATH=`pwd`
+  - export PATH=$PATH:$GOPATH/bin
   - echo $PATH
   - make deps
   - make fix
