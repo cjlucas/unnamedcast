@@ -3,8 +3,10 @@ go:
 
 env:
   - GOPATH="${TRAVIS_BUILD_DIR}"
+  - PATH="PATH:${GOPATH}/bin"
 
 script:
+  - echo $PATH
   - make deps
   - make fix
   - make localTest
