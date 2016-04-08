@@ -1,9 +1,4 @@
-language: go
-
 go:
   - 1.6
 
-before_install:
-  - cp -rv $TRAVIS_BUILD_DIR/* $GOPATH/
-
-script: make test
+script: make localTest

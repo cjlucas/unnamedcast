@@ -30,9 +30,6 @@ server: serverDeps
 koda: kodaDeps
 worker: workerDeps
 
-clean:
-	rm -rf pkg bin build
-
 localUnittest:
 	@cd src/github.com/cjlucas/unnamedcast; go list ./... | grep -v vendor | xargs go test
 
@@ -45,7 +42,8 @@ unittest: docker
 test: dockerCompose
 	@docker-compose -f tools/docker-compose.yml run app make localTest
 
-buildContext: clean
+buildContext:
+	rm -rf build
 	mkdir build
 	@echo "Copying project to /build..."
 	@$(foreach f, $(FILES), mkdir -p build/$(shell dirname $(f)); cp $(f) build/$(shell dirname $(f));)
