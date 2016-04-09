@@ -96,7 +96,7 @@ func main() {
 		url = "mongodb://localhost/cast"
 	}
 
-	port, _ := strconv.Atoi(os.Getenv("WEB_PORT"))
+	port, _ := strconv.Atoi(os.Getenv("API_PORT"))
 	if port == 0 {
 		port = 80
 	}
