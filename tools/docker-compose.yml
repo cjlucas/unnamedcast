@@ -1,13 +1,37 @@
 version: '2'
 services:
-  app:
+  web:
     build:
       context: ../build
       dockerfile: tools/Dockerfile
     depends_on:
       - redis
       - mongodb
+    links:
+      - redis
+      - mongodb:db
+    environment:
+      - DB_URL=mongodb://db:27017/cast
+      - API_PORT=80
+    ports:
+      - "80:80"
+    command: server
+  worker:
+    build:
+      context: ../build
+      dockerfile: tools/Dockerfile
+    depends_on:
+      - web
+      - redis
+    links:
+      - web
+      - redis
+    environment:
+      - API_URL=http://web:80
+      - REDIS_URL=redis://redis:6379
   redis:
     image: redis
   mongodb:
     image: mongo
+    ports:
+      - "27017:27017"

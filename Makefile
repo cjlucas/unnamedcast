@@ -13,6 +13,10 @@ fix:
 	@cd src/github.com/cjlucas/unnamedcast/worker; go get -fix
 	@cd src/github.com/cjlucas/unnamedcast/koda; go get -fix
 
+install:
+	@cd src/github.com/cjlucas/unnamedcast/server; go install
+	@cd src/github.com/cjlucas/unnamedcast/worker; go install
+
 gvt:
 	go get -u github.com/FiloSottile/gvt
 	gvt restore
@@ -40,7 +44,7 @@ unittest: docker
 	@docker run $(IMGNAME):$(TAGNAME) make localUnittest
 
 test: dockerCompose
-	@docker-compose -f tools/docker-compose.yml run app make localTest
+	@docker-compose -f tools/docker-compose.yml run web make localTest
 
 buildContext:
 	rm -rf build
@@ -50,7 +54,7 @@ buildContext:
 
 dockerCompose: buildContext
 	@echo "Building docker image (docker-compose)..."
-	@docker-compose -f tools/docker-compose.yml build app
+	@docker-compose -f tools/docker-compose.yml build web
 
 docker: buildContext
 	@echo "Building docker image..."

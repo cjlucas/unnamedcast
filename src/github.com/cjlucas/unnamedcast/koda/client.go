@@ -1,7 +1,8 @@
 package koda
 
 import (
-	"fmt"
+	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -17,8 +18,7 @@ type Client struct {
 }
 
 type Options struct {
-	Host        string
-	Port        int
+	URL         string
 	Prefix      string
 	ConnFactory func() Conn
 }
@@ -32,12 +32,8 @@ func NewClient(opts *Options) *Client {
 		opts = &Options{}
 	}
 
-	if opts.Host == "" {
-		opts.Host = "localhost"
-	}
-
-	if opts.Port == 0 {
-		opts.Port = 6379
+	if opts.URL == "" {
+		opts.URL = "redis://localhost:6379"
 	}
 
 	if opts.Prefix == "" {
@@ -45,9 +41,18 @@ func NewClient(opts *Options) *Client {
 	}
 
 	if opts.ConnFactory == nil {
+		url, err := url.Parse(opts.URL)
+		db, _ := strconv.Atoi(url.Path)
+
+		// TODO: return err
+		if err != nil {
+			panic(err)
+		}
+
 		opts.ConnFactory = func() Conn {
 			r := redis.NewClient(&redis.Options{
-				Addr: fmt.Sprintf("%s:%d", opts.Host, opts.Port),
+				Addr: url.Host,
+				DB:   int64(db),
 			})
 			return &GoRedisAdapter{R: r}
 		}

@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
@@ -90,7 +91,17 @@ func main() {
 
 	c.Start()
 
-	session, err := mgo.Dial("localhost")
+	url := os.Getenv("DB_URL")
+	if url == "" {
+		url = "mongodb://localhost/cast"
+	}
+
+	port, _ := strconv.Atoi(os.Getenv("API_PORT"))
+	if port == 0 {
+		port = 80
+	}
+
+	session, err := mgo.Dial(url)
 	if err != nil {
 		panic(err)
 	}
@@ -153,5 +164,5 @@ func main() {
 	api.GET("/feeds", FindFeed)
 	api.PUT("/feeds/:id", RequireValidFeedID, UpdateFeed)
 
-	g.Run(":8081")
+	g.Run(fmt.Sprintf("0.0.0.0:%d", port))
 }
