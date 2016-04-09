@@ -27,7 +27,7 @@ services:
       - web
       - redis
     environment:
-      - WEB_URL=http://web:80
+      - API_URL=http://web:80
       - REDIS_URL=redis://redis:6379
   redis:
     image: redis

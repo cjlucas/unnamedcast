@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cjlucas/unnamedcast/koda"
+	"github.com/cjlucas/unnamedcast/worker/api"
 )
 
 const (
@@ -97,11 +99,25 @@ func main() {
 	// koda.Submit(queueUpdateUserFeeds, 0, nil)
 	var wg sync.WaitGroup
 
-	handlers := map[string]Worker{
-		queueScrapeiTunesFeeds: &ScrapeiTunesFeeds{},
-		queueUpdateFeed:        &UpdateFeedWorker{},
-		queueUpdateUserFeeds:   &UpdateUserFeedsWorker{},
+	apiURL := os.Getenv("API_URL")
+	if apiURL == "" {
+		panic("API_URL not specified")
 	}
+
+	url, err := url.Parse(apiURL)
+	if err != nil {
+		panic(fmt.Sprintf("Invalid API_URL given: %s", apiURL))
+	}
+	api := api.API{BaseURL: url}
+
+	handlers := map[string]Worker{
+		queueScrapeiTunesFeeds: &ScrapeiTunesFeeds{API: api},
+		queueUpdateFeed:        &UpdateFeedWorker{API: api},
+		queueUpdateUserFeeds:   &UpdateUserFeedsWorker{API: api},
+	}
+
+	fmt.Println(apiURL)
+	fmt.Printf("%+v\n", handlers[queueScrapeiTunesFeeds])
 
 	for _, opt := range queueList {
 		for i := 0; i < opt.NumWorkers; i++ {

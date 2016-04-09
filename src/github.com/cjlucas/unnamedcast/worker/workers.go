@@ -1,9 +1,7 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -22,6 +20,7 @@ type Worker interface {
 }
 
 type ScrapeiTunesFeeds struct {
+	API api.API
 }
 
 func (w *ScrapeiTunesFeeds) scrapeGenre(url string) ([]string, error) {
@@ -110,9 +109,9 @@ func (w *ScrapeiTunesFeeds) Work(q *koda.Queue, j *koda.Job) error {
 
 	// Remove feeds that are already in the database
 	for id := range itunesIDFeedURLMap {
-		exists, err := api.FeedExistsWithiTunesID(id)
+		exists, err := w.API.FeedExistsWithiTunesID(id)
 		if err != nil {
-			return fmt.Errorf("Error while checking if feed exists:", err)
+			return fmt.Errorf("Error while checking if feed exists: %s", err)
 		}
 
 		if exists {
@@ -174,7 +173,7 @@ func (w *ScrapeiTunesFeeds) Work(q *koda.Queue, j *koda.Job) error {
 
 		feed := &api.Feed{URL: resp.URL, ITunesID: resp.ITunesID}
 
-		feed, err = api.CreateFeed(feed)
+		feed, err = w.API.CreateFeed(feed)
 		if err != nil {
 			fmt.Println("Could not create feed:", err)
 			continue
@@ -198,6 +197,7 @@ func (w *ScrapeiTunesFeeds) Work(q *koda.Queue, j *koda.Job) error {
 }
 
 type UpdateFeedWorker struct {
+	API api.API
 }
 
 type UpdateFeedPayload struct {
@@ -263,7 +263,7 @@ func (w *UpdateFeedWorker) Work(q *koda.Queue, j *koda.Job) error {
 	}
 
 	id := payload.FeedID
-	feed, err := api.GetFeed(id)
+	feed, err := w.API.GetFeed(id)
 	if err != nil {
 		return err
 	}
@@ -298,7 +298,7 @@ func (w *UpdateFeedWorker) Work(q *koda.Queue, j *koda.Job) error {
 		}
 	}
 
-	if err := api.UpdateFeed(feed); err != nil {
+	if err := w.API.UpdateFeed(feed); err != nil {
 		return err
 	}
 
@@ -308,7 +308,7 @@ func (w *UpdateFeedWorker) Work(q *koda.Queue, j *koda.Job) error {
 		return nil
 	}
 
-	users, err := api.GetFeedsUsers(feed.ID)
+	users, err := w.API.GetFeedsUsers(feed.ID)
 	if err != nil {
 		return err
 	}
@@ -323,7 +323,7 @@ func (w *UpdateFeedWorker) Work(q *koda.Queue, j *koda.Job) error {
 			})
 		}
 
-		if err := api.PutItemStates(user.ID, user.ItemStates); err != nil {
+		if err := w.API.PutItemStates(user.ID, user.ItemStates); err != nil {
 			fmt.Println("Error saving states (will continue):", err)
 			continue
 		}
@@ -332,19 +332,13 @@ func (w *UpdateFeedWorker) Work(q *koda.Queue, j *koda.Job) error {
 	return nil
 }
 
-type UpdateUserFeedsWorker struct{}
+type UpdateUserFeedsWorker struct {
+	API api.API
+}
 
 func (w *UpdateUserFeedsWorker) Work(q *koda.Queue, j *koda.Job) error {
-	var users []api.User
-	resp, err := http.Get("http://web:80/api/users")
+	users, err := w.API.GetUsers()
 	if err != nil {
-		return err
-	}
-
-	defer resp.Body.Close()
-	data, _ := ioutil.ReadAll(resp.Body)
-
-	if err := json.Unmarshal(data, &users); err != nil {
 		return err
 	}
 

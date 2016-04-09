@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 )
@@ -58,8 +59,17 @@ type Item struct {
 	ImageURL        string        `json:"image_url"`
 }
 
-func GetFeed(feedID string) (*Feed, error) {
-	url := fmt.Sprintf("http://web:80/api/feeds/%s", feedID)
+type API struct {
+	BaseURL *url.URL
+}
+
+func (api *API) urlf(fmtStr string, vals ...interface{}) string {
+	fmtStr = fmt.Sprintf("%s%s", api.BaseURL, fmtStr)
+	return fmt.Sprintf(fmtStr, vals...)
+}
+
+func (api *API) GetFeed(feedID string) (*Feed, error) {
+	url := api.urlf("/api/feeds/%s", feedID)
 	resp, err := httpClient.Get(url)
 	if err != nil {
 		return nil, err
@@ -80,14 +90,14 @@ func GetFeed(feedID string) (*Feed, error) {
 	return &feed, nil
 }
 
-func UpdateFeed(feed *Feed) error {
+func (api *API) UpdateFeed(feed *Feed) error {
 	payload, err := json.Marshal(&feed)
 	if err != nil {
 		return err
 	}
 
 	r := bytes.NewReader(payload)
-	url := fmt.Sprintf("http://web:80/api/feeds/%s", feed.ID)
+	url := api.urlf("/api/feeds/%s", feed.ID)
 	req, err := http.NewRequest("PUT", url, r)
 	if err != nil {
 		return err
@@ -117,14 +127,14 @@ func UpdateFeed(feed *Feed) error {
 	return nil
 }
 
-func CreateFeed(feed *Feed) (*Feed, error) {
+func (api *API) CreateFeed(feed *Feed) (*Feed, error) {
 	payload, err := json.Marshal(&feed)
 	if err != nil {
 		return nil, err
 	}
 
 	r := bytes.NewReader(payload)
-	apiURL := "http://web:80/api/feeds"
+	apiURL := api.urlf("/api/feeds")
 	resp, err := httpClient.Post(apiURL, "application/json", r)
 	if err != nil {
 		return nil, err
@@ -145,8 +155,8 @@ func CreateFeed(feed *Feed) (*Feed, error) {
 	return feed, nil
 }
 
-func feedExistsWithKey(key, value string) (bool, error) {
-	url := fmt.Sprintf("http://web:80/api/feeds?%s=%s", key, value)
+func (api *API) feedExistsWithKey(key, value string) (bool, error) {
+	url := api.urlf("/api/feeds?%s=%s", key, value)
 	resp, err := httpClient.Get(url)
 	if err != nil {
 		return false, err
@@ -157,16 +167,16 @@ func feedExistsWithKey(key, value string) (bool, error) {
 	return resp.StatusCode == 200, nil
 }
 
-func FeedExistsWithURL(url string) (bool, error) {
-	return feedExistsWithKey("url", url)
+func (api *API) FeedExistsWithURL(url string) (bool, error) {
+	return api.feedExistsWithKey("url", url)
 }
 
-func FeedExistsWithiTunesID(id int) (bool, error) {
-	return feedExistsWithKey("itunes_id", strconv.Itoa(id))
+func (api *API) FeedExistsWithiTunesID(id int) (bool, error) {
+	return api.feedExistsWithKey("itunes_id", strconv.Itoa(id))
 }
 
-func FeedForURL(feedURL string) (*Feed, error) {
-	url := fmt.Sprintf("http://web:80/api/feeds?url=%s", feedURL)
+func (api *API) FeedForURL(feedURL string) (*Feed, error) {
+	url := api.urlf("/api/feeds?url=%s", feedURL)
 	resp, err := httpClient.Get(url)
 	if err != nil {
 		return nil, err
@@ -190,8 +200,8 @@ func FeedForURL(feedURL string) (*Feed, error) {
 	return &feeds[0], nil
 }
 
-func GetFeedsUsers(feedID string) ([]User, error) {
-	url := fmt.Sprintf("http://web:80/api/feeds/%s/users", feedID)
+func (api *API) GetFeedsUsers(feedID string) ([]User, error) {
+	url := api.urlf("/api/feeds/%s/users", feedID)
 	resp, err := httpClient.Get(url)
 	if err != nil {
 		return nil, err
@@ -211,13 +221,13 @@ func GetFeedsUsers(feedID string) ([]User, error) {
 	return users, nil
 }
 
-func PutItemStates(userID string, states []ItemState) error {
+func (api *API) PutItemStates(userID string, states []ItemState) error {
 	data, err := json.Marshal(states)
 	if err != nil {
 		return err
 	}
 
-	url := fmt.Sprintf("http://web:80/api/users/%s/states", userID)
+	url := api.urlf("/api/users/%s/states", userID)
 	r := bytes.NewReader(data)
 	req, err := http.NewRequest("PUT", url, r)
 	if err != nil {
@@ -230,4 +240,21 @@ func PutItemStates(userID string, states []ItemState) error {
 	}
 	resp.Body.Close()
 	return nil
+}
+
+func (api *API) GetUsers() ([]User, error) {
+	var users []User
+	resp, err := http.Get(api.urlf("/api/feeds"))
+	if err != nil {
+		return nil, err
+	}
+
+	defer resp.Body.Close()
+	data, _ := ioutil.ReadAll(resp.Body)
+
+	if err := json.Unmarshal(data, &users); err != nil {
+		return nil, err
+	}
+
+	return users, nil
 }
