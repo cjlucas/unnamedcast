@@ -7,3 +7,4 @@ ENV PATH $PATH:/app/bin
 COPY . /app/
 WORKDIR /app/
 RUN make fix
+RUN make install

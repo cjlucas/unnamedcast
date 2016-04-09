@@ -59,7 +59,7 @@ type Item struct {
 }
 
 func GetFeed(feedID string) (*Feed, error) {
-	url := fmt.Sprintf("http://localhost:8081/api/feeds/%s", feedID)
+	url := fmt.Sprintf("http://web:80/api/feeds/%s", feedID)
 	resp, err := httpClient.Get(url)
 	if err != nil {
 		return nil, err
@@ -87,7 +87,7 @@ func UpdateFeed(feed *Feed) error {
 	}
 
 	r := bytes.NewReader(payload)
-	url := fmt.Sprintf("http://localhost:8081/api/feeds/%s", feed.ID)
+	url := fmt.Sprintf("http://web:80/api/feeds/%s", feed.ID)
 	req, err := http.NewRequest("PUT", url, r)
 	if err != nil {
 		return err
@@ -124,7 +124,7 @@ func CreateFeed(feed *Feed) (*Feed, error) {
 	}
 
 	r := bytes.NewReader(payload)
-	apiURL := "http://localhost:8081/api/feeds"
+	apiURL := "http://web:80/api/feeds"
 	resp, err := httpClient.Post(apiURL, "application/json", r)
 	if err != nil {
 		return nil, err
@@ -146,7 +146,7 @@ func CreateFeed(feed *Feed) (*Feed, error) {
 }
 
 func feedExistsWithKey(key, value string) (bool, error) {
-	url := fmt.Sprintf("http://localhost:8081/api/feeds?%s=%s", key, value)
+	url := fmt.Sprintf("http://web:80/api/feeds?%s=%s", key, value)
 	resp, err := httpClient.Get(url)
 	if err != nil {
 		return false, err
@@ -166,7 +166,7 @@ func FeedExistsWithiTunesID(id int) (bool, error) {
 }
 
 func FeedForURL(feedURL string) (*Feed, error) {
-	url := fmt.Sprintf("http://localhost:8081/api/feeds?url=%s", feedURL)
+	url := fmt.Sprintf("http://web:80/api/feeds?url=%s", feedURL)
 	resp, err := httpClient.Get(url)
 	if err != nil {
 		return nil, err
@@ -191,7 +191,7 @@ func FeedForURL(feedURL string) (*Feed, error) {
 }
 
 func GetFeedsUsers(feedID string) ([]User, error) {
-	url := fmt.Sprintf("http://localhost:8081/api/feeds/%s/users", feedID)
+	url := fmt.Sprintf("http://web:80/api/feeds/%s/users", feedID)
 	resp, err := httpClient.Get(url)
 	if err != nil {
 		return nil, err
@@ -217,7 +217,7 @@ func PutItemStates(userID string, states []ItemState) error {
 		return err
 	}
 
-	url := fmt.Sprintf("http://localhost:8081/api/users/%s/states", userID)
+	url := fmt.Sprintf("http://web:80/api/users/%s/states", userID)
 	r := bytes.NewReader(data)
 	req, err := http.NewRequest("PUT", url, r)
 	if err != nil {

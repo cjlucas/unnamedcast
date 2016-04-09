@@ -13,6 +13,10 @@ fix:
 	@cd src/github.com/cjlucas/unnamedcast/worker; go get -fix
 	@cd src/github.com/cjlucas/unnamedcast/koda; go get -fix
 
+install:
+	@cd src/github.com/cjlucas/unnamedcast/server; go install
+	@cd src/github.com/cjlucas/unnamedcast/worker; go install
+
 gvt:
 	go get -u github.com/FiloSottile/gvt
 	gvt restore

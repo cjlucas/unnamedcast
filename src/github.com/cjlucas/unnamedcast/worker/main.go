@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -83,14 +84,17 @@ func main() {
 	flag.Var(&queueList, "q", "queueName[:numWorkers]")
 	flag.Parse()
 
-	// koda.Submit(queueScrapeiTunesFeeds, 0, nil)
+	koda.Configure(&koda.Options{
+		URL: os.Getenv("REDIS_URL"),
+	})
+
+	koda.Submit(queueScrapeiTunesFeeds, 0, nil)
 
 	// koda.Submit(queueUpdateFeed, 0, &UpdateFeedPayload{
 	// 	FeedID: "56d5c158c87472028649f39a",
 	// })
 	//
-	koda.Submit(queueUpdateUserFeeds, 0, nil)
-
+	// koda.Submit(queueUpdateUserFeeds, 0, nil)
 	var wg sync.WaitGroup
 
 	handlers := map[string]Worker{

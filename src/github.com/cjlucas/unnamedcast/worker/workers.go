@@ -336,7 +336,7 @@ type UpdateUserFeedsWorker struct{}
 
 func (w *UpdateUserFeedsWorker) Work(q *koda.Queue, j *koda.Job) error {
 	var users []api.User
-	resp, err := http.Get("http://localhost:8081/api/users")
+	resp, err := http.Get("http://web:80/api/users")
 	if err != nil {
 		return err
 	}
