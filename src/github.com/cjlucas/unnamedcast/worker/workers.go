@@ -291,7 +291,7 @@ func (w *UpdateFeedWorker) Work(q *koda.Queue, j *koda.Job) error {
 	if feed.ITunesID != 0 {
 		stats, err := itunes.FetchReviewStats(feed.ITunesID)
 		if err != nil {
-			fmt.Printf("Failed to fetch review stats for feed, will continue\n")
+			fmt.Println("Failed to fetch review stats for feed (will continue):", err)
 		} else {
 			feed.ITunesReviewCount = stats.ReviewCount
 			feed.ITunesRatingCount = stats.RatingCount
