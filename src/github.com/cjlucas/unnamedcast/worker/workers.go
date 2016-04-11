@@ -373,6 +373,12 @@ func rssDocumentToAPIPayload(doc *rss.Document) (*api.Feed, error) {
 		jsonItem.Duration, _ = rss.ParseDuration(item.Duration)
 		jsonItem.ImageURL = item.Image.URL
 		jsonItem.Link = item.Link
+
+		// prefer content:encoded over itunes:summary
+		jsonItem.Description = item.ITunesSummary
+		if item.ContentEncoded != "" {
+			jsonItem.Description = item.ContentEncoded
+		}
 	}
 
 	feed.Category.Name = channel.Category.Name

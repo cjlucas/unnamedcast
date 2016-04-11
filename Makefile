@@ -35,7 +35,7 @@ koda: kodaDeps
 worker: workerDeps
 
 localUnittest:
-	@cd src/github.com/cjlucas/unnamedcast; go list ./... | grep -v vendor | xargs go test
+	@cd src/github.com/cjlucas/unnamedcast; go list ./... | grep -v vendor | xargs go test -v
 
 # TODO: figure out a good method for executing integration tests
 localTest: localUnittest
