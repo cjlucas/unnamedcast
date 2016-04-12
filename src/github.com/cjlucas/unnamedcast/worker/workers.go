@@ -310,7 +310,7 @@ func (w *UpdateFeedWorker) Work(q *koda.Queue, j *koda.Job) error {
 
 	users, err := w.API.GetFeedsUsers(feed.ID)
 	if err != nil {
-		return fmt.Errof("Failed to get users' feeds: %s", err)
+		return fmt.Errorf("Failed to get users' feeds: %s", err)
 	}
 
 	for i := range users {

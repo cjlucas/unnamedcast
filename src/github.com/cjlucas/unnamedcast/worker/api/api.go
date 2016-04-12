@@ -271,7 +271,7 @@ func (api *API) GetUsers() ([]User, error) {
 	}
 
 	if resp.StatusCode != 200 {
-		return fmt.Errorf("Received unexpected status code: %d", resp.StatusCode)
+		return nil, fmt.Errorf("Received unexpected status code: %d", resp.StatusCode)
 	}
 
 	return users, nil
