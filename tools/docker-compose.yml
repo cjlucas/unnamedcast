@@ -25,10 +25,10 @@ services:
       - redis
     links:
       - web
-      - redis
+      - redis:rdb
     environment:
       - API_URL=http://web:80
-      - REDIS_URL=redis://redis:6379
+      - REDIS_URL=redis://rdb:6379
   redis:
     image: redis
   mongodb:
