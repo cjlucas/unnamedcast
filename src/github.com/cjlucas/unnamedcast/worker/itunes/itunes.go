@@ -182,18 +182,18 @@ func ResolveiTunesFeedURL(url string) (string, error) {
 	}
 
 	resp, err := httpClient.Do(req)
-
 	if err != nil {
 		return "", err
-	} else if resp.StatusCode != 200 {
-		return "", fmt.Errorf("Received unexpected status code: %d", resp.StatusCode)
 	}
-
 	defer resp.Body.Close()
 
 	data, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return "", err
+	}
+
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("Received non-200 status code %d", resp.StatusCode)
 	}
 
 	if matches := itunesRssFeedRegexp.FindSubmatch(data); len(matches) > 1 {
@@ -217,6 +217,10 @@ func FetchReviewStats(itunesID int) (*ReviewStats, error) {
 
 	defer resp.Body.Close()
 	data, _ := ioutil.ReadAll(resp.Body)
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("Received non-200 status code %d", resp.StatusCode)
+	}
 
 	stats := ReviewStats{}
 	if err := json.Unmarshal(data, &stats); err != nil {

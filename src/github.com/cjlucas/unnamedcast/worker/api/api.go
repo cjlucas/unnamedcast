@@ -188,6 +188,10 @@ func (api *API) FeedForURL(feedURL string) (*Feed, error) {
 		return nil, err
 	}
 
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("Received unexpected status code: %d", resp.StatusCode)
+	}
+
 	var feeds []Feed
 	if err := json.Unmarshal(data, &feeds); err != nil {
 		return nil, err
@@ -211,6 +215,10 @@ func (api *API) GetFeedsUsers(feedID string) ([]User, error) {
 	data, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
+	}
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("Received unexpected status code: %d", resp.StatusCode)
 	}
 
 	var users []User
@@ -238,7 +246,13 @@ func (api *API) PutItemStates(userID string, states []ItemState) error {
 	if err != nil {
 		return err
 	}
-	resp.Body.Close()
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("Received unexpected status code: %d", resp.StatusCode)
+	}
+
 	return nil
 }
 
@@ -254,6 +268,10 @@ func (api *API) GetUsers() ([]User, error) {
 
 	if err := json.Unmarshal(data, &users); err != nil {
 		return nil, err
+	}
+
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("Received unexpected status code: %d", resp.StatusCode)
 	}
 
 	return users, nil

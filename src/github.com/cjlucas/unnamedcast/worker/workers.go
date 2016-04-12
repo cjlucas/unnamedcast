@@ -28,13 +28,13 @@ func (w *ScrapeiTunesFeeds) scrapeGenre(url string) ([]string, error) {
 
 	urls, err := itunes.AlphabetPageListForFeedListPage(url)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Error getting alphabet page list: %s", err)
 	}
 
 	for _, url := range urls {
 		page, err := itunes.NewFeedListPage(url)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("Error creating new page list: %s", err)
 		}
 
 		for _, url := range page.PaginationPageList() {
@@ -48,7 +48,7 @@ func (w *ScrapeiTunesFeeds) scrapeGenre(url string) ([]string, error) {
 func (w *ScrapeiTunesFeeds) scrapeFeedList(url string) ([]string, error) {
 	page, err := itunes.NewFeedListPage(url)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Error creating new page list: %s", err)
 	}
 
 	return page.FeedURLs(), nil
@@ -68,7 +68,7 @@ func (w *ScrapeiTunesFeeds) Work(q *koda.Queue, j *koda.Job) error {
 		fmt.Println("Scraping genre URL:", url)
 		urls, err := w.scrapeGenre(url)
 		if err != nil {
-			return err
+			return fmt.Errorf("Could not scrape genre URL: %s", err)
 		}
 
 		for _, url := range urls {
@@ -76,7 +76,7 @@ func (w *ScrapeiTunesFeeds) Work(q *koda.Queue, j *koda.Job) error {
 		}
 	}
 
-	fmt.Printf("Now scraping %d feed list urls\n", len(feedListURLs))
+	fmt.Printf("Scraping %d feed list urls...\n", len(feedListURLs))
 
 	// Scan through all feed list pages and add feed url to map
 	// (Map is used to prune duplicate urls)
@@ -85,7 +85,7 @@ func (w *ScrapeiTunesFeeds) Work(q *koda.Queue, j *koda.Job) error {
 		fmt.Println("Scraping feed list:", url)
 		urls, err := w.scrapeFeedList(url)
 		if err != nil {
-			return err
+			return fmt.Errorf("Could not scrape feed list: %s", err)
 		}
 
 		for _, url := range urls {
@@ -111,7 +111,7 @@ func (w *ScrapeiTunesFeeds) Work(q *koda.Queue, j *koda.Job) error {
 	for id := range itunesIDFeedURLMap {
 		exists, err := w.API.FeedExistsWithiTunesID(id)
 		if err != nil {
-			return fmt.Errorf("Error while checking if feed exists: %s", err)
+			return fmt.Errorf("Failed to check if feed exists: %s", err)
 		}
 
 		if exists {
@@ -161,13 +161,13 @@ func (w *ScrapeiTunesFeeds) Work(q *koda.Queue, j *koda.Job) error {
 	for i := 0; i < len(itunesIDFeedURLMap); i++ {
 		resp, ok := <-urlResolverOutChan
 		if !ok {
-			panic("Out channel seems to have closed. This should never happen")
+			panic("Out channel closed. This should never happen")
 		}
 
 		fmt.Printf("Resolved url %d of %d\n", i+1, len(itunesIDFeedURLMap))
 
 		if resp.Err != nil {
-			fmt.Println("Error occured when attempting to resolve feed url, will continue. Error: ", resp.Err)
+			fmt.Println("Failed to resolve feed url, will continue. Error: ", resp.Err)
 			continue
 		}
 
@@ -310,7 +310,7 @@ func (w *UpdateFeedWorker) Work(q *koda.Queue, j *koda.Job) error {
 
 	users, err := w.API.GetFeedsUsers(feed.ID)
 	if err != nil {
-		return err
+		return fmt.Errof("Failed to get users' feeds: %s", err)
 	}
 
 	for i := range users {
