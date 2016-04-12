@@ -373,6 +373,20 @@ func rssDocumentToAPIPayload(doc *rss.Document) (*api.Feed, error) {
 		jsonItem.Duration, _ = rss.ParseDuration(item.Duration)
 		jsonItem.ImageURL = item.Image.URL
 		jsonItem.Link = item.Link
+
+		// Choose one description, break when first preferred description is found
+		descriptions := []string{
+			item.ContentEncoded,
+			item.ITunesSummary,
+			item.Description,
+		}
+
+		for _, desc := range descriptions {
+			if desc != "" {
+				jsonItem.Description = desc
+				break
+			}
+		}
 	}
 
 	feed.Category.Name = channel.Category.Name

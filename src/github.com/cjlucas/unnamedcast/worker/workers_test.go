@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bytes"
+	"io/ioutil"
 	"testing"
 
 	"github.com/cjlucas/unnamedcast/worker/api"
+	"github.com/cjlucas/unnamedcast/worker/rss"
 )
 
 func TestUpdateFeedWorker_mergeFeeds(t *testing.T) {
@@ -42,5 +45,26 @@ func TestUpdateFeedWorker_mergeFeeds(t *testing.T) {
 
 	if guidMap["3"].Title != "4" {
 		t.Errorf("Expected duplicate item to overrwrite with new information")
+	}
+}
+
+func TestRssDocumentToAPIPayloadDescription(t *testing.T) {
+	buf, err := ioutil.ReadFile("testdata/nominal.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	doc, err := rss.ParseFeed(bytes.NewReader(buf))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	feed, err := rssDocumentToAPIPayload(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if feed.Items[0].Description != doc.Channel.Items[0].ContentEncoded {
+		t.Error("item.Description != item.ContentEncoded")
 	}
 }

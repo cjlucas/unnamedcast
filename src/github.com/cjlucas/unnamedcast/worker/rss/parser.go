@@ -19,10 +19,20 @@ type Channel struct {
 	} `xml:"image"`
 
 	Items []struct {
-		GUID   string `xml:"guid"`
-		Title  string `xml:"title"`
-		Link   string `xml:"link"`
-		Author string `xml:"author"`
+		GUID        string `xml:"guid"`
+		Title       string `xml:"title"`
+		Link        string `xml:"link"`
+		Author      string `xml:"author"`
+		Description string `xml:"description"`
+
+		// content:encoded
+		ContentEncoded string `xml:"http://purl.org/rss/1.0/modules/content/ encoded"`
+
+		// itunes:subtitle
+		ITunesSubtitle string `xml:"http://www.itunes.com/dtds/podcast-1.0.dtd subtitle"`
+
+		// itunes:summary
+		ITunesSummary string `xml:"http://www.itunes.com/dtds/podcast-1.0.dtd summary"`
 
 		Enclosure struct {
 			URL    string `xml:"url,attr"`
