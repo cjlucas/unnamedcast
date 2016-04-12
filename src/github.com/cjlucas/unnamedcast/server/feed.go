@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -120,10 +121,9 @@ func loadFeed(idHex string) *Feed {
 	}
 
 	var feed Feed
-	err := feeds().FindId(bson.ObjectIdHex(idHex)).One(&feed)
-
 	// TODO: reconsider swallowing this error
-	if err != nil {
+	if err := feeds().FindId(bson.ObjectIdHex(idHex)).One(&feed); err != nil {
+		fmt.Println("Error fetching feed:", err)
 		return nil
 	}
 

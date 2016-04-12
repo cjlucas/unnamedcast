@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"strings"
 	"time"
@@ -60,8 +61,9 @@ func loadUser(idHex string) *User {
 	}
 
 	var user User
-	// TODO: no error checking
-	users().FindId(bson.ObjectIdHex(idHex)).One(&user)
+	if err := users().FindId(bson.ObjectIdHex(idHex)).One(&user); err != nil {
+		fmt.Println("Error loading user:", err)
+	}
 
 	return &user
 }
