@@ -1,12 +1,9 @@
 version: '2'
 services:
-  app:
+  web:
     build:
       context: ../build
       dockerfile: tools/Dockerfile
-  web:
-    extends:
-      service: app
     depends_on:
       - redis
       - mongodb
@@ -20,8 +17,9 @@ services:
       - "80:80"
     command: server
   worker:
-    extends:
-      service: app
+    build:
+      context: ../build
+      dockerfile: tools/Dockerfile
     depends_on:
       - web
       - redis

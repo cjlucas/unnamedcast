@@ -44,7 +44,7 @@ unittest: docker
 	@docker run $(IMGNAME):$(TAGNAME) make localUnittest
 
 test: dockerCompose
-	@docker-compose -f tools/docker-compose.yml run app make localTest
+	@docker-compose -f tools/docker-compose.yml run web make localTest
 
 buildContext:
 	rm -rf build
@@ -54,7 +54,8 @@ buildContext:
 
 dockerCompose: buildContext
 	@echo "Building docker image (docker-compose)..."
-	@docker-compose -f tools/docker-compose.yml build app
+	@docker-compose -f tools/docker-compose.yml build web
+	@docker-compose -f tools/docker-compose.yml build worker
 
 docker: buildContext
 	@echo "Building docker image..."
