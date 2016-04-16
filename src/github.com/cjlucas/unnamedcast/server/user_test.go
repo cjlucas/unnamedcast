@@ -8,7 +8,13 @@ import (
 	"testing"
 
 	"github.com/cjlucas/unnamedcast/server/db"
+	"github.com/gin-gonic/gin"
 )
+
+func init() {
+	gin.SetMode(gin.TestMode)
+	gin.DefaultWriter, _ = os.Open(os.DevNull)
+}
 
 func newTestApp() *App {
 	dbURL := os.Getenv("DB_URL")
