@@ -4,36 +4,60 @@
 		{
 			"importpath": "github.com/dustin/go-broadcast",
 			"repository": "https://github.com/dustin/go-broadcast",
+			"vcs": "",
 			"revision": "3bdf6d4a7164a50bc19d5f230e2981d87d2584f1",
 			"branch": "master"
 		},
 		{
 			"importpath": "github.com/gin-gonic/gin",
 			"repository": "https://github.com/gin-gonic/gin",
-			"revision": "3d002e382355cafc15d706b92899b1961d5b79e9",
+			"vcs": "git",
+			"revision": "5caaac4c5c712a9e7a7de29e6c24ef46c753017f",
 			"branch": "master"
+		},
+		{
+			"importpath": "github.com/golang/protobuf/proto",
+			"repository": "https://github.com/golang/protobuf",
+			"vcs": "git",
+			"revision": "f0a097ddac24fb00e07d2ac17f8671423f3ea47c",
+			"branch": "master",
+			"path": "/proto",
+			"notests": true
+		},
+		{
+			"importpath": "github.com/golang/protobuf/proto/testdata",
+			"repository": "https://github.com/golang/protobuf",
+			"vcs": "git",
+			"revision": "f0a097ddac24fb00e07d2ac17f8671423f3ea47c",
+			"branch": "master",
+			"path": "/proto/testdata",
+			"notests": true
 		},
 		{
 			"importpath": "github.com/manucorporat/sse",
 			"repository": "https://github.com/manucorporat/sse",
+			"vcs": "",
 			"revision": "ee05b128a739a0fb76c7ebd3ae4810c1de808d6d",
 			"branch": "master"
 		},
 		{
 			"importpath": "github.com/manucorporat/stats",
 			"repository": "https://github.com/manucorporat/stats",
+			"vcs": "",
 			"revision": "8f2d6ace262eba462e9beb552382c98be51d807b",
 			"branch": "master"
 		},
 		{
 			"importpath": "github.com/mattn/go-colorable",
 			"repository": "https://github.com/mattn/go-colorable",
+			"vcs": "",
 			"revision": "9cbef7c35391cca05f15f8181dc0b18bc9736dbb",
 			"branch": "master"
 		},
 		{
 			"importpath": "github.com/robfig/cron",
 			"repository": "https://github.com/robfig/cron",
+			"vcs": "",
 			"revision": "32d9c273155a0506d27cf73dd1246e86a470997e",
 			"branch": "master",
 			"notests": true
@@ -41,6 +65,7 @@
 		{
 			"importpath": "golang.org/x/crypto/bcrypt",
 			"repository": "https://go.googlesource.com/crypto",
+			"vcs": "",
 			"revision": "c197bcf24cde29d3f73c7b4ac6fd41f4384e8af6",
 			"branch": "master",
 			"path": "/bcrypt"
@@ -48,6 +73,7 @@
 		{
 			"importpath": "golang.org/x/crypto/blowfish",
 			"repository": "https://go.googlesource.com/crypto",
+			"vcs": "",
 			"revision": "c197bcf24cde29d3f73c7b4ac6fd41f4384e8af6",
 			"branch": "master",
 			"path": "/blowfish"
@@ -55,21 +81,40 @@
 		{
 			"importpath": "golang.org/x/net/context",
 			"repository": "https://go.googlesource.com/net",
+			"vcs": "",
 			"revision": "9d8ef8d73b53840886e4a772c72f2b7d396cb37c",
 			"branch": "master",
 			"path": "/context"
 		},
 		{
+			"importpath": "gopkg.in/go-playground/validator.v8",
+			"repository": "https://gopkg.in/go-playground/validator.v8",
+			"vcs": "git",
+			"revision": "014792cf3e266caff1e916876be12282b33059e0",
+			"branch": "master",
+			"notests": true
+		},
+		{
 			"importpath": "gopkg.in/mgo.v2",
 			"repository": "https://gopkg.in/mgo.v2",
+			"vcs": "",
 			"revision": "b6e2fa371e64216a45e61072a96d4e3859f169da",
 			"branch": "v2"
 		},
 		{
 			"importpath": "gopkg.in/tomb.v2",
 			"repository": "https://gopkg.in/tomb.v2",
+			"vcs": "",
 			"revision": "14b3d72120e8d10ea6e6b7f87f7175734b1faab8",
 			"branch": "v2"
+		},
+		{
+			"importpath": "gopkg.in/yaml.v2",
+			"repository": "https://gopkg.in/yaml.v2",
+			"vcs": "git",
+			"revision": "a83829b6f1293c91addabc89d0571c246397bbf4",
+			"branch": "v2",
+			"notests": true
 		}
 	]
 }

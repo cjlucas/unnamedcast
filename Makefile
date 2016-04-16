@@ -1,5 +1,5 @@
 FILES = $(shell git ls-files)
-BRANCH = $(shell git rev-parse --abbrev-ref HEAD)
+BRANCH = $(shell git rev-parse --abbrev-ref HEAD | awk -F'/' '{print $$NF}')
 IMGNAME = cast
 TAGNAME = $(BRANCH)
 
@@ -7,11 +7,6 @@ default: all
 
 all: server koda worker
 deps: serverDeps kodaDeps workerDeps
-
-fix:
-	@cd src/github.com/cjlucas/unnamedcast/server; go get -fix
-	@cd src/github.com/cjlucas/unnamedcast/worker; go get -fix
-	@cd src/github.com/cjlucas/unnamedcast/koda; go get -fix
 
 install:
 	@cd src/github.com/cjlucas/unnamedcast/server; go install
