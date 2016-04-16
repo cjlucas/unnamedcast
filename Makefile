@@ -38,7 +38,7 @@ unittest: docker
 	@docker run $(IMGNAME):$(TAGNAME) make localUnittest
 
 test: dockerCompose
-	@docker-compose -f tools/docker-compose.yml run web make localTest
+	@docker-compose -f tools/docker-compose.yml run -e DB_URL=mongodb://db/casttest web make localTest
 
 buildContext:
 	rm -rf build
