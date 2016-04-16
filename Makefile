@@ -5,12 +5,8 @@ TAGNAME = $(BRANCH)
 
 default: all
 
-all: server koda worker
+all: install
 deps: serverDeps kodaDeps workerDeps
-
-install:
-	@cd src/github.com/cjlucas/unnamedcast/server; go install
-	@cd src/github.com/cjlucas/unnamedcast/worker; go install
 
 gvt:
 	go get -u github.com/FiloSottile/gvt
@@ -25,9 +21,12 @@ kodaDeps: gvt
 workerDeps: gvt
 	cd src/github.com/cjlucas/unnamedcast/worker; gvt restore
 
-server: serverDeps
-koda: kodaDeps
-worker: workerDeps
+server:
+	@cd src/github.com/cjlucas/unnamedcast/server; go install
+worker:
+	@cd src/github.com/cjlucas/unnamedcast/worker; go install
+
+install: server worker
 
 localUnittest:
 	@cd src/github.com/cjlucas/unnamedcast; go list ./... | grep -v vendor | xargs go test -v
@@ -45,7 +44,7 @@ buildContext:
 	rm -rf build
 	mkdir build
 	@echo "Copying project to /build..."
-	@$(foreach f, $(FILES), mkdir -p build/$(shell dirname $(f)); cp $(f) build/$(shell dirname $(f));)
+	@git ls-files | cpio -pdm build/ 2> /dev/null
 
 dockerCompose: buildContext
 	@echo "Building docker image (docker-compose)..."
