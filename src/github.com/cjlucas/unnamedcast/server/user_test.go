@@ -14,6 +14,10 @@ func newTestApp() *App {
 		panic(err)
 	}
 
+	if err := app.DB.Drop(); err != nil {
+		panic(err)
+	}
+
 	return app
 }
 
@@ -34,7 +38,6 @@ type endpointTestInfo struct {
 func testEndpoint(t *testing.T, info endpointTestInfo) {
 	if info.App == nil {
 		info.App = newTestApp()
-		defer info.App.DB.Drop()
 	}
 
 	w := httptest.NewRecorder()
@@ -56,5 +59,17 @@ func TestCreateUserValidParams(t *testing.T) {
 	testEndpoint(t, endpointTestInfo{
 		Request:      newRequest("POST", "/api/users?username=chris&password=hi", nil),
 		ExpectedCode: http.StatusOK,
+	})
+}
+
+func TestCreateUserDuplicateUser(t *testing.T) {
+	testEndpoint(t, endpointTestInfo{
+		Request:      newRequest("POST", "/api/users?username=chris&password=hi", nil),
+		ExpectedCode: http.StatusOK,
+	})
+
+	testEndpoint(t, endpointTestInfo{
+		Request:      newRequest("POST", "/api/users?username=chris&password=hi", nil),
+		ExpectedCode: http.StatusInternalServerError,
 	})
 }
