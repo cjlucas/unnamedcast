@@ -6,15 +6,21 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
+
+	"github.com/cjlucas/unnamedcast/server/db"
 )
 
 func newTestApp() *App {
-	app, err := NewApp(os.Getenv("DB_URL"))
-	if err != nil {
+	dbURL := os.Getenv("DB_URL")
+
+	// Ensure a clean DB
+	db, err := db.New(dbURL)
+	if err := db.Drop(); err != nil {
 		panic(err)
 	}
 
-	if err := app.DB.Drop(); err != nil {
+	app, err := NewApp(dbURL)
+	if err != nil {
 		panic(err)
 	}
 
@@ -63,13 +69,18 @@ func TestCreateUserValidParams(t *testing.T) {
 }
 
 func TestCreateUserDuplicateUser(t *testing.T) {
+	app := newTestApp()
+	req := newRequest("POST", "/api/users?username=chris&password=hi", nil)
+
 	testEndpoint(t, endpointTestInfo{
-		Request:      newRequest("POST", "/api/users?username=chris&password=hi", nil),
+		App:          app,
+		Request:      req,
 		ExpectedCode: http.StatusOK,
 	})
 
 	testEndpoint(t, endpointTestInfo{
-		Request:      newRequest("POST", "/api/users?username=chris&password=hi", nil),
+		App:          app,
+		Request:      req,
 		ExpectedCode: http.StatusInternalServerError,
 	})
 }
