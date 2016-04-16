@@ -25,9 +25,17 @@ type App struct {
 func NewApp(dbURL string) (*App, error) {
 	app := App{}
 
+	db, err := db.New(dbURL)
+	if err != nil {
+		return nil, err
+	}
+	app.DB = db
+
 	if err := app.setupIndexes(); err != nil {
 		return nil, err
 	}
+
+	app.setupRoutes()
 
 	return &app, nil
 }
@@ -94,6 +102,7 @@ func (app *App) setupRoutes() {
 
 	api := app.g.Group("/api")
 
+	// GET /api/users
 	api.GET("/users", func(c *gin.Context) {
 		var users []db.User
 		if err := app.DB.FindUsers(nil).All(&users); err != nil {
@@ -102,6 +111,7 @@ func (app *App) setupRoutes() {
 		c.JSON(200, users)
 	})
 
+	// POST /api/users
 	api.POST("/users", func(c *gin.Context) {
 		username := strings.TrimSpace(c.Query("username"))
 		password := strings.TrimSpace(c.Query("password"))
