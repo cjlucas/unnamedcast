@@ -3,19 +3,24 @@ package main
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
-
-	"github.com/gin-gonic/gin"
 )
 
-func TestCreateUserNoParams(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	router := gin.New()
-	router.GET("/test", CreateUser)
+func newTestApp() *App {
+	app, err := NewApp(os.Getenv("DB_URL"))
+	if err != nil {
+		panic(err)
+	}
 
+	return app
+}
+
+func TestCreateUserNoParams(t *testing.T) {
+	app := newTestApp()
 	w := httptest.NewRecorder()
-	r, _ := http.NewRequest("GET", "/test", nil)
-	router.ServeHTTP(w, r)
+	r, _ := http.NewRequest("POST", "/api/users", nil)
+	app.g.ServeHTTP(w, r)
 
 	if w.Code/100 != 4 {
 		t.Fail()
