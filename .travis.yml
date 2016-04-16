@@ -1,3 +1,5 @@
+services: mongodb
+
 language: go
 
 go:
@@ -6,7 +8,7 @@ go:
 script:
   - export GOPATH=`pwd`
   - export PATH=$PATH:$GOPATH/bin
+  - export DB_URL=mongodb://localhost/test
   - echo $PATH
-  - make deps
   - make fix
   - make localTest
