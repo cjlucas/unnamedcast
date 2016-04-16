@@ -49,6 +49,10 @@ func (db *DB) db() *mgo.Database {
 	return db.s.DB("")
 }
 
+func (db *DB) Drop() error {
+	return db.db().DropDatabase()
+}
+
 func (q *query) All(result interface{}) error {
 	return q.q.All(result)
 }

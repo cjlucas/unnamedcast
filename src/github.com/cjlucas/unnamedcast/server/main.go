@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -57,9 +58,9 @@ func (app *App) requireValidUserID(paramName string) gin.HandlerFunc {
 		id := bson.ObjectIdHex(c.Param(paramName))
 		n, err := app.DB.FindUserByID(id).Count()
 		if err != nil {
-			c.AbortWithError(500, err)
+			c.AbortWithError(http.StatusInternalServerError, err)
 		} else if n < 0 {
-			c.AbortWithStatus(404)
+			c.AbortWithStatus(http.StatusNotFound)
 		}
 
 		c.Set("userID", id)
@@ -106,9 +107,9 @@ func (app *App) setupRoutes() {
 	api.GET("/users", func(c *gin.Context) {
 		var users []db.User
 		if err := app.DB.FindUsers(nil).All(&users); err != nil {
-			c.AbortWithError(500, err)
+			c.AbortWithError(http.StatusInternalServerError, err)
 		}
-		c.JSON(200, users)
+		c.JSON(http.StatusOK, users)
 	})
 
 	// POST /api/users
@@ -117,14 +118,14 @@ func (app *App) setupRoutes() {
 		password := strings.TrimSpace(c.Query("password"))
 
 		if username == "" || password == "" {
-			c.JSON(400, gin.H{"error": "missing required parameter(s)"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "missing required parameter(s)"})
 			return
 		}
 
 		if user, err := app.DB.CreateUser(username, password); err != nil {
-			c.AbortWithError(500, err)
+			c.AbortWithError(http.StatusInternalServerError, err)
 		} else {
-			c.JSON(200, user)
+			c.JSON(http.StatusOK, user)
 		}
 	})
 
@@ -132,7 +133,7 @@ func (app *App) setupRoutes() {
 		id := c.MustGet("userID").(bson.ObjectId)
 		var user db.User
 		if err := app.DB.FindUserByID(id).One(&user); err != nil {
-			c.AbortWithError(500, err)
+			c.AbortWithError(http.StatusInternalServerError, err)
 			return
 		}
 		c.Set("user", &user)
@@ -141,13 +142,13 @@ func (app *App) setupRoutes() {
 	// GET /api/users/:id
 	userIDEndpoints.GET("/", func(c *gin.Context) {
 		user := c.MustGet("user").(*db.User)
-		c.JSON(200, &user)
+		c.JSON(http.StatusOK, &user)
 	})
 
 	// GET /api/users/:id/feeds
 	userIDEndpoints.GET("/feeds", func(c *gin.Context) {
 		user := c.MustGet("user").(*db.User)
-		c.JSON(200, &user.FeedIDs)
+		c.JSON(http.StatusOK, &user.FeedIDs)
 	})
 
 	// PUT /api/users/:id/feeds
@@ -157,22 +158,22 @@ func (app *App) setupRoutes() {
 
 		var ids []bson.ObjectId
 		if err := json.Unmarshal(body, ids); err != nil {
-			c.AbortWithError(400, err)
+			c.AbortWithError(http.StatusBadRequest, err)
 			return
 		}
 
 		user.FeedIDs = ids
 		if err := app.DB.UpdateUser(user); err != nil {
-			c.AbortWithError(500, err)
+			c.AbortWithError(http.StatusInternalServerError, err)
 			return
 		}
-		c.JSON(200, &user)
+		c.JSON(http.StatusOK, &user)
 	})
 
 	// GET /api/users/:id/states
 	api.GET("/states", func(c *gin.Context) {
 		user := c.MustGet("user").(*db.User)
-		c.JSON(200, &user.ItemStates)
+		c.JSON(http.StatusOK, &user.ItemStates)
 	})
 
 	// PUT /api/users/:id/states
@@ -182,19 +183,19 @@ func (app *App) setupRoutes() {
 
 		var states []db.ItemState
 		if err := json.Unmarshal(body, states); err != nil {
-			c.AbortWithError(400, err)
+			c.AbortWithError(http.StatusBadRequest, err)
 			return
 		}
 
 		user.ItemStates = states
 		if err := app.DB.UpdateUser(user); err != nil {
-			c.AbortWithError(500, err)
+			c.AbortWithError(http.StatusInternalServerError, err)
 			return
 		}
 
 		// TODO(clucas): Return user instead of user.ItemStates to be consistent
 		// with PUT /api/users/:id/feeds
-		c.JSON(200, &user.ItemStates)
+		c.JSON(http.StatusOK, &user.ItemStates)
 	})
 
 	// api.POST("/feeds", CreateFeed)
