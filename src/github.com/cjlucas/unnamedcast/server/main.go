@@ -329,12 +329,12 @@ func (app *App) setupRoutes() {
 	// GET /api/feeds/:id
 	api.GET("/feeds/:id", app.requireFeedID("id"), func(c *gin.Context) {
 		id := c.MustGet("feedID").(bson.ObjectId)
-		var feed db.Feed
-		if err := app.DB.FindUserByID(id).One(&feed); err != nil {
+		feed, err := app.DB.FeedByID(id)
+		if err != nil {
 			c.AbortWithError(http.StatusInternalServerError, err)
 			return
 		}
-		c.JSON(http.StatusOK, &feed)
+		c.JSON(http.StatusOK, feed)
 	})
 
 	// PUT /api/feeds/:id
