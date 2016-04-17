@@ -64,7 +64,16 @@ func (db *DB) FindFeedByID(id bson.ObjectId) Query {
 	return db.FindFeeds(bson.M{"_id": id})
 }
 
+func (db *DB) FeedByID(id bson.ObjectId) (*Feed, error) {
+	var feed Feed
+	if err := db.FindFeedByID(id).One(&feed); err != nil {
+		return nil, err
+	}
+	return &feed, nil
+}
+
 func (db *DB) CreateFeed(feed *Feed) error {
+	feed.ID = bson.NewObjectId()
 	return db.feeds().Insert(feed)
 }
 

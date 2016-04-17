@@ -55,17 +55,39 @@ func readRequestBody(c *gin.Context) {
 	c.Request.Body.Close()
 }
 
-func (app *App) requireValidUserID(paramName string) gin.HandlerFunc {
+func (app *App) loadUserWithID(paramName string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := bson.ObjectIdHex(c.Param(paramName))
-		n, err := app.DB.FindUserByID(id).Count()
+		q := app.DB.FindUserByID(id)
+		n, err := q.Count()
 		if err != nil {
 			c.AbortWithError(http.StatusInternalServerError, err)
+			return
 		} else if n < 0 {
+			c.AbortWithStatus(http.StatusNotFound)
+			return
+		}
+
+		var user db.User
+		if err := q.One(&user); err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+		}
+
+		c.Set("user", &user)
+	}
+}
+
+func (app *App) requireFeedID(paramName string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := bson.ObjectIdHex(c.Param(paramName))
+		n, err := app.DB.FindFeedByID(id).Count()
+		if err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+		} else if n < 1 {
 			c.AbortWithStatus(http.StatusNotFound)
 		}
 
-		c.Set("userID", id)
+		c.Set("feedID", id)
 	}
 }
 
@@ -193,30 +215,20 @@ func (app *App) setupRoutes() {
 		}
 	})
 
-	userIDEndpoints := api.Group("/users/:id", app.requireValidUserID("id"), func(c *gin.Context) {
-		id := c.MustGet("userID").(bson.ObjectId)
-		var user db.User
-		if err := app.DB.FindUserByID(id).One(&user); err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-			return
-		}
-		c.Set("user", &user)
-	})
-
 	// GET /api/users/:id
-	userIDEndpoints.GET("", func(c *gin.Context) {
+	api.GET("/users/:id", app.loadUserWithID("id"), func(c *gin.Context) {
 		user := c.MustGet("user").(*db.User)
 		c.JSON(http.StatusOK, &user)
 	})
 
 	// GET /api/users/:id/feeds
-	userIDEndpoints.GET("/feeds", func(c *gin.Context) {
+	api.GET("/users/:id/feeds", app.loadUserWithID("id"), func(c *gin.Context) {
 		user := c.MustGet("user").(*db.User)
 		c.JSON(http.StatusOK, &user.FeedIDs)
 	})
 
 	// PUT /api/users/:id/feeds
-	userIDEndpoints.PUT("/feeds", readRequestBody, func(c *gin.Context) {
+	api.PUT("/users/:id/feeds", app.loadUserWithID("id"), readRequestBody, func(c *gin.Context) {
 		user := c.MustGet("user").(*db.User)
 		body := c.MustGet("body").([]byte)
 
@@ -235,13 +247,13 @@ func (app *App) setupRoutes() {
 	})
 
 	// GET /api/users/:id/states
-	api.GET("/states", func(c *gin.Context) {
+	api.GET("/users/:id/states", app.loadUserWithID("id"), func(c *gin.Context) {
 		user := c.MustGet("user").(*db.User)
 		c.JSON(http.StatusOK, &user.ItemStates)
 	})
 
 	// PUT /api/users/:id/states
-	api.PUT("/states", func(c *gin.Context) {
+	api.PUT("/users/:id/states", app.loadUserWithID("id"), readRequestBody, func(c *gin.Context) {
 		user := c.MustGet("user").(*db.User)
 		body := c.MustGet("body").([]byte)
 
@@ -266,11 +278,15 @@ func (app *App) setupRoutes() {
 	// GET /api/feeds?itunes_id=43912431
 	api.GET("/feeds", func(c *gin.Context) {
 		var query bson.M
-		for _, param := range []string{"url", "itunes_id"} {
-			if v := c.Query(param); v != "" {
-				query = bson.M{param: v}
-				break
+		if val := c.Query("url"); val != "" {
+			query = bson.M{"url": val}
+		} else if val := c.Query("itunes_id"); val != "" {
+			id, err := strconv.Atoi(val)
+			if err != nil {
+				c.AbortWithError(http.StatusBadRequest, err)
+				return
 			}
+			query = bson.M{"itunes_id": id}
 		}
 
 		if query == nil {
@@ -280,7 +296,7 @@ func (app *App) setupRoutes() {
 
 		var feed db.Feed
 		if err := app.DB.FindFeeds(query).One(&feed); err != nil {
-			c.AbortWithStatus(http.StatusNotFound)
+			c.AbortWithError(http.StatusNotFound, err)
 			return
 		}
 
@@ -290,7 +306,7 @@ func (app *App) setupRoutes() {
 	// POST /api/feeds
 	api.POST("/feeds", func(c *gin.Context) {
 		var feed db.Feed
-		if err := c.Bind(&feed); err != nil {
+		if err := c.BindJSON(&feed); err != nil {
 			c.AbortWithError(http.StatusBadRequest, err)
 			return
 		}
@@ -300,23 +316,16 @@ func (app *App) setupRoutes() {
 			return
 		}
 
-		c.JSON(http.StatusOK, &feed)
-	})
-
-	feedIDEndpoints := api.Group("/feeds/:id", func(c *gin.Context) {
-		id := bson.ObjectIdHex(c.Param("id"))
-		n, err := app.DB.FindFeedByID(id).Count()
+		out, err := app.DB.FeedByID(feed.ID)
 		if err != nil {
 			c.AbortWithError(http.StatusInternalServerError, err)
-		} else if n < 1 {
-			c.AbortWithStatus(http.StatusNotFound)
+			return
 		}
-
-		c.Set("feedID", id)
+		c.JSON(http.StatusOK, out)
 	})
 
 	// GET /api/feeds/:id
-	feedIDEndpoints.GET("", func(c *gin.Context) {
+	api.GET("/feeds/:id", app.requireFeedID("id"), func(c *gin.Context) {
 		id := c.MustGet("feedID").(bson.ObjectId)
 		var feed db.Feed
 		if err := app.DB.FindUserByID(id).One(&feed); err != nil {
@@ -326,8 +335,24 @@ func (app *App) setupRoutes() {
 		c.JSON(http.StatusOK, &feed)
 	})
 
+	// PUT /api/feeds/:id
+	api.PUT("/feeds/:id", app.requireFeedID("id"), func(c *gin.Context) {
+		var feed db.Feed
+		if err := c.BindJSON(&feed); err != nil {
+			c.AbortWithStatus(http.StatusBadRequest)
+		}
+		feed.ID = c.MustGet("feedID").(bson.ObjectId)
+
+		if err := app.DB.UpdateFeed(&feed); err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
+		}
+
+		c.JSON(http.StatusOK, &feed)
+	})
+
 	// GET /api/feeds/:id/users
-	feedIDEndpoints.GET("/users", func(c *gin.Context) {
+	api.GET("/feeds/:id/users", app.requireFeedID("id"), func(c *gin.Context) {
 		id := c.MustGet("feedID").(bson.ObjectId)
 		query := bson.M{
 			"feedids": bson.M{
@@ -342,22 +367,6 @@ func (app *App) setupRoutes() {
 		}
 
 		c.JSON(http.StatusOK, &users)
-	})
-
-	// PUT /api/feeds/:id
-	feedIDEndpoints.PUT("", func(c *gin.Context) {
-		var feed db.Feed
-		if err := c.Bind(&feed); err != nil {
-			c.AbortWithStatus(http.StatusBadRequest)
-		}
-		feed.ID = c.MustGet("feedID").(bson.ObjectId)
-
-		if err := app.DB.UpdateFeed(&feed); err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-			return
-		}
-
-		c.JSON(http.StatusOK, &feed)
 	})
 }
 
