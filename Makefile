@@ -1,3 +1,5 @@
+.PHONY: server
+
 FILES = $(shell git ls-files)
 BRANCH = $(shell git rev-parse --abbrev-ref HEAD | awk -F'/' '{print $$NF}')
 IMGNAME = cast

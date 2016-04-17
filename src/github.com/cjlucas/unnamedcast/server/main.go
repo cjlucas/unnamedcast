@@ -17,7 +17,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/robfig/cron"
 
-	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 )
 
@@ -183,7 +182,7 @@ func (app *App) setupRoutes() {
 		password := strings.TrimSpace(c.Query("password"))
 
 		if username == "" || password == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "missing required parameter(s)"})
+			c.AbortWithStatus(http.StatusBadRequest)
 			return
 		}
 
@@ -205,7 +204,7 @@ func (app *App) setupRoutes() {
 	})
 
 	// GET /api/users/:id
-	userIDEndpoints.GET("/", func(c *gin.Context) {
+	userIDEndpoints.GET("", func(c *gin.Context) {
 		user := c.MustGet("user").(*db.User)
 		c.JSON(http.StatusOK, &user)
 	})
@@ -366,11 +365,6 @@ func (app *App) Run(addr string) error {
 	return app.g.Run(addr)
 }
 
-var gSession *mgo.Session
-
-// func SearchFeeds(c *gin.Context) {
-// }
-
 func main() {
 	c := cron.New()
 	c.AddFunc("@hourly", func() {
@@ -380,9 +374,9 @@ func main() {
 
 	c.Start()
 
-	url := os.Getenv("DB_URL")
-	if url == "" {
-		url = "mongodb://localhost/cast"
+	dbURL := os.Getenv("DB_URL")
+	if dbURL == "" {
+		dbURL = "mongodb://localhost/cast"
 	}
 
 	port, _ := strconv.Atoi(os.Getenv("API_PORT"))
@@ -390,9 +384,10 @@ func main() {
 		port = 80
 	}
 
-	session, err := mgo.Dial(url)
+	app, err := NewApp(dbURL)
 	if err != nil {
 		panic(err)
 	}
-	defer session.Close()
+
+	app.Run(fmt.Sprintf("0.0.0.0:%d", port))
 }
