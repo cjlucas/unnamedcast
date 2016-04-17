@@ -2,12 +2,15 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
+
+	"golang.org/x/crypto/bcrypt"
 
 	"github.com/cjlucas/unnamedcast/koda"
 	"github.com/cjlucas/unnamedcast/server/db"
@@ -98,8 +101,70 @@ func (app *App) setupIndexes() error {
 func (app *App) setupRoutes() {
 	app.g = gin.Default()
 
-	// app.g.GET("/search_feeds", SearchFeeds)
-	// app.g.GET("/login", UserLogin)
+	// GET /search_feeds
+	app.g.GET("/search_feeds", func(c *gin.Context) {
+		var limit int
+		if limitStr := c.Query("limit"); limitStr == "" {
+			limit = 50
+		} else if i, err := strconv.Atoi(limitStr); err != nil {
+			c.AbortWithError(500, errors.New("Error parsing limit"))
+			return
+		} else {
+			limit = i
+		}
+
+		query := c.Query("q")
+		if query == "" {
+			c.AbortWithError(400, errors.New("No query given"))
+			return
+		}
+
+		q := app.DB.FindFeeds(bson.M{
+			"$text": bson.M{"$search": query},
+		})
+
+		q.Select(bson.M{
+			"score":     bson.M{"$meta": "textScore"},
+			"title":     1,
+			"category":  1,
+			"image_url": 1,
+		}).Sort("$textScore:score").Limit(limit)
+
+		var results []db.Feed
+		if err := q.All(&results); err != nil {
+			c.AbortWithError(500, err)
+		}
+
+		if results == nil {
+			results = make([]db.Feed, 0)
+		}
+
+		c.JSON(200, results)
+	})
+
+	// GET /login
+	app.g.GET("/login", func(c *gin.Context) {
+		username := strings.TrimSpace(c.Query("username"))
+		password := strings.TrimSpace(c.Query("password"))
+
+		if username == "" || password == "" {
+			c.AbortWithStatus(http.StatusBadRequest)
+			return
+		}
+
+		var user db.User
+		if err := app.DB.FindUsers(bson.M{"username": username}); err != nil {
+			c.AbortWithStatus(http.StatusBadRequest)
+			return
+		}
+
+		if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
+			c.AbortWithStatus(http.StatusUnauthorized)
+			return
+		}
+
+		c.JSON(200, &user)
+	})
 
 	api := app.g.Group("/api")
 
@@ -177,7 +242,7 @@ func (app *App) setupRoutes() {
 	})
 
 	// PUT /api/users/:id/states
-	api.PUT("/users/:id/states", func(c *gin.Context) {
+	api.PUT("/states", func(c *gin.Context) {
 		user := c.MustGet("user").(*db.User)
 		body := c.MustGet("body").([]byte)
 
@@ -198,11 +263,103 @@ func (app *App) setupRoutes() {
 		c.JSON(http.StatusOK, &user.ItemStates)
 	})
 
-	// api.POST("/feeds", CreateFeed)
-	// api.GET("/feeds/:id", RequireValidFeedID, ReadFeed)
-	// api.GET("/feeds/:id/users", RequireValidFeedID, GetFeedsUsers)
-	// api.GET("/feeds", FindFeed)
-	// api.PUT("/feeds/:id", RequireValidFeedID, UpdateFeed)
+	// GET /api/feeds?url=http://url.com
+	// GET /api/feeds?itunes_id=43912431
+	api.GET("/feeds", func(c *gin.Context) {
+		var query bson.M
+		for _, param := range []string{"url", "itunes_id"} {
+			if v := c.Query(param); v != "" {
+				query = bson.M{param: v}
+				break
+			}
+		}
+
+		if query == nil {
+			c.AbortWithStatus(http.StatusBadRequest)
+			return
+		}
+
+		var feed db.Feed
+		if err := app.DB.FindFeeds(query).One(&feed); err != nil {
+			c.AbortWithStatus(http.StatusNotFound)
+			return
+		}
+
+		c.JSON(200, &feed)
+	})
+
+	// POST /api/feeds
+	api.POST("/feeds", func(c *gin.Context) {
+		var feed db.Feed
+		if err := c.Bind(&feed); err != nil {
+			c.AbortWithError(http.StatusBadRequest, err)
+			return
+		}
+
+		if err := app.DB.CreateFeed(&feed); err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
+		}
+
+		c.JSON(http.StatusOK, &feed)
+	})
+
+	feedIDEndpoints := api.Group("/feeds/:id", func(c *gin.Context) {
+		id := bson.ObjectIdHex(c.Param("id"))
+		n, err := app.DB.FindFeedByID(id).Count()
+		if err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+		} else if n < 1 {
+			c.AbortWithStatus(http.StatusNotFound)
+		}
+
+		c.Set("feedID", id)
+	})
+
+	// GET /api/feeds/:id
+	feedIDEndpoints.GET("", func(c *gin.Context) {
+		id := c.MustGet("feedID").(bson.ObjectId)
+		var feed db.Feed
+		if err := app.DB.FindUserByID(id).One(&feed); err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
+		}
+		c.JSON(http.StatusOK, &feed)
+	})
+
+	// GET /api/feeds/:id/users
+	feedIDEndpoints.GET("/users", func(c *gin.Context) {
+		id := c.MustGet("feedID").(bson.ObjectId)
+		query := bson.M{
+			"feedids": bson.M{
+				"$in": []bson.ObjectId{id},
+			},
+		}
+
+		var users []db.User
+		if err := app.DB.FindUsers(query).All(&users); err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
+		}
+
+		c.JSON(http.StatusOK, &users)
+	})
+
+	// PUT /api/feeds/:id
+	feedIDEndpoints.PUT("", func(c *gin.Context) {
+		var feed db.Feed
+		if err := c.Bind(&feed); err != nil {
+			c.AbortWithStatus(http.StatusBadRequest)
+		}
+		feed.ID = c.MustGet("feedID").(bson.ObjectId)
+
+		if err := app.DB.UpdateFeed(&feed); err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
+		}
+
+		c.JSON(http.StatusOK, &feed)
+	})
 }
 
 func (app *App) Run(addr string) error {
@@ -212,66 +369,6 @@ func (app *App) Run(addr string) error {
 var gSession *mgo.Session
 
 // func SearchFeeds(c *gin.Context) {
-// 	var limit int
-// 	if limitStr := c.Query("limit"); limitStr == "" {
-// 		limit = 50
-// 	} else if i, err := strconv.Atoi(limitStr); err != nil {
-// 		c.AbortWithError(500, errors.New("Error parsing limit"))
-// 		return
-// 	} else {
-// 		limit = i
-// 	}
-//
-// 	query := c.Query("q")
-// 	if query == "" {
-// 		c.AbortWithError(400, errors.New("No query given"))
-// 		return
-// 	}
-//
-// 	q := feeds().Find(bson.M{
-// 		"$text": bson.M{"$search": query},
-// 	})
-//
-// 	q.Select(bson.M{
-// 		"score":     bson.M{"$meta": "textScore"},
-// 		"title":     1,
-// 		"category":  1,
-// 		"image_url": 1,
-// 	}).Sort("$textScore:score").Limit(limit)
-//
-// 	var results []Feed
-// 	if err := q.All(&results); err != nil {
-// 		c.AbortWithError(500, err)
-// 	}
-//
-// 	if results == nil {
-// 		results = make([]Feed, 0)
-// 	}
-//
-// 	c.JSON(200, results)
-// }
-//
-// func UserLogin(c *gin.Context) {
-// 	username := strings.TrimSpace(c.Query("username"))
-// 	password := strings.TrimSpace(c.Query("password"))
-//
-// 	if username == "" || password == "" {
-// 		c.JSON(400, gin.H{"error": "missing required parameter(s)"})
-// 		return
-// 	}
-//
-// 	var user db.User
-// 	if err := user.FindByName(username); err != nil {
-// 		c.JSON(400, gin.H{"error": "user not found"})
-// 		return
-// 	}
-//
-// 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
-// 		c.JSON(401, gin.H{"error": "incorrect password"})
-// 		return
-// 	}
-//
-// 	c.JSON(200, &user)
 // }
 
 func main() {

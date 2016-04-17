@@ -68,13 +68,6 @@ func TestCreateUserNoParams(t *testing.T) {
 }
 
 func TestCreateUserValidParams(t *testing.T) {
-	testEndpoint(t, endpointTestInfo{
-		Request:      newRequest("POST", "/api/users?username=chris&password=hi", nil),
-		ExpectedCode: http.StatusOK,
-	})
-}
-
-func TestCreateUserDuplicateUser(t *testing.T) {
 	app := newTestApp()
 	req := newRequest("POST", "/api/users?username=chris&password=hi", nil)
 
