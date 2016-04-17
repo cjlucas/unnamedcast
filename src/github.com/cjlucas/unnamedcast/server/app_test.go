@@ -151,6 +151,35 @@ func TestGetUser(t *testing.T) {
 	})
 }
 
+func TestPutUserFeeds(t *testing.T) {
+	app := newTestApp()
+	user, err := app.DB.CreateUser("chris", "hithere")
+	if err != nil {
+		t.Fatal("Could not create user:", err)
+	}
+
+	ids := []bson.ObjectId{
+		bson.NewObjectId(),
+	}
+
+	req := newRequest("PUT", fmt.Sprintf("/api/users/%s/feeds", user.ID.Hex()), ids)
+	var out db.User
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      req,
+		ExpectedCode: http.StatusOK,
+		ResponseBody: &out,
+	})
+
+	if len(out.FeedIDs) == len(ids) {
+		if out.FeedIDs[0] != ids[0] {
+			t.Errorf("Feed ID mismatch: %s != %s", out.FeedIDs[0], ids[0])
+		}
+	} else {
+		t.Errorf("Unexpected # of feed IDs: %d != %d", len(out.FeedIDs), len(ids))
+	}
+}
+
 func TestCreateFeed(t *testing.T) {
 	in := db.Feed{
 		URL: "http://google.com",

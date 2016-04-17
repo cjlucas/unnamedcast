@@ -246,12 +246,11 @@ func (app *App) setupRoutes() {
 	})
 
 	// PUT /api/users/:id/feeds
-	api.PUT("/users/:id/feeds", app.loadUserWithID("id"), readRequestBody, func(c *gin.Context) {
+	api.PUT("/users/:id/feeds", app.loadUserWithID("id"), func(c *gin.Context) {
 		user := c.MustGet("user").(*db.User)
-		body := c.MustGet("body").([]byte)
 
 		var ids []bson.ObjectId
-		if err := json.Unmarshal(body, ids); err != nil {
+		if err := c.BindJSON(&ids); err != nil {
 			c.AbortWithError(http.StatusBadRequest, err)
 			return
 		}
