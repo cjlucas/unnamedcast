@@ -31,7 +31,7 @@ worker:
 install: server worker
 
 localUnittest:
-	@cd src/github.com/cjlucas/unnamedcast; go list ./... | grep -v vendor | xargs go test -v
+	@cd src/github.com/cjlucas/unnamedcast; go list ./... | grep -v vendor | xargs go test
 
 # TODO: figure out a good method for executing integration tests
 localTest: localUnittest
