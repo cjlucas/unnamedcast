@@ -1,10 +1,8 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"strconv"
@@ -49,18 +47,6 @@ func newObjectIDFromHex(idHex string) (bson.ObjectId, error) {
 		return id, errors.New("invalid object id")
 	}
 	return bson.ObjectIdHex(idHex), nil
-}
-
-// readRequestBody is middleware for reading the request body. This is necessary
-// in cases where c.Bind does not work (such as when deserializing to a slice)
-func readRequestBody(c *gin.Context) {
-	data, err := ioutil.ReadAll(c.Request.Body)
-	if err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
-	} else {
-		c.Set("body", data)
-	}
-	c.Request.Body.Close()
 }
 
 func (app *App) loadUserWithID(paramName string) gin.HandlerFunc {
@@ -270,12 +256,11 @@ func (app *App) setupRoutes() {
 	})
 
 	// PUT /api/users/:id/states
-	api.PUT("/users/:id/states", app.loadUserWithID("id"), readRequestBody, func(c *gin.Context) {
+	api.PUT("/users/:id/states", app.loadUserWithID("id"), func(c *gin.Context) {
 		user := c.MustGet("user").(*db.User)
-		body := c.MustGet("body").([]byte)
 
 		var states []db.ItemState
-		if err := json.Unmarshal(body, states); err != nil {
+		if err := c.BindJSON(&states); err != nil {
 			c.AbortWithError(http.StatusBadRequest, err)
 			return
 		}
