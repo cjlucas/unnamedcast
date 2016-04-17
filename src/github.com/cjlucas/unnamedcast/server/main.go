@@ -98,13 +98,13 @@ func (app *App) requireFeedID(paramName string) gin.HandlerFunc {
 func (app *App) setupIndexes() error {
 	userIndexes := []db.Index{
 		{Key: []string{"username"}, Unique: true},
-		{Key: []string{"feedids"}, Unique: true},
+		{Key: []string{"feedids"}},
 	}
 
 	feedIndexes := []db.Index{
 		{Key: []string{"url"}, Unique: true},
 		{Key: []string{"itunes_id"}, Unique: true},
-		{Key: []string{"modification_time"}, Unique: false},
+		{Key: []string{"modification_time"}},
 		{Key: []string{"$text:title"}},
 	}
 

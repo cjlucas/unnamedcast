@@ -90,6 +90,28 @@ func testEndpoint(t *testing.T, info endpointTestInfo) {
 	}
 }
 
+func TestGetUsers(t *testing.T) {
+	app := newTestApp()
+	if _, err := app.DB.CreateUser("chris", "hithere"); err != nil {
+		t.Fatal("Could not create user:", err)
+	}
+	if _, err := app.DB.CreateUser("john", "hithere"); err != nil {
+		t.Fatal("Could not create user:", err)
+	}
+
+	var out []db.User
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      newRequest("GET", "/api/users", nil),
+		ExpectedCode: http.StatusOK,
+		ResponseBody: &out,
+	})
+
+	if len(out) != 2 {
+		t.Errorf("Unexpected # of users: %d != %d", len(out), 2)
+	}
+}
+
 func TestCreateUserValidParams(t *testing.T) {
 	app := newTestApp()
 	req := newRequest("POST", "/api/users?username=chris&password=hi", nil)
