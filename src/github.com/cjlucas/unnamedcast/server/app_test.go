@@ -48,6 +48,10 @@ func newRequest(method string, endpoint string, body interface{}) *http.Request 
 			panic(err)
 		}
 		reqBody = bytes.NewReader(buf)
+	} else {
+		// Body cannot be nil because we are not sending request through a
+		// transport and c.BindJSON/json.NewDecoder do not perform anil check
+		reqBody = bytes.NewReader([]byte{})
 	}
 
 	r, err := http.NewRequest(method, endpoint, reqBody)
@@ -162,6 +166,12 @@ func TestCreateFeed(t *testing.T) {
 	} else {
 		t.Errorf("Unexpected # of items: %d != %d", len(out.Items), len(in.Items))
 	}
+
+	// No body given
+	testEndpoint(t, endpointTestInfo{
+		Request:      newRequest("POST", "/api/feeds", nil),
+		ExpectedCode: http.StatusBadRequest,
+	})
 }
 
 func TestGetFeedWithoutParams(t *testing.T) {
@@ -267,12 +277,12 @@ func TestPutFeed(t *testing.T) {
 		t.Errorf("Unexpected title: %s != %s", out.Title, feed.Title)
 	}
 
-	// No body given (skip until fixed)
-	// testEndpoint(t, endpointTestInfo{
-	// 	App:          app,
-	// 	Request:      newRequest("PUT", url, nil),
-	// 	ExpectedCode: http.StatusBadRequest,
-	// })
+	// No body given
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      newRequest("PUT", url, nil),
+		ExpectedCode: http.StatusBadRequest,
+	})
 }
 
 func TestGetFeedsUsers(t *testing.T) {
