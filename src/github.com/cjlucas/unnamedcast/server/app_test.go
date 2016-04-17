@@ -90,13 +90,6 @@ func testEndpoint(t *testing.T, info endpointTestInfo) {
 	}
 }
 
-func TestCreateUserNoParams(t *testing.T) {
-	testEndpoint(t, endpointTestInfo{
-		Request:      newRequest("POST", "/api/users", nil),
-		ExpectedCode: http.StatusBadRequest,
-	})
-}
-
 func TestCreateUserValidParams(t *testing.T) {
 	app := newTestApp()
 	req := newRequest("POST", "/api/users?username=chris&password=hi", nil)
@@ -122,6 +115,39 @@ func TestCreateUserValidParams(t *testing.T) {
 		App:          app,
 		Request:      req,
 		ExpectedCode: http.StatusInternalServerError,
+	})
+
+	// No parameters
+	testEndpoint(t, endpointTestInfo{
+		Request:      newRequest("POST", "/api/users", nil),
+		ExpectedCode: http.StatusBadRequest,
+	})
+}
+
+func TestGetUser(t *testing.T) {
+	app := newTestApp()
+	user, err := app.DB.CreateUser("chris", "hithere")
+	if err != nil {
+		t.Fatal("Could not create user:", err)
+	}
+
+	var out db.User
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      newRequest("GET", fmt.Sprintf("/api/users/%s", user.ID.Hex()), nil),
+		ExpectedCode: http.StatusOK,
+		ResponseBody: &out,
+	})
+
+	if out.ID != user.ID {
+		t.Errorf("ID mismatch: %s != %s", out.ID, user.ID)
+	}
+
+	// Non-existant ID
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      newRequest("GET", fmt.Sprintf("/api/users/%s", bson.NewObjectId().Hex()), nil),
+		ExpectedCode: http.StatusNotFound,
 	})
 }
 
