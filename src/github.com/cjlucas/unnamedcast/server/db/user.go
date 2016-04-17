@@ -76,7 +76,7 @@ func (db *DB) UpdateUser(user *User) error {
 		return err
 	}
 
-	if CopyModel(origUser, user, "ID", "Username", "Password") {
+	if CopyModel(&origUser, user, "ID", "Username", "Password") {
 		user.ModificationTime = time.Now().UTC()
 	}
 

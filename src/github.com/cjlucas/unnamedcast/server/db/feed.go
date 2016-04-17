@@ -100,7 +100,7 @@ func (db *DB) UpdateFeed(feed *Feed) error {
 		ignoredFields = append(ignoredFields, "Category")
 	}
 
-	didChange := CopyModel(origFeed, feed, ignoredFields...)
+	didChange := CopyModel(&origFeed, feed, ignoredFields...)
 	itemGUIDMap := generateGUIDToItemMap(origFeed.Items)
 
 	// TODO(clucas): Refactor to copy items from origFeed into

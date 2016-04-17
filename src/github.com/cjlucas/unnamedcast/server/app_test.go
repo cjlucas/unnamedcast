@@ -164,6 +164,13 @@ func TestCreateFeed(t *testing.T) {
 	}
 }
 
+func TestGetFeedWithoutParams(t *testing.T) {
+	testEndpoint(t, endpointTestInfo{
+		Request:      newRequest("GET", "/api/feeds", nil),
+		ExpectedCode: http.StatusBadRequest,
+	})
+}
+
 func TestGetFeedByURL(t *testing.T) {
 	app := newTestApp()
 	feed := &db.Feed{
@@ -203,7 +210,7 @@ func TestGetFeedByITunesID(t *testing.T) {
 	}
 
 	if err := app.DB.CreateFeed(feed); err != nil {
-		t.Fatal("could not create feed", err)
+		t.Fatal("could not create feed:", err)
 	}
 
 	req := newRequest("GET", fmt.Sprintf("/api/feeds?itunes_id=%d", feed.ITunesID), nil)
@@ -232,4 +239,77 @@ func TestGetFeedByITunesID(t *testing.T) {
 		Request:      newRequest("GET", "/api/feeds?itunes_id=notanum", nil),
 		ExpectedCode: http.StatusBadRequest,
 	})
+}
+
+func TestPutFeed(t *testing.T) {
+	app := newTestApp()
+	feed := &db.Feed{
+		URL:      "http://google.com",
+		ITunesID: 12345,
+	}
+
+	if err := app.DB.CreateFeed(feed); err != nil {
+		t.Fatal("could not create feed:", err)
+	}
+
+	feed.Title = "Something"
+
+	url := fmt.Sprintf("/api/feeds/%s", feed.ID.Hex())
+	var out db.Feed
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      newRequest("PUT", url, feed),
+		ExpectedCode: http.StatusOK,
+		ResponseBody: &out,
+	})
+
+	if out.Title != feed.Title {
+		t.Errorf("Unexpected title: %s != %s", out.Title, feed.Title)
+	}
+
+	// No body given (skip until fixed)
+	// testEndpoint(t, endpointTestInfo{
+	// 	App:          app,
+	// 	Request:      newRequest("PUT", url, nil),
+	// 	ExpectedCode: http.StatusBadRequest,
+	// })
+}
+
+func TestGetFeedsUsers(t *testing.T) {
+	app := newTestApp()
+	feed := &db.Feed{
+		URL:      "http://google.com",
+		ITunesID: 12345,
+	}
+
+	if err := app.DB.CreateFeed(feed); err != nil {
+		t.Fatal("could not create feed:", err)
+	}
+
+	user, err := app.DB.CreateUser("chris", "whatever")
+	if err != nil {
+		t.Fatal("Could not create user:", err)
+	}
+
+	user.FeedIDs = append(user.FeedIDs, feed.ID)
+	if err := app.DB.UpdateUser(user); err != nil {
+		t.Fatal("Failed to update user:", err)
+	}
+
+	req := newRequest("GET", fmt.Sprintf("/api/feeds/%s/users", feed.ID.Hex()), nil)
+	var out []db.User
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      req,
+		ExpectedCode: http.StatusOK,
+		ResponseBody: &out,
+	})
+
+	if len(out) == 1 {
+		if out[0].ID != user.ID {
+			t.Errorf("User ID mismatch: %s != %s", out[0].ID, user.ID)
+		}
+	} else {
+		t.Errorf("Unexpected number of users: %d != %d", len(out), 1)
+	}
 }

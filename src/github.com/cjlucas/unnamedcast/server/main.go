@@ -43,12 +43,20 @@ func NewApp(dbURL string) (*App, error) {
 	return &app, nil
 }
 
+func newObjectIDFromHex(idHex string) (bson.ObjectId, error) {
+	if !bson.IsObjectIdHex(idHex) {
+		var id bson.ObjectId
+		return id, errors.New("invalid object id")
+	}
+	return bson.ObjectIdHex(idHex), nil
+}
+
 // readRequestBody is middleware for reading the request body. This is necessary
 // in cases where c.Bind does not work (such as when deserializing to a slice)
 func readRequestBody(c *gin.Context) {
 	data, err := ioutil.ReadAll(c.Request.Body)
 	if err != nil {
-		c.AbortWithError(500, err)
+		c.AbortWithError(http.StatusInternalServerError, err)
 	} else {
 		c.Set("body", data)
 	}
@@ -57,13 +65,18 @@ func readRequestBody(c *gin.Context) {
 
 func (app *App) loadUserWithID(paramName string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		id := bson.ObjectIdHex(c.Param(paramName))
+		id, err := newObjectIDFromHex(c.Param(paramName))
+		if err != nil {
+			c.AbortWithError(http.StatusBadRequest, err)
+			return
+		}
+
 		q := app.DB.FindUserByID(id)
 		n, err := q.Count()
 		if err != nil {
 			c.AbortWithError(http.StatusInternalServerError, err)
 			return
-		} else if n < 0 {
+		} else if n < 1 {
 			c.AbortWithStatus(http.StatusNotFound)
 			return
 		}
@@ -79,7 +92,12 @@ func (app *App) loadUserWithID(paramName string) gin.HandlerFunc {
 
 func (app *App) requireFeedID(paramName string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		id := bson.ObjectIdHex(c.Param(paramName))
+		id, err := newObjectIDFromHex(c.Param(paramName))
+		if err != nil {
+			c.AbortWithError(http.StatusBadRequest, err)
+			return
+		}
+
 		n, err := app.DB.FindFeedByID(id).Count()
 		if err != nil {
 			c.AbortWithError(http.StatusInternalServerError, err)
