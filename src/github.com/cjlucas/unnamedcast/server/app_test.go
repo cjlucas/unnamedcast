@@ -90,6 +90,62 @@ func testEndpoint(t *testing.T, info endpointTestInfo) {
 	}
 }
 
+func TestLoginInvalidParameters(t *testing.T) {
+	app := newTestApp()
+	if _, err := app.DB.CreateUser("chris", "hithere"); err != nil {
+		t.Fatal("Could not create user:", err)
+	}
+
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      newRequest("GET", "/login", nil),
+		ExpectedCode: http.StatusBadRequest,
+	})
+
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      newRequest("GET", "/login?username=chris", nil),
+		ExpectedCode: http.StatusBadRequest,
+	})
+
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      newRequest("GET", "/login?password=hithere", nil),
+		ExpectedCode: http.StatusBadRequest,
+	})
+}
+
+func TestLoginBadPassword(t *testing.T) {
+	app := newTestApp()
+	if _, err := app.DB.CreateUser("chris", "hithere"); err != nil {
+		t.Fatal("Could not create user:", err)
+	}
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      newRequest("GET", "/login?username=chris&password=wrong", nil),
+		ExpectedCode: http.StatusUnauthorized,
+	})
+}
+
+func TestLogin(t *testing.T) {
+	app := newTestApp()
+	if _, err := app.DB.CreateUser("chris", "hithere"); err != nil {
+		t.Fatal("Could not create user:", err)
+	}
+
+	var out db.User
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      newRequest("GET", "/login?username=chris&password=hithere", nil),
+		ExpectedCode: http.StatusOK,
+		ResponseBody: &out,
+	})
+
+	if out.Username != "chris" {
+		t.Errorf("Username mismatch: %s != %s", out.Username, "chris")
+	}
+}
+
 func TestGetUsers(t *testing.T) {
 	app := newTestApp()
 	if _, err := app.DB.CreateUser("chris", "hithere"); err != nil {

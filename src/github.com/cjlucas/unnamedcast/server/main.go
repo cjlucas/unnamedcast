@@ -178,7 +178,7 @@ func (app *App) setupRoutes() {
 		}
 
 		var user db.User
-		if err := app.DB.FindUsers(bson.M{"username": username}); err != nil {
+		if err := app.DB.FindUsers(bson.M{"username": username}).One(&user); err != nil {
 			c.AbortWithStatus(http.StatusBadRequest)
 			return
 		}
