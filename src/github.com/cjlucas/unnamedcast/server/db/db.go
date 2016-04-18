@@ -1,13 +1,18 @@
 package db
 
-import "gopkg.in/mgo.v2"
+import (
+	"io"
+	"time"
+
+	"gopkg.in/mgo.v2"
+)
 
 type DB struct {
 	s *mgo.Session
 }
 
 func New(url string) (*DB, error) {
-	s, err := mgo.Dial(url)
+	s, err := mgo.DialWithTimeout(url, 2*time.Second)
 	if err != nil {
 		return nil, err
 	}
@@ -49,20 +54,42 @@ func (db *DB) db() *mgo.Database {
 	return db.s.DB("")
 }
 
+func (q *query) handleDBError(f func() error) error {
+	i := 0
+	err := f()
+	for err == io.EOF && i < 5 {
+		q.s.Refresh()
+		err = f()
+		i++
+	}
+	return err
+}
+
 func (db *DB) Drop() error {
 	return db.db().DropDatabase()
 }
 
 func (q *query) All(result interface{}) error {
-	return q.q.All(result)
+	return q.handleDBError(func() error {
+		return q.q.All(result)
+	})
 }
 
 func (q *query) Count() (int, error) {
-	return q.q.Count()
+	var n int
+	err := q.handleDBError(func() error {
+		var err error
+		n, err = q.q.Count()
+		return err
+	})
+
+	return n, err
 }
 
 func (q *query) One(result interface{}) error {
-	return q.q.One(result)
+	return q.handleDBError(func() error {
+		return q.q.One(result)
+	})
 }
 
 func (q *query) Select(selector interface{}) Query {
