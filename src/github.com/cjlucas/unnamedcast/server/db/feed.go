@@ -1,10 +1,7 @@
-package main
+package db
 
 import (
-	"fmt"
 	"time"
-
-	"github.com/gin-gonic/gin"
 
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
@@ -52,14 +49,40 @@ func generateGUIDToItemMap(items []Item) map[string]*Item {
 	return guidMap
 }
 
-func (f *Feed) Create() error {
-	f.ID = bson.NewObjectId()
-	f.CreationTime = time.Now().UTC()
-	f.ModificationTime = f.CreationTime
-	return feeds().Insert(f)
+func (db *DB) feeds() *mgo.Collection {
+	return db.db().C("feeds")
 }
 
-func (f *Feed) Update(new *Feed) error {
+func (db *DB) FindFeeds(q interface{}) Query {
+	return &query{
+		s: db.s,
+		q: db.feeds().Find(q),
+	}
+}
+
+func (db *DB) FindFeedByID(id bson.ObjectId) Query {
+	return db.FindFeeds(bson.M{"_id": id})
+}
+
+func (db *DB) FeedByID(id bson.ObjectId) (*Feed, error) {
+	var feed Feed
+	if err := db.FindFeedByID(id).One(&feed); err != nil {
+		return nil, err
+	}
+	return &feed, nil
+}
+
+func (db *DB) CreateFeed(feed *Feed) error {
+	feed.ID = bson.NewObjectId()
+	return db.feeds().Insert(feed)
+}
+
+func (db *DB) UpdateFeed(feed *Feed) error {
+	var origFeed Feed
+	if err := db.FindFeedByID(feed.ID).One(&origFeed); err != nil {
+		return err
+	}
+
 	ignoredFields := []string{"ID", "Items", "CreationTime", "ModificationTime"}
 
 	// Ignore Category if both are equal in the case where both subcats are 0 len
@@ -71,17 +94,19 @@ func (f *Feed) Update(new *Feed) error {
 	// An alternative solution would be to override the behavior of BSON
 	// unmarshalling for category using the bson.Setter interface to mimic
 	// the behavior of JSON's unmarshaller.
-	if len(f.Category.Subcategories) == 0 &&
-		len(new.Category.Subcategories) == 0 &&
-		f.Category.Name == new.Category.Name {
+	if len(origFeed.Category.Subcategories) == 0 &&
+		len(feed.Category.Subcategories) == 0 &&
+		origFeed.Category.Name == feed.Category.Name {
 		ignoredFields = append(ignoredFields, "Category")
 	}
 
-	didChange := CopyModel(f, new, ignoredFields...)
-	itemGUIDMap := generateGUIDToItemMap(f.Items)
+	didChange := CopyModel(&origFeed, feed, ignoredFields...)
+	itemGUIDMap := generateGUIDToItemMap(origFeed.Items)
 
-	for i := range new.Items {
-		item := &new.Items[i]
+	// TODO(clucas): Refactor to copy items from origFeed into
+	// feed and update with new feed instead of old
+	for i := range feed.Items {
+		item := &feed.Items[i]
 		// Time needs to be UTC because CopyModel will detect
 		// a change if the time zones don't match.
 		//
@@ -99,151 +124,18 @@ func (f *Feed) Update(new *Feed) error {
 		} else {
 			// If Item is new, append it to the Item list
 			item.ModificationTime = time.Now().UTC()
-			f.Items = append(f.Items, *item)
+			origFeed.Items = append(origFeed.Items, *item)
 			didChange = true
 		}
 	}
 
 	if didChange {
-		f.ModificationTime = time.Now().UTC()
+		origFeed.ModificationTime = time.Now().UTC()
 	}
 
-	return feeds().Update(bson.M{"_id": f.ID}, f)
+	return db.feeds().UpdateId(origFeed.ID, origFeed)
 }
 
-func feeds() *mgo.Collection {
-	return gSession.DB("test").C("feeds")
-}
-
-func loadFeed(idHex string) *Feed {
-	if !bson.IsObjectIdHex(idHex) {
-		return nil
-	}
-
-	var feed Feed
-	// TODO: reconsider swallowing this error
-	if err := feeds().FindId(bson.ObjectIdHex(idHex)).One(&feed); err != nil {
-		fmt.Println("Error fetching feed:", err)
-		return nil
-	}
-
-	feed.ModificationTime = feed.ModificationTime.UTC()
-	feed.CreationTime = feed.CreationTime.UTC()
-	for i := range feed.Items {
-		feed.Items[i].ModificationTime = feed.Items[i].ModificationTime.UTC()
-		feed.Items[i].PublicationTime = feed.Items[i].PublicationTime.UTC()
-	}
-
-	return &feed
-}
-
-func RequireValidFeedID(c *gin.Context) {
-	id := c.Param("id")
-	feed := loadFeed(id)
-
-	if feed == nil {
-		c.AbortWithStatus(404)
-		return
-	}
-
-	c.Set("feed", feed)
-}
-
-func CreateFeed(c *gin.Context) {
-	var feed Feed
-	if err := c.Bind(&feed); err != nil {
-		c.JSON(500, gin.H{"error": "could not unmarshal payload"})
-		return
-	}
-
-	if err := feed.Create(); err != nil {
-		c.AbortWithError(500, err)
-		return
-	}
-
-	c.JSON(200, &feed)
-}
-
-func FindFeed(c *gin.Context) {
-	var query bson.M
-
-	for _, param := range []string{"url", "itunes_id"} {
-		if v := c.Query(param); v != "" {
-			query = bson.M{param: v}
-			break
-		}
-	}
-
-	if query == nil {
-		c.JSON(400, gin.H{"error": "invalid query parameter"})
-		return
-	}
-
-	var feed Feed
-	if err := feeds().Find(query).One(&feed); err != nil {
-		c.JSON(404, gin.H{"error": "no results found"})
-	} else {
-		c.JSON(200, &feed)
-	}
-}
-
-func ReadFeed(c *gin.Context) {
-	feed := c.MustGet("feed").(*Feed)
-
-	if v := c.Query("items_modified_since"); v != "" {
-		t, err := time.Parse(time.RFC3339, v)
-		if err != nil {
-			c.AbortWithError(500, err)
-			return
-		}
-
-		// Filter items by modification time
-		// NOTE: This can be optimized by using an aggregate with $filter
-		var items []Item
-		for i := range feed.Items {
-			item := &feed.Items[i]
-			if item.ModificationTime.After(t) {
-				items = append(items, *item)
-			}
-		}
-
-		feed.Items = items
-	}
-
-	c.JSON(200, &feed)
-}
-
-func UpdateFeed(c *gin.Context) {
-	feed := c.MustGet("feed").(*Feed)
-
-	var bodyFeed Feed
-	if err := c.Bind(&bodyFeed); err != nil {
-		c.AbortWithError(500, err)
-		return
-	}
-
-	if err := feed.Update(&bodyFeed); err != nil {
-		c.AbortWithError(500, err)
-		return
-	}
-
-	c.JSON(200, &feed)
-}
-
-func GetFeedsUsers(c *gin.Context) {
-	feed := c.MustGet("feed").(*Feed)
-	var user []User
-
-	query := bson.M{
-		"feedids": bson.M{
-			"$in": []bson.ObjectId{feed.ID},
-		},
-	}
-
-	if err := users().Find(query).All(&user); err != nil {
-		c.AbortWithError(500, err)
-		return
-	}
-
-	c.JSON(200, &user)
+func (db *DB) EnsureFeedIndex(idx Index) error {
+	return db.feeds().EnsureIndex(mgoIndexForIndex(idx))
 }
