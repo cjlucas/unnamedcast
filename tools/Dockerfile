@@ -1,5 +1,8 @@
-FROM golang:1
+FROM golang:1-alpine
 MAINTAINER Chris Lucas
+
+RUN apk update
+RUN apk add make
 
 ENV GOPATH /app
 ENV PATH $PATH:/app/bin
