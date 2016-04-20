@@ -49,7 +49,7 @@ func newObjectIDFromHex(idHex string) (bson.ObjectId, error) {
 	return bson.ObjectIdHex(idHex), nil
 }
 
-func (app *App) loadUserWithID(paramName string) gin.HandlerFunc {
+func (app *App) requireModelID(f func(id bson.ObjectId) db.Query, paramName, boundName string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id, err := newObjectIDFromHex(c.Param(paramName))
 		if err != nil {
@@ -57,42 +57,38 @@ func (app *App) loadUserWithID(paramName string) gin.HandlerFunc {
 			return
 		}
 
-		q := app.DB.FindUserByID(id)
-		n, err := q.Count()
+		n, err := f(id).Count()
 		if err != nil {
 			c.AbortWithError(http.StatusInternalServerError, err)
-			return
 		} else if n < 1 {
 			c.AbortWithStatus(http.StatusNotFound)
-			return
 		}
+
+		c.Set(boundName, id)
+	}
+}
+
+func (app *App) loadUserWithID(paramName string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		boundName := "userID"
+		app.requireModelID(app.DB.FindUserByID, paramName, boundName)(c)
+		id := c.MustGet(boundName).(bson.ObjectId)
 
 		var user db.User
-		if err := q.One(&user); err != nil {
+		if err := app.DB.FindUserByID(id).One(&user); err != nil {
 			c.AbortWithError(http.StatusInternalServerError, err)
+			return
 		}
-
 		c.Set("user", &user)
 	}
 }
 
 func (app *App) requireFeedID(paramName string) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		id, err := newObjectIDFromHex(c.Param(paramName))
-		if err != nil {
-			c.AbortWithError(http.StatusBadRequest, err)
-			return
-		}
+	return app.requireModelID(app.DB.FindFeedByID, paramName, "feedID")
+}
 
-		n, err := app.DB.FindFeedByID(id).Count()
-		if err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-		} else if n < 1 {
-			c.AbortWithStatus(http.StatusNotFound)
-		}
-
-		c.Set("feedID", id)
-	}
+func (app *App) requireItemID(paramName string) gin.HandlerFunc {
+	return app.requireModelID(app.DB.FindItemByID, paramName, "feedID")
 }
 
 func (app *App) setupIndexes() error {
@@ -370,6 +366,38 @@ func (app *App) setupRoutes() {
 
 		c.JSON(http.StatusOK, &users)
 	})
+
+	// POST /feeds/:id/items
+	api.POST("/feeds/:id/items", app.requireFeedID("id"), func(c *gin.Context) {
+		var item db.Item
+		if err := c.BindJSON(&item); err != nil {
+			c.AbortWithError(http.StatusBadRequest, err)
+			return
+		}
+
+		if err := app.DB.CreateItem(&item); err != nil {
+			c.AbortWithError(http.StatusBadRequest, err)
+			return
+		}
+
+		id := c.MustGet("feedID").(bson.ObjectId)
+		feed, err := app.DB.FeedByID(id)
+		if err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
+		}
+		feed.Items = append(feed.Items, item.ID)
+
+		if err := app.DB.UpdateFeed(feed); err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
+		}
+
+		c.JSON(http.StatusOK, &item)
+	})
+
+	// PUT /feeds/:id/items
+	// api.PUT("/feeds/:feedID/items/:itemID", app.requireFeedID("feedID"))
 }
 
 func (app *App) Run(addr string) error {

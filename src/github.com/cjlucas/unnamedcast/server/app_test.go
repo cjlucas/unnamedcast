@@ -360,16 +360,6 @@ func TestPutUserItemStates(t *testing.T) {
 func TestCreateFeed(t *testing.T) {
 	in := db.Feed{
 		URL: "http://google.com",
-		Items: []db.Item{
-			{
-				GUID: "1",
-				Link: "http://google.com/link",
-			},
-			{
-				GUID: "2",
-				Link: "http://google.com/link2",
-			},
-		},
 	}
 	var out db.Feed
 
@@ -385,18 +375,6 @@ func TestCreateFeed(t *testing.T) {
 
 	if out.URL != in.URL {
 		t.Errorf("URL mismatch: %s != %s", out.URL, in.URL)
-	}
-
-	if len(out.Items) == len(in.Items) {
-		for i := range out.Items {
-			outGUID := out.Items[i].GUID
-			inGUID := out.Items[i].GUID
-			if outGUID != inGUID {
-				t.Errorf("GUID mismatch (item #%d): %s != %s", i, outGUID, inGUID)
-			}
-		}
-	} else {
-		t.Errorf("Unexpected # of items: %d != %d", len(out.Items), len(in.Items))
 	}
 
 	// No body given
@@ -577,5 +555,44 @@ func TestGetFeedsUsers(t *testing.T) {
 		}
 	} else {
 		t.Errorf("Unexpected number of users: %d != %d", len(out), 1)
+	}
+}
+
+func TestCreateFeedItem(t *testing.T) {
+	app := newTestApp()
+	feed := &db.Feed{
+		URL: "http://google.com",
+	}
+
+	if err := app.DB.CreateFeed(feed); err != nil {
+		t.Fatal("Could not create feed")
+	}
+
+	item := db.Item{
+		GUID: "http://google.com/items/1",
+	}
+
+	req := newRequest("POST", fmt.Sprintf("/api/feeds/%s/items", feed.ID.Hex()), &item)
+	var out db.Item
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      req,
+		ExpectedCode: http.StatusOK,
+		ResponseBody: &out,
+	})
+
+	if out.GUID != item.GUID {
+		t.Errorf("GUID mismatch: %s != %s", out.GUID, item.GUID)
+	}
+
+	feed, err := app.DB.FeedByID(feed.ID)
+	if err != nil {
+		t.Fatal("Could not fetch feed")
+	}
+
+	if len(feed.Items) != 1 {
+		t.Errorf("feed.Items len mismatch: %d != %d", len(feed.Items), 1)
+	} else if feed.Items[0] != out.ID {
+		t.Errorf("item.ID mismatch: %s != %s", feed.Items[0], out.ID)
 	}
 }
