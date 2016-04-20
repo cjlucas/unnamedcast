@@ -40,6 +40,28 @@ func newTestApp() *App {
 	return app
 }
 
+func createFeed(t *testing.T, app *App, feed *db.Feed) *db.Feed {
+	if err := app.DB.CreateFeed(feed); err != nil {
+		t.Fatal("Failed to create feed")
+	}
+	return feed
+}
+
+func createItem(t *testing.T, app *App, item *db.Item) *db.Item {
+	if err := app.DB.CreateItem(item); err != nil {
+		t.Fatal("Failed to create item")
+	}
+	return item
+}
+
+func createUser(t *testing.T, app *App, username, password string) *db.User {
+	user, err := app.DB.CreateUser(username, password)
+	if err != nil {
+		t.Fatal("Failed to create user")
+	}
+	return user
+}
+
 func newRequest(method string, endpoint string, body interface{}) *http.Request {
 	var reqBody io.Reader
 	if body != nil {
@@ -92,9 +114,7 @@ func testEndpoint(t *testing.T, info endpointTestInfo) {
 
 func TestLoginInvalidParameters(t *testing.T) {
 	app := newTestApp()
-	if _, err := app.DB.CreateUser("chris", "hithere"); err != nil {
-		t.Fatal("Could not create user:", err)
-	}
+	createUser(t, app, "chris", "hithere")
 
 	testEndpoint(t, endpointTestInfo{
 		App:          app,
@@ -117,9 +137,8 @@ func TestLoginInvalidParameters(t *testing.T) {
 
 func TestLoginBadPassword(t *testing.T) {
 	app := newTestApp()
-	if _, err := app.DB.CreateUser("chris", "hithere"); err != nil {
-		t.Fatal("Could not create user:", err)
-	}
+	createUser(t, app, "chris", "hithere")
+
 	testEndpoint(t, endpointTestInfo{
 		App:          app,
 		Request:      newRequest("GET", "/login?username=chris&password=wrong", nil),
@@ -129,9 +148,7 @@ func TestLoginBadPassword(t *testing.T) {
 
 func TestLogin(t *testing.T) {
 	app := newTestApp()
-	if _, err := app.DB.CreateUser("chris", "hithere"); err != nil {
-		t.Fatal("Could not create user:", err)
-	}
+	createUser(t, app, "chris", "hithere")
 
 	var out db.User
 	testEndpoint(t, endpointTestInfo{
@@ -148,12 +165,8 @@ func TestLogin(t *testing.T) {
 
 func TestGetUsers(t *testing.T) {
 	app := newTestApp()
-	if _, err := app.DB.CreateUser("chris", "hithere"); err != nil {
-		t.Fatal("Could not create user:", err)
-	}
-	if _, err := app.DB.CreateUser("john", "hithere"); err != nil {
-		t.Fatal("Could not create user:", err)
-	}
+	createUser(t, app, "chris", "hithere")
+	createUser(t, app, "john", "hithere")
 
 	var out []db.User
 	testEndpoint(t, endpointTestInfo{
@@ -204,10 +217,7 @@ func TestCreateUserValidParams(t *testing.T) {
 
 func TestGetUser(t *testing.T) {
 	app := newTestApp()
-	user, err := app.DB.CreateUser("chris", "hithere")
-	if err != nil {
-		t.Fatal("Could not create user:", err)
-	}
+	user := createUser(t, app, "chris", "hithere")
 
 	var out db.User
 	testEndpoint(t, endpointTestInfo{
@@ -231,11 +241,7 @@ func TestGetUser(t *testing.T) {
 
 func TestGetUserFeeds(t *testing.T) {
 	app := newTestApp()
-	user, err := app.DB.CreateUser("chris", "hithere")
-	if err != nil {
-		t.Fatal("Could not create user:", err)
-	}
-
+	user := createUser(t, app, "chris", "hithere")
 	user.FeedIDs = append(user.FeedIDs, bson.NewObjectId())
 
 	if err := app.DB.UpdateUser(user); err != nil {
@@ -261,11 +267,7 @@ func TestGetUserFeeds(t *testing.T) {
 
 func TestGetUserItemStates(t *testing.T) {
 	app := newTestApp()
-	user, err := app.DB.CreateUser("chris", "hithere")
-	if err != nil {
-		t.Fatal("Could not create user:", err)
-	}
-
+	user := createUser(t, app, "chris", "hithere")
 	user.ItemStates = append(user.ItemStates, db.ItemState{
 		FeedID:   bson.NewObjectId(),
 		ItemGUID: "http://google.com",
@@ -295,15 +297,9 @@ func TestGetUserItemStates(t *testing.T) {
 
 func TestPutUserFeeds(t *testing.T) {
 	app := newTestApp()
-	user, err := app.DB.CreateUser("chris", "hithere")
-	if err != nil {
-		t.Fatal("Could not create user:", err)
-	}
+	user := createUser(t, app, "chris", "hithere")
 
-	ids := []bson.ObjectId{
-		bson.NewObjectId(),
-	}
-
+	ids := []bson.ObjectId{bson.NewObjectId()}
 	req := newRequest("PUT", fmt.Sprintf("/api/users/%s/feeds", user.ID.Hex()), ids)
 	var out db.User
 	testEndpoint(t, endpointTestInfo{
@@ -324,10 +320,7 @@ func TestPutUserFeeds(t *testing.T) {
 
 func TestPutUserItemStates(t *testing.T) {
 	app := newTestApp()
-	user, err := app.DB.CreateUser("chris", "hithere")
-	if err != nil {
-		t.Fatal("Could not create user:", err)
-	}
+	user := createUser(t, app, "chris", "hithere")
 
 	states := []db.ItemState{
 		{
@@ -336,7 +329,6 @@ func TestPutUserItemStates(t *testing.T) {
 			Position: 5,
 		},
 	}
-
 	req := newRequest("PUT", fmt.Sprintf("/api/users/%s/states", user.ID.Hex()), states)
 	var out []db.ItemState
 	testEndpoint(t, endpointTestInfo{
@@ -358,11 +350,9 @@ func TestPutUserItemStates(t *testing.T) {
 }
 
 func TestCreateFeed(t *testing.T) {
-	in := db.Feed{
-		URL: "http://google.com",
-	}
-	var out db.Feed
+	in := db.Feed{URL: "http://google.com"}
 
+	var out db.Feed
 	testEndpoint(t, endpointTestInfo{
 		Request:      newRequest("POST", "/api/feeds", &in),
 		ExpectedCode: http.StatusOK,
@@ -386,13 +376,7 @@ func TestCreateFeed(t *testing.T) {
 
 func TestGetFeed(t *testing.T) {
 	app := newTestApp()
-	feed := &db.Feed{
-		URL: "http://google.com",
-	}
-
-	if err := app.DB.CreateFeed(feed); err != nil {
-		t.Fatal("could not create feed", err)
-	}
+	feed := createFeed(t, app, &db.Feed{URL: "http://google.com"})
 
 	req := newRequest("GET", fmt.Sprintf("/api/feeds/%s", feed.ID.Hex()), nil)
 	var out db.Feed
@@ -417,13 +401,7 @@ func TestGetFeedWithoutParams(t *testing.T) {
 
 func TestGetFeedByURL(t *testing.T) {
 	app := newTestApp()
-	feed := &db.Feed{
-		URL: "http://google.com",
-	}
-
-	if err := app.DB.CreateFeed(feed); err != nil {
-		t.Fatal("could not create feed", err)
-	}
+	feed := createFeed(t, app, &db.Feed{URL: "http://google.com"})
 
 	req := newRequest("GET", fmt.Sprintf("/api/feeds?url=%s", feed.URL), nil)
 	var out db.Feed
@@ -448,14 +426,10 @@ func TestGetFeedByURL(t *testing.T) {
 
 func TestGetFeedByITunesID(t *testing.T) {
 	app := newTestApp()
-	feed := &db.Feed{
+	feed := createFeed(t, app, &db.Feed{
 		URL:      "http://google.com",
 		ITunesID: 12345,
-	}
-
-	if err := app.DB.CreateFeed(feed); err != nil {
-		t.Fatal("could not create feed:", err)
-	}
+	})
 
 	req := newRequest("GET", fmt.Sprintf("/api/feeds?itunes_id=%d", feed.ITunesID), nil)
 	var out db.Feed
@@ -487,15 +461,10 @@ func TestGetFeedByITunesID(t *testing.T) {
 
 func TestPutFeed(t *testing.T) {
 	app := newTestApp()
-	feed := &db.Feed{
+	feed := createFeed(t, app, &db.Feed{
 		URL:      "http://google.com",
 		ITunesID: 12345,
-	}
-
-	if err := app.DB.CreateFeed(feed); err != nil {
-		t.Fatal("could not create feed:", err)
-	}
-
+	})
 	feed.Title = "Something"
 
 	url := fmt.Sprintf("/api/feeds/%s", feed.ID.Hex())
@@ -521,19 +490,11 @@ func TestPutFeed(t *testing.T) {
 
 func TestGetFeedsUsers(t *testing.T) {
 	app := newTestApp()
-	feed := &db.Feed{
+	feed := createFeed(t, app, &db.Feed{
 		URL:      "http://google.com",
 		ITunesID: 12345,
-	}
-
-	if err := app.DB.CreateFeed(feed); err != nil {
-		t.Fatal("could not create feed:", err)
-	}
-
-	user, err := app.DB.CreateUser("chris", "whatever")
-	if err != nil {
-		t.Fatal("Could not create user:", err)
-	}
+	})
+	user := createUser(t, app, "chris", "whatever")
 
 	user.FeedIDs = append(user.FeedIDs, feed.ID)
 	if err := app.DB.UpdateUser(user); err != nil {
@@ -560,19 +521,10 @@ func TestGetFeedsUsers(t *testing.T) {
 
 func TestCreateFeedItem(t *testing.T) {
 	app := newTestApp()
-	feed := &db.Feed{
-		URL: "http://google.com",
-	}
+	feedID := createFeed(t, app, &db.Feed{URL: "http://google.com"}).ID
 
-	if err := app.DB.CreateFeed(feed); err != nil {
-		t.Fatal("Could not create feed")
-	}
-
-	item := db.Item{
-		GUID: "http://google.com/items/1",
-	}
-
-	req := newRequest("POST", fmt.Sprintf("/api/feeds/%s/items", feed.ID.Hex()), &item)
+	item := db.Item{GUID: "http://google.com/items/1"}
+	req := newRequest("POST", fmt.Sprintf("/api/feeds/%s/items", feedID.Hex()), &item)
 	var out db.Item
 	testEndpoint(t, endpointTestInfo{
 		App:          app,
@@ -585,7 +537,7 @@ func TestCreateFeedItem(t *testing.T) {
 		t.Errorf("GUID mismatch: %s != %s", out.GUID, item.GUID)
 	}
 
-	feed, err := app.DB.FeedByID(feed.ID)
+	feed, err := app.DB.FeedByID(feedID)
 	if err != nil {
 		t.Fatal("Could not fetch feed")
 	}
@@ -599,19 +551,11 @@ func TestCreateFeedItem(t *testing.T) {
 
 func TestPutFeedItem(t *testing.T) {
 	app := newTestApp()
-	item := &db.Item{GUID: "http://google.com/item"}
-	if err := app.DB.CreateItem(item); err != nil {
-		t.Fatal("Failed to create item")
-	}
-
-	feed := &db.Feed{
+	item := createItem(t, app, &db.Item{GUID: "http://google.com/item"})
+	feed := createFeed(t, app, &db.Feed{
 		URL:   "http://google.com",
 		Items: []bson.ObjectId{item.ID},
-	}
-
-	if err := app.DB.CreateFeed(feed); err != nil {
-		t.Fatal("Could not create feed")
-	}
+	})
 
 	item.URL = "http://google.com/item.mp3"
 
