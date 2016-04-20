@@ -596,3 +596,36 @@ func TestCreateFeedItem(t *testing.T) {
 		t.Errorf("item.ID mismatch: %s != %s", feed.Items[0], out.ID)
 	}
 }
+
+func TestPutFeedItem(t *testing.T) {
+	app := newTestApp()
+	item := &db.Item{GUID: "http://google.com/item"}
+	if err := app.DB.CreateItem(item); err != nil {
+		t.Fatal("Failed to create item")
+	}
+
+	feed := &db.Feed{
+		URL:   "http://google.com",
+		Items: []bson.ObjectId{item.ID},
+	}
+
+	if err := app.DB.CreateFeed(feed); err != nil {
+		t.Fatal("Could not create feed")
+	}
+
+	item.URL = "http://google.com/item.mp3"
+
+	url := fmt.Sprintf("/api/feeds/%s/items/%s", feed.ID.Hex(), item.ID.Hex())
+	req := newRequest("PUT", url, item)
+	var out db.Item
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      req,
+		ExpectedCode: http.StatusOK,
+		ResponseBody: &out,
+	})
+
+	if out.URL != item.URL {
+		t.Errorf("URL mismatch: %s != %s", out.URL, item.URL)
+	}
+}

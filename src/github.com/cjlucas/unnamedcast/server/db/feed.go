@@ -26,6 +26,16 @@ type Feed struct {
 	} `json:"category"`
 }
 
+func (f *Feed) HasItemWithID(id bson.ObjectId) bool {
+	for i := range f.Items {
+		if f.Items[i] == id {
+			return true
+		}
+	}
+
+	return false
+}
+
 type Item struct {
 	ID               bson.ObjectId `json:"id" bson:"_id,omitempty"`
 	GUID             string        `json:"guid" bson:"guid"`
@@ -125,7 +135,7 @@ func (db *DB) UpdateItem(item *Item) error {
 	// This would have to be done at a choke point like the JSON/BSON
 	// [un]marshallers
 	item.PublicationTime = item.PublicationTime.UTC()
-	if CopyModel(origItem, item, "CreationTime", "ModificationTime") {
+	if CopyModel(&origItem, item, "CreationTime", "ModificationTime") {
 		item.ModificationTime = time.Now().UTC()
 	}
 

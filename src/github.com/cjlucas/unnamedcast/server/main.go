@@ -88,7 +88,7 @@ func (app *App) requireFeedID(paramName string) gin.HandlerFunc {
 }
 
 func (app *App) requireItemID(paramName string) gin.HandlerFunc {
-	return app.requireModelID(app.DB.FindItemByID, paramName, "feedID")
+	return app.requireModelID(app.DB.FindItemByID, paramName, "itemID")
 }
 
 func (app *App) setupIndexes() error {
@@ -396,8 +396,38 @@ func (app *App) setupRoutes() {
 		c.JSON(http.StatusOK, &item)
 	})
 
-	// PUT /feeds/:id/items
-	// api.PUT("/feeds/:feedID/items/:itemID", app.requireFeedID("feedID"))
+	// PUT /feeds/:id/items/:itemID
+	// NOTE: Placeholder for feed id MUST be :id due to a limitation in gin's router
+	// that is not expected to be resolved. See: https://github.com/gin-gonic/gin/issues/388
+	api.PUT("/feeds/:id/items/:itemID", app.requireFeedID("id"), app.requireItemID("itemID"), func(c *gin.Context) {
+		feedID := c.MustGet("feedID").(bson.ObjectId)
+		itemID := c.MustGet("itemID").(bson.ObjectId)
+
+		var item db.Item
+		if err := c.BindJSON(&item); err != nil {
+			c.AbortWithError(http.StatusBadRequest, err)
+			return
+		}
+		item.ID = itemID
+
+		feed, err := app.DB.FeedByID(feedID)
+		if err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
+		}
+
+		if !feed.HasItemWithID(itemID) {
+			c.AbortWithError(http.StatusNotFound, errors.New("item does not belong to feed"))
+			return
+		}
+
+		if err := app.DB.UpdateItem(&item); err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
+		}
+
+		c.JSON(http.StatusOK, &item)
+	})
 }
 
 func (app *App) Run(addr string) error {
