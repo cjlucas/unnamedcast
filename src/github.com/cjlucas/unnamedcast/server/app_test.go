@@ -549,6 +549,29 @@ func TestCreateFeedItem(t *testing.T) {
 	}
 }
 
+func TestGetFeedItem(t *testing.T) {
+	app := newTestApp()
+	item := createItem(t, app, &db.Item{GUID: "http://google.com/item"})
+	feed := createFeed(t, app, &db.Feed{
+		URL:   "http://google.com",
+		Items: []bson.ObjectId{item.ID},
+	})
+
+	url := fmt.Sprintf("/api/feeds/%s/items/%s", feed.ID.Hex(), item.ID.Hex())
+	req := newRequest("GET", url, item)
+	var out db.Item
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      req,
+		ExpectedCode: http.StatusOK,
+		ResponseBody: &out,
+	})
+
+	if out.GUID != item.GUID {
+		t.Errorf("GUID mismatch: %s != %s", out.GUID, item.GUID)
+	}
+}
+
 func TestPutFeedItem(t *testing.T) {
 	app := newTestApp()
 	item := createItem(t, app, &db.Item{GUID: "http://google.com/item"})

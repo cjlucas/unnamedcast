@@ -396,9 +396,34 @@ func (app *App) setupRoutes() {
 		c.JSON(http.StatusOK, &item)
 	})
 
-	// PUT /feeds/:id/items/:itemID
+	// GET /feeds/:id/items/:itemID
 	// NOTE: Placeholder for feed id MUST be :id due to a limitation in gin's router
 	// that is not expected to be resolved. See: https://github.com/gin-gonic/gin/issues/388
+	api.GET("/feeds/:id/items/:itemID", app.requireFeedID("id"), app.requireItemID("itemID"), func(c *gin.Context) {
+		feedID := c.MustGet("feedID").(bson.ObjectId)
+		itemID := c.MustGet("itemID").(bson.ObjectId)
+
+		feed, err := app.DB.FeedByID(feedID)
+		if err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
+		}
+
+		if !feed.HasItemWithID(itemID) {
+			c.AbortWithError(http.StatusNotFound, errors.New("item does not belong to feed"))
+			return
+		}
+
+		var item db.Item
+		if err := app.DB.FindItemByID(itemID).One(&item); err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
+		}
+
+		c.JSON(http.StatusOK, &item)
+	})
+
+	// PUT /feeds/:id/items/:itemID
 	api.PUT("/feeds/:id/items/:itemID", app.requireFeedID("id"), app.requireItemID("itemID"), func(c *gin.Context) {
 		feedID := c.MustGet("feedID").(bson.ObjectId)
 		itemID := c.MustGet("itemID").(bson.ObjectId)
