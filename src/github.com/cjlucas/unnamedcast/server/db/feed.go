@@ -152,11 +152,3 @@ func (db *DB) FindItems(q interface{}) Query {
 func (db *DB) FindItemByID(id bson.ObjectId) Query {
 	return db.FindItems(bson.M{"_id": id})
 }
-
-func (db *DB) FindItemsWithIDs(ids []bson.ObjectId) Query {
-	return db.FindItems(bson.M{
-		"_id": bson.M{
-			"$in": ids,
-		},
-	})
-}
