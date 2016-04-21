@@ -350,86 +350,6 @@ func TestPutUserItemStates(t *testing.T) {
 	}
 }
 
-func TestGetUserFeedItems(t *testing.T) {
-	app := newTestApp()
-	user := createUser(t, app, "chris", "password")
-	item := createItem(t, app, &db.Item{
-		GUID: "http://google.com/item",
-	})
-	feed := createFeed(t, app, &db.Feed{
-		URL:   "http://google.com",
-		Items: []bson.ObjectId{item.ID},
-	})
-
-	user.FeedIDs = append(user.FeedIDs, feed.ID)
-	if err := app.DB.UpdateUser(user); err != nil {
-		t.Fatal("Could not update feed")
-	}
-
-	req := newRequest("GET", fmt.Sprintf("/api/users/%s/items", user.ID.Hex()), nil)
-	var items []db.Item
-	testEndpoint(t, endpointTestInfo{
-		App:          app,
-		Request:      req,
-		ExpectedCode: http.StatusOK,
-		ResponseBody: &items,
-	})
-
-	if len(items) != 1 {
-		t.Errorf("items len mismatch: %d != %d", len(items), 1)
-		if items[0].ID != feed.Items[0] {
-			t.Errorf("item id mismatch: %s != %s", items[0].ID, feed.Items[0])
-		}
-	}
-}
-
-func TestGetUserFeedItemsWithModTime(t *testing.T) {
-	app := newTestApp()
-	user := createUser(t, app, "chris", "password")
-	item := createItem(t, app, &db.Item{
-		GUID: "http://google.com/item",
-	})
-	feed := createFeed(t, app, &db.Feed{
-		URL:   "http://google.com",
-		Items: []bson.ObjectId{item.ID},
-	})
-
-	user.FeedIDs = append(user.FeedIDs, feed.ID)
-	if err := app.DB.UpdateUser(user); err != nil {
-		t.Fatal("Could not update feed")
-	}
-
-	modTime := item.ModificationTime.Add(1 * time.Second)
-	url := fmt.Sprintf("/api/users/%s/items?modified_since=%s", user.ID.Hex(), modTime.Format(time.RFC3339))
-	req := newRequest("GET", url, nil)
-	var items []db.Item
-	testEndpoint(t, endpointTestInfo{
-		App:          app,
-		Request:      req,
-		ExpectedCode: http.StatusOK,
-		ResponseBody: &items,
-	})
-
-	if len(items) != 0 {
-		t.Errorf("items len mismatch: %d != %d", len(items), 0)
-	}
-
-	modTime = item.ModificationTime.Add(-2 * time.Second)
-	url = fmt.Sprintf("/api/users/%s/items?modified_since=%s", user.ID.Hex(), modTime.Format(time.RFC3339))
-	req = newRequest("GET", url, nil)
-	items = []db.Item{}
-	testEndpoint(t, endpointTestInfo{
-		App:          app,
-		Request:      req,
-		ExpectedCode: http.StatusOK,
-		ResponseBody: &items,
-	})
-
-	if len(items) != 1 {
-		t.Errorf("items len mismatch: %d != %d", len(items), 1)
-	}
-}
-
 func TestCreateFeed(t *testing.T) {
 	in := db.Feed{URL: "http://google.com"}
 
@@ -567,6 +487,74 @@ func TestPutFeed(t *testing.T) {
 		Request:      newRequest("PUT", url, nil),
 		ExpectedCode: http.StatusBadRequest,
 	})
+}
+
+func TestGetUserFeedItems(t *testing.T) {
+	app := newTestApp()
+	item := createItem(t, app, &db.Item{
+		GUID: "http://google.com/item",
+	})
+	feed := createFeed(t, app, &db.Feed{
+		URL:   "http://google.com",
+		Items: []bson.ObjectId{item.ID},
+	})
+
+	req := newRequest("GET", fmt.Sprintf("/api/feeds/%s/items", feed.ID.Hex()), nil)
+	var items []db.Item
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      req,
+		ExpectedCode: http.StatusOK,
+		ResponseBody: &items,
+	})
+
+	if len(items) != 1 {
+		t.Errorf("items len mismatch: %d != %d", len(items), 1)
+		if items[0].ID != feed.Items[0] {
+			t.Errorf("item id mismatch: %s != %s", items[0].ID, feed.Items[0])
+		}
+	}
+}
+
+func TestGetUserFeedItemsWithModTime(t *testing.T) {
+	app := newTestApp()
+	item := createItem(t, app, &db.Item{
+		GUID: "http://google.com/item",
+	})
+	feed := createFeed(t, app, &db.Feed{
+		URL:   "http://google.com",
+		Items: []bson.ObjectId{item.ID},
+	})
+
+	modTime := item.ModificationTime.Add(1 * time.Second)
+	url := fmt.Sprintf("/api/feeds/%s/items?modified_since=%s", feed.ID.Hex(), modTime.Format(time.RFC3339))
+	req := newRequest("GET", url, nil)
+	var items []db.Item
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      req,
+		ExpectedCode: http.StatusOK,
+		ResponseBody: &items,
+	})
+
+	if len(items) != 0 {
+		t.Errorf("items len mismatch: %d != %d", len(items), 0)
+	}
+
+	modTime = item.ModificationTime.Add(-2 * time.Second)
+	url = fmt.Sprintf("/api/feeds/%s/items?modified_since=%s", feed.ID.Hex(), modTime.Format(time.RFC3339))
+	req = newRequest("GET", url, nil)
+	items = []db.Item{}
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      req,
+		ExpectedCode: http.StatusOK,
+		ResponseBody: &items,
+	})
+
+	if len(items) != 1 {
+		t.Errorf("items len mismatch: %d != %d", len(items), 1)
+	}
 }
 
 func TestGetFeedsUsers(t *testing.T) {

@@ -273,52 +273,6 @@ func (app *App) setupRoutes() {
 		c.JSON(http.StatusOK, &user.ItemStates)
 	})
 
-	// GET /api/users/:id/items[?modified_since=2006-01-02T15:04:05Z07:00]
-	// NOTE: modified_since date check is strictly greater than
-	api.GET("/users/:id/items", app.loadUserWithID("id"), func(c *gin.Context) {
-		user := c.MustGet("user").(*db.User)
-		modifiedSince := c.Query("modified_since")
-
-		var modifiedSinceDate time.Time
-		if modifiedSince != "" {
-			t, err := time.Parse(time.RFC3339, modifiedSince)
-			if err != nil {
-				c.AbortWithError(http.StatusBadRequest, err)
-				return
-			}
-			modifiedSinceDate = t
-		}
-
-		feedsQuery := bson.M{"_id": bson.M{"$in": user.FeedIDs}}
-		var feeds []db.Feed
-		if err := app.DB.FindFeeds(feedsQuery).All(&feeds); err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-			return
-		}
-
-		var itemIDs []bson.ObjectId
-		for i := range feeds {
-			feed := &feeds[i]
-			for j := range feed.Items {
-				itemIDs = append(itemIDs, feed.Items[j])
-			}
-		}
-
-		itemsQuery := bson.M{
-			"_id": bson.M{"$in": itemIDs},
-		}
-		if !modifiedSinceDate.IsZero() {
-			itemsQuery["modification_time"] = bson.M{"$gt": modifiedSinceDate}
-		}
-		var items []db.Item
-		if err := app.DB.FindItems(itemsQuery).All(&items); err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-			return
-		}
-
-		c.JSON(http.StatusOK, &items)
-	})
-
 	// GET /api/feeds?url=http://url.com
 	// GET /api/feeds?itunes_id=43912431
 	api.GET("/feeds", func(c *gin.Context) {
@@ -394,6 +348,43 @@ func (app *App) setupRoutes() {
 		}
 
 		c.JSON(http.StatusOK, &feed)
+	})
+
+	// GET /api/feeds/:id/items[?modified_since=2006-01-02T15:04:05Z07:00]
+	// NOTE: modified_since date check is strictly greater than
+	api.GET("/feeds/:id/items", app.requireFeedID("id"), func(c *gin.Context) {
+		feedID := c.MustGet("feedID").(bson.ObjectId)
+		modifiedSince := c.Query("modified_since")
+
+		var modifiedSinceDate time.Time
+		if modifiedSince != "" {
+			t, err := time.Parse(time.RFC3339, modifiedSince)
+			if err != nil {
+				c.AbortWithError(http.StatusBadRequest, err)
+				return
+			}
+			modifiedSinceDate = t
+		}
+
+		feed, err := app.DB.FeedByID(feedID)
+		if err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
+		}
+
+		itemsQuery := bson.M{
+			"_id": bson.M{"$in": feed.Items},
+		}
+		if !modifiedSinceDate.IsZero() {
+			itemsQuery["modification_time"] = bson.M{"$gt": modifiedSinceDate}
+		}
+		var items []db.Item
+		if err := app.DB.FindItems(itemsQuery).All(&items); err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
+		}
+
+		c.JSON(http.StatusOK, &items)
 	})
 
 	// GET /api/feeds/:id/users
