@@ -5,8 +5,8 @@ import (
 	"net/url"
 	"os"
 
+	"github.com/cjlucas/unnamedcast/api"
 	"github.com/cjlucas/unnamedcast/koda"
-	"github.com/cjlucas/unnamedcast/worker/api"
 )
 
 func main() {

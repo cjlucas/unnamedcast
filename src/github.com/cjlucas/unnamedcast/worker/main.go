@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cjlucas/unnamedcast/api"
 	"github.com/cjlucas/unnamedcast/koda"
-	"github.com/cjlucas/unnamedcast/worker/api"
 )
 
 const (
