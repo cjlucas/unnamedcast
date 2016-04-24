@@ -111,6 +111,25 @@ func (api *API) makeRequest(apiReq *apiRoundTrip) error {
 	return nil
 }
 
+func (api *API) CreateUser(username, password string) (*User, error) {
+	var user User
+	endpoint := fmt.Sprintf("/api/users?username=%s&password=%s", username, password)
+	err := api.makeRequest(&apiRoundTrip{
+		Method:       "POST",
+		Endpoint:     endpoint,
+		ResponseBody: &user,
+	})
+	return &user, err
+}
+
+func (api *API) UpdateUserFeeds(userID string, feedIDs []string) error {
+	return api.makeRequest(&apiRoundTrip{
+		Method:      "PUT",
+		Endpoint:    fmt.Sprintf("/api/users/%s/feeds", userID),
+		RequestBody: feedIDs,
+	})
+}
+
 func (api *API) GetFeed(feedID string) (*Feed, error) {
 	var feed Feed
 	err := api.makeRequest(&apiRoundTrip{
