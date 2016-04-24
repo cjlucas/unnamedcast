@@ -40,6 +40,7 @@ type Feed struct {
 	ITunesRatingCount int       `json:"itunes_rating_count"`
 	CreationTime      time.Time `json:"creation_time"`
 	ModificationTime  time.Time `json:"modification_time"`
+	Items             []string  `json:"items"`
 
 	Category struct {
 		Name          string   `json:"name"`
@@ -167,6 +168,25 @@ func (api *API) FeedForURL(feedURL string) (*Feed, error) {
 		return nil, err
 	}
 	return &feeds[0], err
+}
+
+func (api *API) CreateFeedItem(feedID string, item *Item) error {
+	return api.makeRequest(&apiRoundTrip{
+		Method:      "POST",
+		Endpoint:    fmt.Sprintf("/api/feeds/%s/items", feedID),
+		RequestBody: item,
+	})
+}
+
+func (api *API) UpdateFeedItem(feedID string, item *Item) (*Item, error) {
+	var out Item
+	err := api.makeRequest(&apiRoundTrip{
+		Method:       "PUT",
+		Endpoint:     fmt.Sprintf("/api/feeds/%s/items/%s", feedID, item.ID),
+		RequestBody:  item,
+		ResponseBody: &out,
+	})
+	return &out, err
 }
 
 func (api *API) GetFeedItems(feedID string) ([]Item, error) {
