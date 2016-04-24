@@ -116,7 +116,6 @@ func (app *App) setupIndexes() error {
 
 	feedIndexes := []db.Index{
 		{Key: []string{"url"}, Unique: true},
-		{Key: []string{"itunes_id"}, Unique: true},
 		{Key: []string{"modification_time"}},
 		{Key: []string{"$text:title"}},
 	}
