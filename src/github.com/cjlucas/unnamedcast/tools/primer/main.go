@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"net/url"
 	"os"
 
 	"github.com/cjlucas/unnamedcast/api"
@@ -15,17 +14,11 @@ func main() {
 	}
 
 	host := os.Args[1]
+	apiTransport := api.API{Host: host}
 
 	koda.Configure(&koda.Options{
 		URL: fmt.Sprintf("redis://%s:6379", host),
 	})
-
-	baseURL, err := url.Parse(fmt.Sprintf("http://%s", host))
-	if err != nil {
-		panic(err)
-	}
-
-	apiTransport := api.API{BaseURL: baseURL}
 
 	fmt.Println("Creating user")
 	user, err := apiTransport.CreateUser("chris", "blah")

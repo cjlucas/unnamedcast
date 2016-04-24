@@ -7,7 +7,6 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
-	"net/url"
 	"strconv"
 	"time"
 )
@@ -65,7 +64,7 @@ type Item struct {
 }
 
 type API struct {
-	BaseURL *url.URL
+	Host string
 }
 
 type apiRoundTrip struct {
@@ -86,7 +85,7 @@ func (api *API) makeRequest(apiReq *apiRoundTrip) error {
 		reqBody = bytes.NewReader(data)
 	}
 
-	url := fmt.Sprintf("%s%s", api.BaseURL, apiReq.Endpoint)
+	url := fmt.Sprintf("http://%s%s", api.Host, apiReq.Endpoint)
 	req, err := http.NewRequest(apiReq.Method, url, reqBody)
 	if err != nil {
 		return err

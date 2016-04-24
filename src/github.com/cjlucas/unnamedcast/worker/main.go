@@ -108,7 +108,7 @@ func main() {
 	if err != nil {
 		panic(fmt.Sprintf("Invalid API_URL given: %s", apiURL))
 	}
-	api := api.API{BaseURL: url}
+	api := api.API{Host: url.Host}
 
 	handlers := map[string]Worker{
 		queueScrapeiTunesFeeds: &ScrapeiTunesFeeds{API: api},

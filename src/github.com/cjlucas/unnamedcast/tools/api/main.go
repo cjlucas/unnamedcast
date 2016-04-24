@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"net/url"
 	"os"
 
 	"github.com/cjlucas/unnamedcast/api"
@@ -19,11 +18,7 @@ func main() {
 		URL: "redis://192.168.1.21:6379",
 	})
 
-	baseURL, err := url.Parse("http://192.168.1.21")
-	if err != nil {
-		panic(err)
-	}
-	apiTransport := api.API{BaseURL: baseURL}
+	apiTransport := api.API{Host: "192.168.1.21"}
 
 	url := os.Args[1]
 	feed, err := apiTransport.CreateFeed(&api.Feed{
