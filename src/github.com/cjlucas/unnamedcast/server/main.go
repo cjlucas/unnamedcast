@@ -50,6 +50,22 @@ func newObjectIDFromHex(idHex string) (bson.ObjectId, error) {
 	return bson.ObjectIdHex(idHex), nil
 }
 
+func unmarshalFeed(c *gin.Context) {
+	var feed db.Feed
+	if err := c.BindJSON(&feed); err != nil {
+		c.AbortWithStatus(http.StatusBadRequest)
+	}
+
+	if len(feed.Items) > 0 {
+		c.JSON(http.StatusConflict, gin.H{
+			"reason": "items is a read-only property",
+		})
+		c.Abort()
+	}
+
+	c.Set("feed", &feed)
+}
+
 func (app *App) requireModelID(f func(id bson.ObjectId) db.Query, paramName, boundName string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id, err := newObjectIDFromHex(c.Param(paramName))
@@ -303,14 +319,9 @@ func (app *App) setupRoutes() {
 	})
 
 	// POST /api/feeds
-	api.POST("/feeds", func(c *gin.Context) {
-		var feed db.Feed
-		if err := c.BindJSON(&feed); err != nil {
-			c.AbortWithError(http.StatusBadRequest, err)
-			return
-		}
-
-		if err := app.DB.CreateFeed(&feed); err != nil {
+	api.POST("/feeds", unmarshalFeed, func(c *gin.Context) {
+		feed := c.MustGet("feed").(*db.Feed)
+		if err := app.DB.CreateFeed(feed); err != nil {
 			c.AbortWithError(http.StatusInternalServerError, err)
 			return
 		}
@@ -335,14 +346,19 @@ func (app *App) setupRoutes() {
 	})
 
 	// PUT /api/feeds/:id
-	api.PUT("/feeds/:id", app.requireFeedID("id"), func(c *gin.Context) {
-		var feed db.Feed
-		if err := c.BindJSON(&feed); err != nil {
-			c.AbortWithStatus(http.StatusBadRequest)
-		}
+	api.PUT("/feeds/:id", app.requireFeedID("id"), unmarshalFeed, func(c *gin.Context) {
+		feed := c.MustGet("feed").(*db.Feed)
 		feed.ID = c.MustGet("feedID").(bson.ObjectId)
 
-		if err := app.DB.UpdateFeed(&feed); err != nil {
+		existingFeed, err := app.DB.FeedByID(feed.ID)
+		if err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
+		}
+		// Persist existing items
+		feed.Items = existingFeed.Items
+
+		if err := app.DB.UpdateFeed(feed); err != nil {
 			c.AbortWithError(http.StatusInternalServerError, err)
 			return
 		}

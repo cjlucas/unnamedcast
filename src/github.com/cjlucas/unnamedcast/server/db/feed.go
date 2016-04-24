@@ -12,7 +12,7 @@ type Feed struct {
 	Title             string          `json:"title" bson:"title"`
 	URL               string          `json:"url" bson:"url"`
 	Author            string          `json:"author" bson:"author"`
-	Items             []bson.ObjectId `json:"-" bson:"items"`
+	Items             []bson.ObjectId `json:"items" bson:"items"`
 	CreationTime      time.Time       `json:"creation_time" bson:"creation_time"`
 	ModificationTime  time.Time       `json:"modification_time" bson:"modification_time"`
 	ImageURL          string          `json:"image_url" bson:"image_url"`
@@ -47,6 +47,7 @@ type Item struct {
 	Duration         time.Duration `json:"duration" bson:"duration"`
 	Size             int           `json:"size" bson:"size"`
 	PublicationTime  time.Time     `json:"publication_time" bson:"publication_time"`
+	CreationTime     time.Time     `json:"creation_time" bson:"creation_time"`
 	ModificationTime time.Time     `json:"modification_time" bson:"modification_time"`
 	ImageURL         string        `json:"image_url" bson:"image_url"`
 }
@@ -76,6 +77,8 @@ func (db *DB) FeedByID(id bson.ObjectId) (*Feed, error) {
 
 func (db *DB) CreateFeed(feed *Feed) error {
 	feed.ID = bson.NewObjectId()
+	feed.CreationTime = time.Now().UTC()
+	feed.ModificationTime = time.Now().UTC()
 	return db.feeds().Insert(feed)
 }
 
@@ -119,6 +122,8 @@ func (db *DB) items() *mgo.Collection {
 
 func (db *DB) CreateItem(item *Item) error {
 	item.ID = bson.NewObjectId()
+	item.CreationTime = time.Now().UTC()
+	item.ModificationTime = time.Now().UTC()
 	return db.items().Insert(item)
 }
 

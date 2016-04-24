@@ -375,6 +375,20 @@ func TestCreateFeed(t *testing.T) {
 	})
 }
 
+func TestCreateFeedWithItems(t *testing.T) {
+	app := newTestApp()
+	feed := &db.Feed{
+		URL:   "http://google.com",
+		Items: []bson.ObjectId{bson.NewObjectId()},
+	}
+
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      newRequest("POST", "/api/feeds", feed),
+		ExpectedCode: http.StatusConflict,
+	})
+}
+
 func TestGetFeed(t *testing.T) {
 	app := newTestApp()
 	feed := createFeed(t, app, &db.Feed{URL: "http://google.com"})
@@ -486,6 +500,53 @@ func TestPutFeed(t *testing.T) {
 		App:          app,
 		Request:      newRequest("PUT", url, nil),
 		ExpectedCode: http.StatusBadRequest,
+	})
+}
+
+// Regression test to ensure items array is not modified
+func TestPutFeedWithExistingItems(t *testing.T) {
+	app := newTestApp()
+	item := createItem(t, app, &db.Item{
+		GUID: "http://google.com/item",
+	})
+	feed := createFeed(t, app, &db.Feed{
+		URL:   "http://google.com",
+		Items: []bson.ObjectId{item.ID},
+	})
+	feed.Items = []bson.ObjectId{}
+
+	url := fmt.Sprintf("/api/feeds/%s", feed.ID.Hex())
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      newRequest("PUT", url, feed),
+		ExpectedCode: http.StatusOK,
+	})
+
+	feed, err := app.DB.FeedByID(feed.ID)
+	if err != nil {
+		t.Fatal("Could not find feed")
+	}
+
+	if len(feed.Items) != 1 {
+		t.Error("Items list was emptied")
+	}
+}
+
+func TestPutFeedWithItems(t *testing.T) {
+	app := newTestApp()
+	item := createItem(t, app, &db.Item{
+		GUID: "http://google.com/item",
+	})
+	feed := createFeed(t, app, &db.Feed{
+		URL: "http://google.com",
+	})
+	feed.Items = append(feed.Items, item.ID)
+
+	url := fmt.Sprintf("/api/feeds/%s", feed.ID.Hex())
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      newRequest("PUT", url, feed),
+		ExpectedCode: http.StatusConflict,
 	})
 }
 
