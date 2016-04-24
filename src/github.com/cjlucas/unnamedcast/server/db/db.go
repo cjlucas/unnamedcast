@@ -54,6 +54,8 @@ func (db *DB) db() *mgo.Database {
 	return db.s.DB("")
 }
 
+// TODO(clucas): Move this method to be a member of DB and use this
+// function to wrap all Create* and Update* methods
 func (q *query) handleDBError(f func() error) error {
 	i := 0
 	err := f()

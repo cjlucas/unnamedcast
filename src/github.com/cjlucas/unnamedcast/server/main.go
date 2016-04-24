@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
 
@@ -49,7 +50,23 @@ func newObjectIDFromHex(idHex string) (bson.ObjectId, error) {
 	return bson.ObjectIdHex(idHex), nil
 }
 
-func (app *App) loadUserWithID(paramName string) gin.HandlerFunc {
+func unmarshalFeed(c *gin.Context) {
+	var feed db.Feed
+	if err := c.BindJSON(&feed); err != nil {
+		c.AbortWithStatus(http.StatusBadRequest)
+	}
+
+	if len(feed.Items) > 0 {
+		c.JSON(http.StatusConflict, gin.H{
+			"reason": "items is a read-only property",
+		})
+		c.Abort()
+	}
+
+	c.Set("feed", &feed)
+}
+
+func (app *App) requireModelID(f func(id bson.ObjectId) db.Query, paramName, boundName string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id, err := newObjectIDFromHex(c.Param(paramName))
 		if err != nil {
@@ -57,42 +74,38 @@ func (app *App) loadUserWithID(paramName string) gin.HandlerFunc {
 			return
 		}
 
-		q := app.DB.FindUserByID(id)
-		n, err := q.Count()
+		n, err := f(id).Count()
 		if err != nil {
 			c.AbortWithError(http.StatusInternalServerError, err)
-			return
 		} else if n < 1 {
 			c.AbortWithStatus(http.StatusNotFound)
-			return
 		}
+
+		c.Set(boundName, id)
+	}
+}
+
+func (app *App) loadUserWithID(paramName string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		boundName := "userID"
+		app.requireModelID(app.DB.FindUserByID, paramName, boundName)(c)
+		id := c.MustGet(boundName).(bson.ObjectId)
 
 		var user db.User
-		if err := q.One(&user); err != nil {
+		if err := app.DB.FindUserByID(id).One(&user); err != nil {
 			c.AbortWithError(http.StatusInternalServerError, err)
+			return
 		}
-
 		c.Set("user", &user)
 	}
 }
 
 func (app *App) requireFeedID(paramName string) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		id, err := newObjectIDFromHex(c.Param(paramName))
-		if err != nil {
-			c.AbortWithError(http.StatusBadRequest, err)
-			return
-		}
+	return app.requireModelID(app.DB.FindFeedByID, paramName, "feedID")
+}
 
-		n, err := app.DB.FindFeedByID(id).Count()
-		if err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-		} else if n < 1 {
-			c.AbortWithStatus(http.StatusNotFound)
-		}
-
-		c.Set("feedID", id)
-	}
+func (app *App) requireItemID(paramName string) gin.HandlerFunc {
+	return app.requireModelID(app.DB.FindItemByID, paramName, "itemID")
 }
 
 func (app *App) setupIndexes() error {
@@ -305,14 +318,9 @@ func (app *App) setupRoutes() {
 	})
 
 	// POST /api/feeds
-	api.POST("/feeds", func(c *gin.Context) {
-		var feed db.Feed
-		if err := c.BindJSON(&feed); err != nil {
-			c.AbortWithError(http.StatusBadRequest, err)
-			return
-		}
-
-		if err := app.DB.CreateFeed(&feed); err != nil {
+	api.POST("/feeds", unmarshalFeed, func(c *gin.Context) {
+		feed := c.MustGet("feed").(*db.Feed)
+		if err := app.DB.CreateFeed(feed); err != nil {
 			c.AbortWithError(http.StatusInternalServerError, err)
 			return
 		}
@@ -337,19 +345,61 @@ func (app *App) setupRoutes() {
 	})
 
 	// PUT /api/feeds/:id
-	api.PUT("/feeds/:id", app.requireFeedID("id"), func(c *gin.Context) {
-		var feed db.Feed
-		if err := c.BindJSON(&feed); err != nil {
-			c.AbortWithStatus(http.StatusBadRequest)
-		}
+	api.PUT("/feeds/:id", app.requireFeedID("id"), unmarshalFeed, func(c *gin.Context) {
+		feed := c.MustGet("feed").(*db.Feed)
 		feed.ID = c.MustGet("feedID").(bson.ObjectId)
 
-		if err := app.DB.UpdateFeed(&feed); err != nil {
+		existingFeed, err := app.DB.FeedByID(feed.ID)
+		if err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
+		}
+		// Persist existing items
+		feed.Items = existingFeed.Items
+
+		if err := app.DB.UpdateFeed(feed); err != nil {
 			c.AbortWithError(http.StatusInternalServerError, err)
 			return
 		}
 
 		c.JSON(http.StatusOK, &feed)
+	})
+
+	// GET /api/feeds/:id/items[?modified_since=2006-01-02T15:04:05Z07:00]
+	// NOTE: modified_since date check is strictly greater than
+	api.GET("/feeds/:id/items", app.requireFeedID("id"), func(c *gin.Context) {
+		feedID := c.MustGet("feedID").(bson.ObjectId)
+		modifiedSince := c.Query("modified_since")
+
+		var modifiedSinceDate time.Time
+		if modifiedSince != "" {
+			t, err := time.Parse(time.RFC3339, modifiedSince)
+			if err != nil {
+				c.AbortWithError(http.StatusBadRequest, err)
+				return
+			}
+			modifiedSinceDate = t
+		}
+
+		feed, err := app.DB.FeedByID(feedID)
+		if err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
+		}
+
+		itemsQuery := bson.M{
+			"_id": bson.M{"$in": feed.Items},
+		}
+		if !modifiedSinceDate.IsZero() {
+			itemsQuery["modification_time"] = bson.M{"$gt": modifiedSinceDate}
+		}
+		var items []db.Item
+		if err := app.DB.FindItems(itemsQuery).All(&items); err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
+		}
+
+		c.JSON(http.StatusOK, &items)
 	})
 
 	// GET /api/feeds/:id/users
@@ -368,6 +418,93 @@ func (app *App) setupRoutes() {
 		}
 
 		c.JSON(http.StatusOK, &users)
+	})
+
+	// POST /api/feeds/:id/items
+	api.POST("/feeds/:id/items", app.requireFeedID("id"), func(c *gin.Context) {
+		var item db.Item
+		if err := c.BindJSON(&item); err != nil {
+			c.AbortWithError(http.StatusBadRequest, err)
+			return
+		}
+
+		if err := app.DB.CreateItem(&item); err != nil {
+			c.AbortWithError(http.StatusBadRequest, err)
+			return
+		}
+
+		id := c.MustGet("feedID").(bson.ObjectId)
+		feed, err := app.DB.FeedByID(id)
+		if err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
+		}
+		feed.Items = append(feed.Items, item.ID)
+
+		if err := app.DB.UpdateFeed(feed); err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
+		}
+
+		c.JSON(http.StatusOK, &item)
+	})
+
+	// GET /api/feeds/:id/items/:itemID
+	// NOTE: Placeholder for feed id MUST be :id due to a limitation in gin's router
+	// that is not expected to be resolved. See: https://github.com/gin-gonic/gin/issues/388
+	api.GET("/feeds/:id/items/:itemID", app.requireFeedID("id"), app.requireItemID("itemID"), func(c *gin.Context) {
+		feedID := c.MustGet("feedID").(bson.ObjectId)
+		itemID := c.MustGet("itemID").(bson.ObjectId)
+
+		feed, err := app.DB.FeedByID(feedID)
+		if err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
+		}
+
+		if !feed.HasItemWithID(itemID) {
+			c.AbortWithError(http.StatusNotFound, errors.New("item does not belong to feed"))
+			return
+		}
+
+		var item db.Item
+		if err := app.DB.FindItemByID(itemID).One(&item); err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
+		}
+
+		c.JSON(http.StatusOK, &item)
+	})
+
+	// PUT /api/feeds/:id/items/:itemID
+	api.PUT("/feeds/:id/items/:itemID", app.requireFeedID("id"), app.requireItemID("itemID"), func(c *gin.Context) {
+		feedID := c.MustGet("feedID").(bson.ObjectId)
+		itemID := c.MustGet("itemID").(bson.ObjectId)
+
+		var item db.Item
+		if err := c.BindJSON(&item); err != nil {
+			c.AbortWithError(http.StatusBadRequest, err)
+			return
+		}
+		item.ID = itemID
+
+		feed, err := app.DB.FeedByID(feedID)
+		if err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
+		}
+
+		if !feed.HasItemWithID(itemID) {
+			c.AbortWithError(http.StatusNotFound, errors.New("item does not belong to feed"))
+			return
+		}
+
+		if err := app.DB.UpdateItem(&item); err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
+		}
+
+		c.JSON(http.StatusOK, &item)
 	})
 }
 

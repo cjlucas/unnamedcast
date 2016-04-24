@@ -204,56 +204,14 @@ type UpdateFeedPayload struct {
 	FeedID string `json:"feed_id"`
 }
 
-func (w *UpdateFeedWorker) guidItemsMap(items []api.Item) map[string]*api.Item {
-	guidMap := make(map[string]*api.Item)
+func (w *UpdateFeedWorker) guidItemsMap(items []api.Item) map[string]api.Item {
+	guidMap := make(map[string]api.Item)
 
-	for i := range items {
-		item := &items[i]
+	for _, item := range items {
 		guidMap[item.GUID] = item
 	}
 
 	return guidMap
-}
-
-func (w *UpdateFeedWorker) findNewItems(oldFeed, newFeed *api.Feed) []api.Item {
-	var newItems []api.Item
-
-	oldMap := w.guidItemsMap(oldFeed.Items)
-	newMap := w.guidItemsMap(newFeed.Items)
-
-	for guid, item := range newMap {
-		if _, ok := oldMap[guid]; !ok {
-			newItems = append(newItems, *item)
-		}
-	}
-
-	return newItems
-}
-
-func (w *UpdateFeedWorker) mergeFeeds(feed *api.Feed, rssFeed *api.Feed) *api.Feed {
-	rssFeed.ID = feed.ID
-	rssFeed.ITunesID = feed.ITunesID
-	rssFeed.URL = feed.URL
-	rssFeed.ITunesReviewCount = feed.ITunesReviewCount
-	rssFeed.ITunesRatingCount = feed.ITunesRatingCount
-
-	// Update items while preserving items that are no longer present in the
-	// current RSS document
-	guidMap := make(map[string]*api.Item)
-	for i := range feed.Items {
-		guidMap[feed.Items[i].GUID] = &feed.Items[i]
-	}
-
-	for i := range rssFeed.Items {
-		guidMap[rssFeed.Items[i].GUID] = &rssFeed.Items[i]
-	}
-
-	rssFeed.Items = rssFeed.Items[len(rssFeed.Items):]
-	for _, i := range guidMap {
-		rssFeed.Items = append(rssFeed.Items, *i)
-	}
-
-	return rssFeed
 }
 
 func (w *UpdateFeedWorker) Work(q *koda.Queue, j *koda.Job) error {
@@ -262,13 +220,14 @@ func (w *UpdateFeedWorker) Work(q *koda.Queue, j *koda.Job) error {
 		return err
 	}
 
-	id := payload.FeedID
-	feed, err := w.API.GetFeed(id)
+	origFeed, err := w.API.GetFeed(payload.FeedID)
 	if err != nil {
 		return err
 	}
 
-	resp, err := http.Get(feed.URL)
+	fmt.Println(origFeed)
+
+	resp, err := http.Get(origFeed.URL)
 	if err != nil {
 		return err
 	}
@@ -279,36 +238,58 @@ func (w *UpdateFeedWorker) Work(q *koda.Queue, j *koda.Job) error {
 		return err
 	}
 
-	rawFeed, err := rssDocumentToAPIPayload(doc)
+	origItems, err := w.API.GetFeedItems(payload.FeedID)
 	if err != nil {
 		return err
 	}
 
-	newItems := w.findNewItems(feed, rawFeed)
+	existingFeedItemMap := w.guidItemsMap(origItems)
+	newFeedItemMap := w.guidItemsMap(itemsFromRSS(doc))
 
-	feed = w.mergeFeeds(feed, rawFeed)
-
-	if feed.ITunesID != 0 {
-		stats, err := itunes.FetchReviewStats(feed.ITunesID)
-		if err != nil {
-			fmt.Println("Failed to fetch review stats for feed (will continue):", err)
+	var newItems []api.Item
+	var existingItems []api.Item
+	for guid, item := range newFeedItemMap {
+		if _, ok := existingFeedItemMap[guid]; ok {
+			existingItems = append(existingItems, item)
 		} else {
-			feed.ITunesReviewCount = stats.ReviewCount
-			feed.ITunesRatingCount = stats.RatingCount
+			newItems = append(newItems, item)
 		}
 	}
 
+	for _, item := range newItems {
+		if err := w.API.CreateFeedItem(payload.FeedID, &item); err != nil {
+			return err
+		}
+	}
+
+	for _, item := range existingItems {
+		if _, err = w.API.UpdateFeedItem(payload.FeedID, &item); err != nil {
+			return err
+		}
+	}
+
+	// NOTE: Disabled for now until http unauthorized request bug is resolved
+	// if origFeed.ITunesID != 0 {
+	// 	var stats *itunes.ReviewStats
+	// 	stats, err = itunes.FetchReviewStats(feed.ITunesID)
+	// 	if err != nil {
+	// 		fmt.Println("Failed to fetch review stats for feed (will continue):", err)
+	// 	} else {
+	// 		feed.ITunesReviewCount = stats.ReviewCount
+	// 		feed.ITunesRatingCount = stats.RatingCount
+	// 	}
+	// }
+
+	feed := feedFromRSS(doc)
+	feed.ID = payload.FeedID
+	feed.URL = origFeed.URL
+	feed.ITunesRatingCount = origFeed.ITunesRatingCount
+	feed.ITunesReviewCount = origFeed.ITunesReviewCount
 	if err := w.API.UpdateFeed(feed); err != nil {
 		return err
 	}
 
-	// Update user's item states to include new items.
-	// Bail if there are no new items.
-	if len(newItems) == 0 {
-		return nil
-	}
-
-	users, err := w.API.GetFeedsUsers(feed.ID)
+	users, err := w.API.GetFeedsUsers(payload.FeedID)
 	if err != nil {
 		return fmt.Errorf("Failed to get users' feeds: %s", err)
 	}
@@ -352,17 +333,30 @@ func (w *UpdateUserFeedsWorker) Work(q *koda.Queue, j *koda.Job) error {
 	return nil
 }
 
-func rssDocumentToAPIPayload(doc *rss.Document) (*api.Feed, error) {
+func feedFromRSS(doc *rss.Document) *api.Feed {
 	channel := doc.Channel
 	var feed api.Feed
 
 	feed.Title = channel.Title
 	feed.ImageURL = channel.Image.URL
 	feed.Author = channel.Author
-	feed.Items = make([]api.Item, len(channel.Items))
 
-	for i, item := range channel.Items {
-		jsonItem := &feed.Items[i]
+	feed.Category.Name = channel.Category.Name
+	feed.Category.Subcategories = make(
+		[]string,
+		len(channel.Category.Subcategories))
+
+	for _, c := range channel.Category.Subcategories {
+		feed.Category.Subcategories = append(feed.Category.Subcategories, c.Name)
+	}
+
+	return &feed
+}
+
+func itemsFromRSS(doc *rss.Document) []api.Item {
+	items := make([]api.Item, len(doc.Channel.Items))
+	for i, item := range doc.Channel.Items {
+		jsonItem := &items[i]
 
 		jsonItem.GUID = item.GUID
 		jsonItem.Title = item.Title
@@ -389,14 +383,5 @@ func rssDocumentToAPIPayload(doc *rss.Document) (*api.Feed, error) {
 		}
 	}
 
-	feed.Category.Name = channel.Category.Name
-	feed.Category.Subcategories = make(
-		[]string,
-		len(channel.Category.Subcategories))
-
-	for _, c := range channel.Category.Subcategories {
-		feed.Category.Subcategories = append(feed.Category.Subcategories, c.Name)
-	}
-
-	return &feed, nil
+	return items
 }

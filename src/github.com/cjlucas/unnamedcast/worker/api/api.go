@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
-	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -30,15 +30,17 @@ type ItemState struct {
 }
 
 type Feed struct {
-	ID                string `json:"id,omitempty"`
-	Title             string `json:"title"`
-	URL               string `json:"url"`
-	Author            string `json:"author"`
-	Items             []Item `json:"items"`
-	ImageURL          string `json:"image_url"`
-	ITunesID          int    `json:"itunes_id"`
-	ITunesReviewCount int    `json:"itunes_review_count"`
-	ITunesRatingCount int    `json:"itunes_rating_count"`
+	ID                string    `json:"id,omitempty"`
+	Title             string    `json:"title"`
+	URL               string    `json:"url"`
+	Author            string    `json:"author"`
+	ImageURL          string    `json:"image_url"`
+	ITunesID          int       `json:"itunes_id"`
+	ITunesReviewCount int       `json:"itunes_review_count"`
+	ITunesRatingCount int       `json:"itunes_rating_count"`
+	CreationTime      time.Time `json:"creation_time"`
+	ModificationTime  time.Time `json:"modification_time"`
+	Items             []string  `json:"items"`
 
 	Category struct {
 		Name          string   `json:"name"`
@@ -47,124 +49,104 @@ type Feed struct {
 }
 
 type Item struct {
-	GUID            string        `json:"guid"`
-	Link            string        `json:"link"`
-	Title           string        `json:"title"`
-	Description     string        `json:"description"`
-	URL             string        `json:"url"`
-	Author          string        `json:"author"`
-	Duration        time.Duration `json:"duration"`
-	Size            int           `json:"size"`
-	PublicationTime time.Time     `json:"publication_time"`
-	ImageURL        string        `json:"image_url"`
+	ID               string        `json:"id,omitempty"`
+	GUID             string        `json:"guid"`
+	Link             string        `json:"link"`
+	Title            string        `json:"title"`
+	Description      string        `json:"description"`
+	URL              string        `json:"url"`
+	Author           string        `json:"author"`
+	Duration         time.Duration `json:"duration"`
+	Size             int           `json:"size"`
+	PublicationTime  time.Time     `json:"publication_time"`
+	ImageURL         string        `json:"image_url"`
+	CreationTime     time.Time     `json:"creation_time"`
+	ModificationTime time.Time     `json:"modification_time"`
 }
 
 type API struct {
 	BaseURL *url.URL
 }
 
-func (api *API) urlf(fmtStr string, vals ...interface{}) string {
-	fmtStr = fmt.Sprintf("%s%s", api.BaseURL, fmtStr)
-	return fmt.Sprintf(fmtStr, vals...)
+type apiRoundTrip struct {
+	Method       string
+	Endpoint     string
+	RequestBody  interface{}
+	Response     *http.Response
+	ResponseBody interface{}
 }
 
-func (api *API) GetFeed(feedID string) (*Feed, error) {
-	url := api.urlf("/api/feeds/%s", feedID)
-	resp, err := httpClient.Get(url)
-	if err != nil {
-		return nil, err
+func (api *API) makeRequest(apiReq *apiRoundTrip) error {
+	var reqBody io.Reader
+	if apiReq.RequestBody != nil {
+		data, err := json.Marshal(apiReq.RequestBody)
+		if err != nil {
+			return err
+		}
+		reqBody = bytes.NewReader(data)
 	}
 
-	defer resp.Body.Close()
-	data, _ := ioutil.ReadAll(resp.Body)
-
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("failed to get feed (code: %d)", resp.StatusCode)
-	}
-
-	var feed Feed
-	if err := json.Unmarshal(data, &feed); err != nil {
-		return nil, err
-	}
-
-	return &feed, nil
-}
-
-func (api *API) UpdateFeed(feed *Feed) error {
-	payload, err := json.Marshal(&feed)
+	url := fmt.Sprintf("%s%s", api.BaseURL, apiReq.Endpoint)
+	req, err := http.NewRequest(apiReq.Method, url, reqBody)
 	if err != nil {
 		return err
 	}
-
-	r := bytes.NewReader(payload)
-	url := api.urlf("/api/feeds/%s", feed.ID)
-	req, err := http.NewRequest("PUT", url, r)
-	if err != nil {
-		return err
-	}
-
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		if err, ok := err.(*net.DNSError); ok {
-			panic(fmt.Sprintf("TURNS OUT IT IS A DNS error: %s", err))
-		}
 		return err
 	}
+	data, _ := ioutil.ReadAll(resp.Body)
 	defer resp.Body.Close()
 
-	// Read entire response to prevent broken pipe
-	data, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
+	apiReq.Response = resp
 
-	if resp.StatusCode != 200 {
-		return fmt.Errorf("Received unexpected status code with body: %s", data)
+	if apiReq.ResponseBody != nil {
+		if err := json.Unmarshal(data, apiReq.ResponseBody); err != nil {
+			return err
+		}
 	}
 
 	return nil
 }
 
+func (api *API) GetFeed(feedID string) (*Feed, error) {
+	var feed Feed
+	err := api.makeRequest(&apiRoundTrip{
+		Method:       "GET",
+		Endpoint:     fmt.Sprintf("/api/feeds/%s", feedID),
+		ResponseBody: &feed,
+	})
+	return &feed, err
+}
+
+func (api *API) UpdateFeed(feed *Feed) error {
+	return api.makeRequest(&apiRoundTrip{
+		Method:      "PUT",
+		Endpoint:    fmt.Sprintf("/api/feeds/%s", feed.ID),
+		RequestBody: feed,
+	})
+}
+
 func (api *API) CreateFeed(feed *Feed) (*Feed, error) {
-	payload, err := json.Marshal(&feed)
-	if err != nil {
-		return nil, err
-	}
-
-	r := bytes.NewReader(payload)
-	apiURL := api.urlf("/api/feeds")
-	resp, err := httpClient.Post(apiURL, "application/json", r)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	// Read entire response to prevent broken pipe
-	data, _ := ioutil.ReadAll(resp.Body)
-
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("Received unexpected status code with body: %s", data)
-	}
-
-	if err := json.Unmarshal(data, feed); err != nil {
-		return nil, err
-	}
-
-	return feed, nil
+	var respFeed Feed
+	err := api.makeRequest(&apiRoundTrip{
+		Method:       "POST",
+		Endpoint:     "/api/feeds",
+		RequestBody:  feed,
+		ResponseBody: &respFeed,
+	})
+	return &respFeed, err
 }
 
 func (api *API) feedExistsWithKey(key, value string) (bool, error) {
-	url := api.urlf("/api/feeds?%s=%s", key, value)
-	resp, err := httpClient.Get(url)
-	if err != nil {
-		return false, err
+	req := apiRoundTrip{
+		Method:   "GET",
+		Endpoint: fmt.Sprintf("/api/feeds?%s=%s", key, value),
 	}
-	defer resp.Body.Close()
-	ioutil.ReadAll(resp.Body)
-
-	return resp.StatusCode == 200, nil
+	err := api.makeRequest(&req)
+	return req.Response.StatusCode == http.StatusOK, err
 }
 
 func (api *API) FeedExistsWithURL(url string) (bool, error) {
@@ -176,103 +158,71 @@ func (api *API) FeedExistsWithiTunesID(id int) (bool, error) {
 }
 
 func (api *API) FeedForURL(feedURL string) (*Feed, error) {
-	url := api.urlf("/api/feeds?url=%s", feedURL)
-	resp, err := httpClient.Get(url)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	data, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("Received unexpected status code: %d", resp.StatusCode)
-	}
-
 	var feeds []Feed
-	if err := json.Unmarshal(data, &feeds); err != nil {
+	err := api.makeRequest(&apiRoundTrip{
+		Method:       "GET",
+		Endpoint:     fmt.Sprintf("/api/feeds?url=%s", feedURL),
+		ResponseBody: &feeds,
+	})
+	if len(feeds) == 0 {
 		return nil, err
 	}
+	return &feeds[0], err
+}
 
-	if len(feeds) == 0 {
-		return nil, nil
-	}
+func (api *API) CreateFeedItem(feedID string, item *Item) error {
+	return api.makeRequest(&apiRoundTrip{
+		Method:      "POST",
+		Endpoint:    fmt.Sprintf("/api/feeds/%s/items", feedID),
+		RequestBody: item,
+	})
+}
 
-	return &feeds[0], nil
+func (api *API) UpdateFeedItem(feedID string, item *Item) (*Item, error) {
+	var out Item
+	err := api.makeRequest(&apiRoundTrip{
+		Method:       "PUT",
+		Endpoint:     fmt.Sprintf("/api/feeds/%s/items/%s", feedID, item.ID),
+		RequestBody:  item,
+		ResponseBody: &out,
+	})
+	return &out, err
+}
+
+func (api *API) GetFeedItems(feedID string) ([]Item, error) {
+	var items []Item
+	err := api.makeRequest(&apiRoundTrip{
+		Method:       "GET",
+		Endpoint:     fmt.Sprintf("/api/feeds/%s/items", feedID),
+		ResponseBody: &items,
+	})
+	return items, err
 }
 
 func (api *API) GetFeedsUsers(feedID string) ([]User, error) {
-	url := api.urlf("/api/feeds/%s/users", feedID)
-	resp, err := httpClient.Get(url)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	data, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("Received unexpected status code: %d", resp.StatusCode)
-	}
-
 	var users []User
-	if err := json.Unmarshal(data, &users); err != nil {
-		return nil, err
-	}
-
-	return users, nil
+	err := api.makeRequest(&apiRoundTrip{
+		Method:       "GET",
+		Endpoint:     fmt.Sprintf("/api/feeds/%s/users", feedID),
+		ResponseBody: &users,
+	})
+	return users, err
 }
 
 func (api *API) PutItemStates(userID string, states []ItemState) error {
-	data, err := json.Marshal(states)
-	if err != nil {
-		return err
-	}
-
-	url := api.urlf("/api/users/%s/states", userID)
-	r := bytes.NewReader(data)
-	req, err := http.NewRequest("PUT", url, r)
-	if err != nil {
-		return err
-	}
-
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return err
-	}
-
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return fmt.Errorf("Received unexpected status code: %d", resp.StatusCode)
-	}
-
-	return nil
+	return api.makeRequest(&apiRoundTrip{
+		Method:      "PUT",
+		Endpoint:    fmt.Sprintf("/api/users/%s/states", userID),
+		RequestBody: &states,
+	})
 }
 
 func (api *API) GetUsers() ([]User, error) {
 	var users []User
-	resp, err := http.Get(api.urlf("/api/feeds"))
-	if err != nil {
-		return nil, err
-	}
-
-	defer resp.Body.Close()
-	data, _ := ioutil.ReadAll(resp.Body)
-
-	if err := json.Unmarshal(data, &users); err != nil {
-		return nil, err
-	}
-
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("Received unexpected status code: %d", resp.StatusCode)
-	}
-
-	return users, nil
+	err := api.makeRequest(&apiRoundTrip{
+		Method:       "GET",
+		Endpoint:     "/api/users",
+		ResponseBody: &users,
+	})
+	return users, err
 }
