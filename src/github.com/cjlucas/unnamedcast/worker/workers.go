@@ -179,8 +179,6 @@ func (w *ScrapeiTunesFeeds) Work(q *koda.Queue, j *koda.Job) error {
 			continue
 		}
 
-		fmt.Printf("#%v\n", feed)
-
 		_, err = koda.Submit(queueUpdateFeed, 0, &UpdateFeedPayload{
 			FeedID: feed.ID,
 		})
