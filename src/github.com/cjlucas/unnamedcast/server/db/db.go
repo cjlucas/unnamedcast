@@ -7,6 +7,8 @@ import (
 	"gopkg.in/mgo.v2"
 )
 
+var ErrNotFound = mgo.ErrNotFound
+
 type DB struct {
 	s *mgo.Session
 }
