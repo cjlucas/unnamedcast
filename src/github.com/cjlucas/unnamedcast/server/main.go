@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"strconv"
@@ -18,6 +20,14 @@ import (
 
 	"gopkg.in/mgo.v2/bson"
 )
+
+type bytesReadCloser struct {
+	*bytes.Buffer
+}
+
+func (r bytesReadCloser) Close() error {
+	return nil
+}
 
 type App struct {
 	DB *db.DB
@@ -64,6 +74,33 @@ func unmarshalFeed(c *gin.Context) {
 	}
 
 	c.Set("feed", &feed)
+}
+
+func (app *App) logErrors(c *gin.Context) {
+	body, err := ioutil.ReadAll(c.Request.Body)
+	c.Request.Body.Close()
+
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, errors.New("could not read body"))
+		return
+	}
+
+	c.Request.Body = bytesReadCloser{bytes.NewBuffer(body)}
+	c.Next()
+
+	if len(c.Errors) == 0 {
+		return
+	}
+
+	app.DB.CreateLog(&db.Log{
+		Method:        c.Request.Method,
+		RequestHeader: c.Request.Header,
+		RequestBody:   string(body),
+		URL:           c.Request.URL.String(),
+		StatusCode:    c.Writer.Status(),
+		RemoteAddr:    c.ClientIP(),
+		Errors:        c.Errors,
+	})
 }
 
 func (app *App) requireModelID(f func(id bson.ObjectId) db.Query, paramName, boundName string) gin.HandlerFunc {
@@ -204,7 +241,7 @@ func (app *App) setupRoutes() {
 		c.JSON(200, &user)
 	})
 
-	api := app.g.Group("/api")
+	api := app.g.Group("/api", app.logErrors)
 
 	// GET /api/users
 	api.GET("/users", func(c *gin.Context) {
