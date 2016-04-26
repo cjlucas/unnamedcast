@@ -21,14 +21,6 @@ import (
 	"gopkg.in/mgo.v2/bson"
 )
 
-type bytesReadCloser struct {
-	*bytes.Buffer
-}
-
-func (r bytesReadCloser) Close() error {
-	return nil
-}
-
 type App struct {
 	DB *db.DB
 	g  *gin.Engine
@@ -85,7 +77,7 @@ func (app *App) logErrors(c *gin.Context) {
 		return
 	}
 
-	c.Request.Body = bytesReadCloser{bytes.NewBuffer(body)}
+	c.Request.Body = ioutil.NopCloser(bytes.NewReader(body))
 	c.Next()
 
 	if len(c.Errors) == 0 {
