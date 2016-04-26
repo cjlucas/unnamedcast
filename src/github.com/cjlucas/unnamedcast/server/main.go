@@ -18,6 +18,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/robfig/cron"
 
+	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 )
 
@@ -340,7 +341,11 @@ func (app *App) setupRoutes() {
 
 		var feed db.Feed
 		if err := app.DB.FindFeeds(query).One(&feed); err != nil {
-			c.AbortWithError(http.StatusNotFound, err)
+			if err == mgo.ErrNotFound {
+				c.AbortWithStatus(http.StatusNotFound)
+			} else {
+				c.AbortWithError(http.StatusInternalServerError, err)
+			}
 			return
 		}
 
