@@ -261,6 +261,7 @@ func (app *App) setupRoutes() {
 			c.JSON(http.StatusConflict, gin.H{
 				"reason": "user already exists",
 			})
+			c.Abort()
 		default:
 			c.AbortWithError(http.StatusInternalServerError, err)
 		}
@@ -363,6 +364,7 @@ func (app *App) setupRoutes() {
 		switch err := app.DB.CreateFeed(feed); {
 		case db.IsDup(err):
 			c.JSON(http.StatusConflict, gin.H{"reason": "duplicate url found"})
+			c.Abort()
 			return
 		case err != nil:
 			c.AbortWithError(http.StatusInternalServerError, err)
