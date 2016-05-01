@@ -9,6 +9,10 @@ import (
 
 var ErrNotFound = mgo.ErrNotFound
 
+func IsDup(err error) bool {
+	return mgo.IsDup(err)
+}
+
 type DB struct {
 	s *mgo.Session
 }

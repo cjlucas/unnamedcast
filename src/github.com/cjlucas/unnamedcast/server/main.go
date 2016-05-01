@@ -254,10 +254,15 @@ func (app *App) setupRoutes() {
 			return
 		}
 
-		if user, err := app.DB.CreateUser(username, password); err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-		} else {
+		switch user, err := app.DB.CreateUser(username, password); {
+		case err == nil:
 			c.JSON(http.StatusOK, user)
+		case db.IsDup(err):
+			c.JSON(http.StatusConflict, gin.H{
+				"reason": "user already exists",
+			})
+		default:
+			c.AbortWithError(http.StatusInternalServerError, err)
 		}
 	})
 
@@ -354,7 +359,12 @@ func (app *App) setupRoutes() {
 	// POST /api/feeds
 	api.POST("/feeds", unmarshalFeed, func(c *gin.Context) {
 		feed := c.MustGet("feed").(*db.Feed)
-		if err := app.DB.CreateFeed(feed); err != nil {
+
+		switch err := app.DB.CreateFeed(feed); {
+		case db.IsDup(err):
+			c.JSON(http.StatusConflict, gin.H{"reason": "duplicate url found"})
+			return
+		case err != nil:
 			c.AbortWithError(http.StatusInternalServerError, err)
 			return
 		}
@@ -463,7 +473,13 @@ func (app *App) setupRoutes() {
 		}
 
 		if err := app.DB.CreateItem(&item); err != nil {
-			c.AbortWithError(http.StatusBadRequest, err)
+			if db.IsDup(err) {
+				c.JSON(http.StatusConflict, gin.H{
+					"reason": "duplicate id",
+				})
+			} else {
+				c.AbortWithError(http.StatusBadRequest, err)
+			}
 			return
 		}
 

@@ -203,10 +203,11 @@ func TestCreateUserValidParams(t *testing.T) {
 		t.Error("user.ID is invalid")
 	}
 
+	// Duplicate entry
 	testEndpoint(t, endpointTestInfo{
 		App:          app,
 		Request:      req,
-		ExpectedCode: http.StatusInternalServerError,
+		ExpectedCode: http.StatusConflict,
 	})
 
 	// No parameters
@@ -367,6 +368,20 @@ func TestCreateFeed(t *testing.T) {
 	if out.URL != in.URL {
 		t.Errorf("URL mismatch: %s != %s", out.URL, in.URL)
 	}
+
+	// Duplicate entry
+	app := newTestApp()
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      newRequest("POST", "/api/feeds", &in),
+		ExpectedCode: http.StatusOK,
+	})
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      newRequest("POST", "/api/feeds", &in),
+		ExpectedCode: http.StatusConflict,
+	})
+	app.DB.Drop()
 
 	// No body given
 	testEndpoint(t, endpointTestInfo{
