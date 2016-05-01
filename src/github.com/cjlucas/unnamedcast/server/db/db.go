@@ -7,6 +7,12 @@ import (
 	"gopkg.in/mgo.v2"
 )
 
+var ErrNotFound = mgo.ErrNotFound
+
+func IsDup(err error) bool {
+	return mgo.IsDup(err)
+}
+
 type DB struct {
 	s *mgo.Session
 }

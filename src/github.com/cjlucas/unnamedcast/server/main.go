@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"strconv"
@@ -64,6 +66,33 @@ func unmarshalFeed(c *gin.Context) {
 	}
 
 	c.Set("feed", &feed)
+}
+
+func (app *App) logErrors(c *gin.Context) {
+	body, err := ioutil.ReadAll(c.Request.Body)
+	c.Request.Body.Close()
+
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, errors.New("could not read body"))
+		return
+	}
+
+	c.Request.Body = ioutil.NopCloser(bytes.NewReader(body))
+	c.Next()
+
+	if len(c.Errors) == 0 {
+		return
+	}
+
+	app.DB.CreateLog(&db.Log{
+		Method:        c.Request.Method,
+		RequestHeader: c.Request.Header,
+		RequestBody:   string(body),
+		URL:           c.Request.URL.String(),
+		StatusCode:    c.Writer.Status(),
+		RemoteAddr:    c.ClientIP(),
+		Errors:        c.Errors,
+	})
 }
 
 func (app *App) requireModelID(f func(id bson.ObjectId) db.Query, paramName, boundName string) gin.HandlerFunc {
@@ -204,7 +233,7 @@ func (app *App) setupRoutes() {
 		c.JSON(200, &user)
 	})
 
-	api := app.g.Group("/api")
+	api := app.g.Group("/api", app.logErrors)
 
 	// GET /api/users
 	api.GET("/users", func(c *gin.Context) {
@@ -225,10 +254,16 @@ func (app *App) setupRoutes() {
 			return
 		}
 
-		if user, err := app.DB.CreateUser(username, password); err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-		} else {
+		switch user, err := app.DB.CreateUser(username, password); {
+		case err == nil:
 			c.JSON(http.StatusOK, user)
+		case db.IsDup(err):
+			c.JSON(http.StatusConflict, gin.H{
+				"reason": "user already exists",
+			})
+			c.Abort()
+		default:
+			c.AbortWithError(http.StatusInternalServerError, err)
 		}
 	})
 
@@ -311,7 +346,11 @@ func (app *App) setupRoutes() {
 
 		var feed db.Feed
 		if err := app.DB.FindFeeds(query).One(&feed); err != nil {
-			c.AbortWithError(http.StatusNotFound, err)
+			if err == db.ErrNotFound {
+				c.AbortWithStatus(http.StatusNotFound)
+			} else {
+				c.AbortWithError(http.StatusInternalServerError, err)
+			}
 			return
 		}
 
@@ -321,7 +360,13 @@ func (app *App) setupRoutes() {
 	// POST /api/feeds
 	api.POST("/feeds", unmarshalFeed, func(c *gin.Context) {
 		feed := c.MustGet("feed").(*db.Feed)
-		if err := app.DB.CreateFeed(feed); err != nil {
+
+		switch err := app.DB.CreateFeed(feed); {
+		case db.IsDup(err):
+			c.JSON(http.StatusConflict, gin.H{"reason": "duplicate url found"})
+			c.Abort()
+			return
+		case err != nil:
 			c.AbortWithError(http.StatusInternalServerError, err)
 			return
 		}
@@ -430,7 +475,13 @@ func (app *App) setupRoutes() {
 		}
 
 		if err := app.DB.CreateItem(&item); err != nil {
-			c.AbortWithError(http.StatusBadRequest, err)
+			if db.IsDup(err) {
+				c.JSON(http.StatusConflict, gin.H{
+					"reason": "duplicate id",
+				})
+			} else {
+				c.AbortWithError(http.StatusBadRequest, err)
+			}
 			return
 		}
 
