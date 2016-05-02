@@ -575,9 +575,12 @@ func main() {
 	koda.Configure(&koda.Options{
 		URL: rdbURL,
 	})
-	c.AddFunc("@hourly", func() {
+
+	c.AddFunc("10 * * * * *", func() {
 		fmt.Println("Updating user feeds")
-		koda.Submit("update-user-feeds", 0, nil)
+		if _, err := koda.Submit("update-user-feeds", 0, nil); err != nil {
+			fmt.Println("Error updating user feeds:", err)
+		}
 	})
 
 	c.Start()
