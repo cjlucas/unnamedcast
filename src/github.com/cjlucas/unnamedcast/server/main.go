@@ -566,6 +566,15 @@ func (app *App) Run(addr string) error {
 
 func main() {
 	c := cron.New()
+
+	rdbURL := os.Getenv("REDIS_URL")
+	if rdbURL == "" {
+		rdbURL = "redis://localhost:6379"
+	}
+
+	koda.Configure(&koda.Options{
+		URL: rdbURL,
+	})
 	c.AddFunc("@hourly", func() {
 		fmt.Println("Updating user feeds")
 		koda.Submit("update-user-feeds", 0, nil)
