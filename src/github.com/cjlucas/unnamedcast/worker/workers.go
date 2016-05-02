@@ -247,7 +247,8 @@ func (w *UpdateFeedWorker) Work(q *koda.Queue, j *koda.Job) error {
 	var newItems []api.Item
 	var existingItems []api.Item
 	for guid, item := range newFeedItemMap {
-		if _, ok := existingFeedItemMap[guid]; ok {
+		if origItem, ok := existingFeedItemMap[guid]; ok {
+			item.ID = origItem.ID
 			existingItems = append(existingItems, item)
 		} else {
 			newItems = append(newItems, item)
