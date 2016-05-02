@@ -576,7 +576,7 @@ func main() {
 		URL: rdbURL,
 	})
 
-	c.AddFunc("10 * * * * *", func() {
+	c.AddFunc("* 10 * * * *", func() {
 		fmt.Println("Updating user feeds")
 		if _, err := koda.Submit("update-user-feeds", 0, nil); err != nil {
 			fmt.Println("Error updating user feeds:", err)
