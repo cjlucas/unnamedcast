@@ -118,6 +118,10 @@ func (app *App) loadUserWithID(paramName string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		boundName := "userID"
 		app.requireModelID(app.DB.FindUserByID, paramName, boundName)(c)
+		if c.IsAborted() {
+			return
+		}
+
 		id := c.MustGet(boundName).(bson.ObjectId)
 
 		var user db.User
