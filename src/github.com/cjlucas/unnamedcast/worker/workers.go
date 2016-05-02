@@ -223,8 +223,6 @@ func (w *UpdateFeedWorker) Work(q *koda.Queue, j *koda.Job) error {
 		return err
 	}
 
-	fmt.Println(origFeed)
-
 	resp, err := http.Get(origFeed.URL)
 	if err != nil {
 		return err
