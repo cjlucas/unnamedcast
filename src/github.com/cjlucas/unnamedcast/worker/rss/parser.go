@@ -65,6 +65,8 @@ type Document struct {
 }
 
 var pubDateFmts = []string{
+	"Mon, 2 Jan 2006 15:04:05 MST",
+	"Mon, 2 Jan 2006 15:04:05 -0700",
 	"Mon, 02 Jan 2006 15:04:05 MST",
 	"Mon, 02 Jan 2006 15:04:05 -0700",
 }
