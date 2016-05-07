@@ -365,19 +365,30 @@ func itemsFromRSS(doc *rss.Document) []api.Item {
 		jsonItem.ImageURL = item.Image.URL
 		jsonItem.Link = item.Link
 
-		// Choose one description, break when first preferred description is found
-		descriptions := []string{
+		// Choose one description and one summary
+		// break when first preferred description is found
+
+		chooseOne := func(s *string, choices []string) {
+			for _, c := range choices {
+				if c != "" {
+					*s = c
+					break
+				}
+			}
+		}
+
+		chooseOne(&jsonItem.Summary, []string{
+			item.ITunesSummary,
+			item.ITunesSubtitle,
+			item.Description,
+		})
+
+		chooseOne(&jsonItem.Description, []string{
 			item.ContentEncoded,
 			item.ITunesSummary,
 			item.Description,
-		}
-
-		for _, desc := range descriptions {
-			if desc != "" {
-				jsonItem.Description = desc
-				break
-			}
-		}
+			jsonItem.Summary,
+		})
 	}
 
 	return items
