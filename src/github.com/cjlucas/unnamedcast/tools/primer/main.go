@@ -1,24 +1,21 @@
 package main
 
 import (
+	"flag"
 	"fmt"
-	"os"
 
 	"github.com/cjlucas/unnamedcast/api"
 	"github.com/cjlucas/unnamedcast/koda"
 )
 
+var apiHost = flag.String("api-host", "localhost:80", "Host for API")
+var rdbURL = flag.String("redis-url", "redis://localhost:6379", "URL for redis endpoint")
+
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Println("Usage: primer <hostname>")
-	}
+	flag.Parse()
 
-	host := os.Args[1]
-	apiTransport := api.API{Host: host}
-
-	koda.Configure(&koda.Options{
-		URL: fmt.Sprintf("redis://%s:6379", host),
-	})
+	apiTransport := api.API{Host: *apiHost}
+	koda.Configure(&koda.Options{URL: *rdbURL})
 
 	fmt.Println("Creating user")
 	user, err := apiTransport.CreateUser("chris", "blah")
