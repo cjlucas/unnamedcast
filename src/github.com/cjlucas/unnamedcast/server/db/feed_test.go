@@ -2,6 +2,26 @@ package db
 
 import "testing"
 
+func createFeed(t *testing.T, db *DB, feed *Feed) *Feed {
+	if err := db.CreateFeed(feed); err != nil {
+		t.Fatal("Could not create feed:", err)
+	}
+
+	return feed
+}
+
+func TestCreateFeed(t *testing.T) {
+	db := newDB()
+
+	feed := createFeed(t, db, &Feed{
+		URL: "http://google.com",
+	})
+
+	if feed.CreationTime.IsZero() {
+		t.Error("Creation time was not set")
+	}
+}
+
 func TestUpdateItem_NoModification(t *testing.T) {
 	db := newDB()
 
