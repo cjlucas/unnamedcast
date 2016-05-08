@@ -110,7 +110,7 @@ func (db *DB) UpdateFeed(feed *Feed) error {
 		origFeed.ModificationTime = time.Now().UTC()
 	}
 
-	return db.feeds().UpdateId(origFeed.ID, origFeed)
+	return db.feeds().UpdateId(origFeed.ID, &origFeed)
 }
 
 func (db *DB) EnsureFeedIndex(idx Index) error {
@@ -146,7 +146,7 @@ func (db *DB) UpdateItem(item *Item) error {
 		item.ModificationTime = time.Now().UTC()
 	}
 
-	return db.items().UpdateId(item.ID, item)
+	return db.items().UpdateId(origItem.ID, &origItem)
 }
 
 func (db *DB) FindItems(q interface{}) Query {

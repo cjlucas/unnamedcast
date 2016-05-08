@@ -80,7 +80,7 @@ func (db *DB) UpdateUser(user *User) error {
 		user.ModificationTime = time.Now().UTC()
 	}
 
-	return db.users().UpdateId(user.ID, user)
+	return db.users().UpdateId(origUser.ID, &origUser)
 }
 
 func (db *DB) EnsureUserIndex(idx Index) error {

@@ -1,22 +1,6 @@
 package db
 
-import (
-	"os"
-	"testing"
-)
-
-func newDB() *DB {
-	db, err := New(os.Getenv("DB_URL"))
-	if err != nil {
-		panic(err)
-	}
-
-	if err := db.Drop(); err != nil {
-		panic(err)
-	}
-
-	return db
-}
+import "testing"
 
 func TestUpdateItem_NoModification(t *testing.T) {
 	db := newDB()
