@@ -141,6 +141,7 @@ func (db *DB) UpdateItem(item *Item) error {
 	// This would have to be done at a choke point like the JSON/BSON
 	// [un]marshallers
 	item.PublicationTime = item.PublicationTime.UTC()
+	origItem.PublicationTime = origItem.PublicationTime.UTC()
 	if CopyModel(&origItem, item, "CreationTime", "ModificationTime") {
 		item.ModificationTime = time.Now().UTC()
 	}
