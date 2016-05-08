@@ -52,6 +52,7 @@ type Item struct {
 	GUID             string        `json:"guid"`
 	Link             string        `json:"link"`
 	Title            string        `json:"title"`
+	Summary          string        `json:"summary"`
 	Description      string        `json:"description"`
 	URL              string        `json:"url"`
 	Author           string        `json:"author"`

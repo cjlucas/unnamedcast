@@ -43,6 +43,7 @@ type Item struct {
 	Title            string        `json:"title" bson:"title"`
 	URL              string        `json:"url" bson:"url"`
 	Author           string        `json:"author" bson:"author"`
+	Summary          string        `json:"summary" bson:"summary"`
 	Description      string        `json:"description" bson:"description"`
 	Duration         time.Duration `json:"duration" bson:"duration"`
 	Size             int           `json:"size" bson:"size"`
