@@ -311,27 +311,6 @@ func (app *App) setupRoutes() {
 		c.JSON(http.StatusOK, &user.ItemStates)
 	})
 
-	// PUT /api/users/:id/states
-	api.PUT("/users/:id/states", app.loadUserWithID("id"), func(c *gin.Context) {
-		user := c.MustGet("user").(*db.User)
-
-		var states []db.ItemState
-		if err := c.BindJSON(&states); err != nil {
-			c.AbortWithError(http.StatusBadRequest, err)
-			return
-		}
-
-		user.ItemStates = states
-		if err := app.DB.UpdateUser(user); err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-			return
-		}
-
-		// TODO(clucas): Return user instead of user.ItemStates to be consistent
-		// with PUT /api/users/:id/feeds
-		c.JSON(http.StatusOK, &user.ItemStates)
-	})
-
 	api.PUT("/users/:id/states/:itemID", app.requireUserID("id"), app.requireItemID("itemID"), func(c *gin.Context) {
 		userID := c.MustGet("userID").(bson.ObjectId)
 		itemID := c.MustGet("itemID").(bson.ObjectId)
@@ -492,7 +471,7 @@ func (app *App) setupRoutes() {
 	api.GET("/feeds/:id/users", app.requireFeedID("id"), func(c *gin.Context) {
 		id := c.MustGet("feedID").(bson.ObjectId)
 		query := bson.M{
-			"feedids": bson.M{
+			"feed_ids": bson.M{
 				"$in": []bson.ObjectId{id},
 			},
 		}
