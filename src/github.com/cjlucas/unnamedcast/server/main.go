@@ -133,6 +133,10 @@ func (app *App) loadUserWithID(paramName string) gin.HandlerFunc {
 	}
 }
 
+func (app *App) requireUserID(paramName string) gin.HandlerFunc {
+	return app.requireModelID(app.DB.FindUserByID, paramName, "userID")
+}
+
 func (app *App) requireFeedID(paramName string) gin.HandlerFunc {
 	return app.requireModelID(app.DB.FindFeedByID, paramName, "feedID")
 }
@@ -326,6 +330,38 @@ func (app *App) setupRoutes() {
 		// TODO(clucas): Return user instead of user.ItemStates to be consistent
 		// with PUT /api/users/:id/feeds
 		c.JSON(http.StatusOK, &user.ItemStates)
+	})
+
+	api.PUT("/users/:id/states/:itemID", app.requireUserID("id"), app.requireItemID("itemID"), func(c *gin.Context) {
+		userID := c.MustGet("userID").(bson.ObjectId)
+		itemID := c.MustGet("itemID").(bson.ObjectId)
+
+		var state db.ItemState
+		if err := c.BindJSON(&state); err != nil {
+			c.AbortWithError(http.StatusBadRequest, err)
+			return
+		}
+
+		state.ItemID = itemID
+
+		if err := app.DB.UpsertUserState(userID, &state); err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
+		}
+
+		c.JSON(http.StatusOK, &state)
+	})
+
+	api.DELETE("/users/:id/states/:itemID", app.requireUserID("id"), app.requireItemID("itemID"), func(c *gin.Context) {
+		userID := c.MustGet("userID").(bson.ObjectId)
+		itemID := c.MustGet("itemID").(bson.ObjectId)
+
+		if err := app.DB.DeleteUserState(userID, itemID); err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
+		}
+
+		c.Status(http.StatusOK)
 	})
 
 	// GET /api/feeds?url=http://url.com

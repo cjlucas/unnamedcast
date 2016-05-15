@@ -12,19 +12,19 @@ import (
 // ItemState represents the state of an unplayed/in progress items
 // Played items will not have an associated state.
 type ItemState struct {
-	FeedID   bson.ObjectId `json:"feed_id"`
-	ItemGUID string        `json:"item_guid"`
-	Position float64       `json:"position"` // 0 if item is unplayed
+	ItemID           bson.ObjectId `json:"item_id" bson:"item_id"`
+	Position         float64       `json:"position" bson:"position"` // 0 if item is unplayed
+	ModificationTime time.Time     `json:"modification_time" bson:"modification_time"`
 }
 
 type User struct {
 	ID               bson.ObjectId   `bson:"_id,omitempty" json:"id"`
-	Username         string          `json:"username"`
-	Password         string          `json:"-"` // encrypted
-	FeedIDs          []bson.ObjectId `json:"feeds"`
-	ItemStates       []ItemState     `json:"states"`
-	CreationTime     time.Time       `json:"creation_time"`
-	ModificationTime time.Time       `json:"modification_time"`
+	Username         string          `json:"username" bson:"username"`
+	Password         string          `json:"-" bson:"password"` // encrypted
+	FeedIDs          []bson.ObjectId `json:"feeds" bson:"feed_ids"`
+	ItemStates       []ItemState     `json:"states" bson:"states"`
+	CreationTime     time.Time       `json:"creation_time" bson:"creation_time"`
+	ModificationTime time.Time       `json:"modification_time" bson:"modification_time"`
 }
 
 func (db *DB) users() *mgo.Collection {
@@ -81,6 +81,50 @@ func (db *DB) UpdateUser(user *User) error {
 	}
 
 	return db.users().UpdateId(origUser.ID, &origUser)
+}
+
+func (db *DB) UpsertUserState(userID bson.ObjectId, state *ItemState) error {
+	state.ModificationTime = time.Now().UTC()
+
+	sel := bson.M{
+		"_id":            userID,
+		"states.item_id": state.ItemID,
+	}
+
+	err := db.users().Update(sel, bson.M{
+		"$set": bson.M{"states.$": &state},
+	})
+
+	if err == ErrNotFound {
+		sel := bson.M{
+			"_id": userID,
+			"states.item_id": bson.M{
+				"$ne": state.ItemID,
+			},
+		}
+
+		// Push the state on the front of the array to keep the array
+		// sorted by modification time (desc). In a normal use-case, this will
+		// allow the $set operation above to be performed quicker
+		return db.users().Update(sel, bson.M{
+			"$push": bson.M{
+				"states": bson.M{
+					"$each":     []ItemState{*state},
+					"$position": 0,
+				},
+			},
+		})
+	}
+
+	return err
+}
+
+func (db *DB) DeleteUserState(userID, itemID bson.ObjectId) error {
+	return db.users().UpdateId(userID, bson.M{
+		"$pull": bson.M{
+			"states": bson.M{"item_id": itemID},
+		},
+	})
 }
 
 func (db *DB) EnsureUserIndex(idx Index) error {
