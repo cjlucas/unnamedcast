@@ -105,7 +105,7 @@ func (db *DB) UpsertUserState(userID bson.ObjectId, state *ItemState) error {
 
 		// Push the state on the front of the array to keep the array
 		// sorted by modification time (desc). In a normal use-case, this will
-		// allow the $set operation above to be performed quicker
+		// improve the speed of the initial update operation
 		return db.users().Update(sel, bson.M{
 			"$push": bson.M{
 				"states": bson.M{
