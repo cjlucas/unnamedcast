@@ -310,23 +310,16 @@ func (app *App) setupRoutes() {
 		userID := c.MustGet("userID").(bson.ObjectId)
 		modifiedSince := c.Query("modified_since")
 
-		var modifiedSinceDate time.Time
+		var user db.User
+
 		if modifiedSince != "" {
 			t, err := time.Parse(time.RFC3339, modifiedSince)
 			if err != nil {
 				c.AbortWithError(http.StatusBadRequest, err)
 				return
 			}
-			modifiedSinceDate = t
-		}
+			modifiedSinceDate := t
 
-		var user db.User
-		if modifiedSinceDate.IsZero() {
-			if err := app.DB.FindUserByID(userID).One(&user); err != nil {
-				c.AbortWithError(http.StatusInternalServerError, err)
-				return
-			}
-		} else {
 			pipeline := []bson.M{
 				{"$match": bson.M{"_id": userID}},
 				{"$project": bson.M{
@@ -351,6 +344,11 @@ func (app *App) setupRoutes() {
 				return
 			}
 
+		} else { // if modifiedSince == ""
+			if err := app.DB.FindUserByID(userID).One(&user); err != nil {
+				c.AbortWithError(http.StatusInternalServerError, err)
+				return
+			}
 		}
 
 		c.JSON(http.StatusOK, &user.ItemStates)
