@@ -328,9 +328,7 @@ func (app *App) setupRoutes() {
 			}
 		} else {
 			pipeline := []bson.M{
-				{"$match": bson.M{
-					"_id": userID,
-				}},
+				{"$match": bson.M{"_id": userID}},
 				{"$project": bson.M{
 					"states": bson.M{
 						"$filter": bson.M{
