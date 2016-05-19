@@ -25,6 +25,28 @@ func New(url string) (*DB, error) {
 	return &DB{s: s}, nil
 }
 
+func (db *DB) Drop() error {
+	return db.db().DropDatabase()
+}
+
+func (db *DB) db() *mgo.Database {
+	// when given the empty string, database is defered to db name specified in New()
+	return db.s.DB("")
+}
+
+func handleDBError(s *mgo.Session, f func() error) error {
+	for i := 0; i < 5; i++ {
+		switch err := f(); err {
+		case io.EOF:
+			s.Refresh()
+		default:
+			return err
+		}
+	}
+
+	return nil
+}
+
 type Query interface {
 	All(result interface{}) error
 	Count() (int, error)
@@ -32,11 +54,6 @@ type Query interface {
 	Select(selector interface{}) Query
 	Sort(fields ...string) Query
 	Limit(n int) Query
-}
-
-type query struct {
-	s *mgo.Session
-	q *mgo.Query
 }
 
 type Index struct {
@@ -55,37 +72,20 @@ func mgoIndexForIndex(idx Index) mgo.Index {
 	}
 }
 
-func (db *DB) db() *mgo.Database {
-	// when given the empty string, database is defered to db name specified in New()
-	return db.s.DB("")
-}
-
-// TODO(clucas): Move this method to be a member of DB and use this
-// function to wrap all Create* and Update* methods
-func (q *query) handleDBError(f func() error) error {
-	i := 0
-	err := f()
-	for err == io.EOF && i < 5 {
-		q.s.Refresh()
-		err = f()
-		i++
-	}
-	return err
-}
-
-func (db *DB) Drop() error {
-	return db.db().DropDatabase()
+type query struct {
+	s *mgo.Session
+	q *mgo.Query
 }
 
 func (q *query) All(result interface{}) error {
-	return q.handleDBError(func() error {
+	return handleDBError(q.s, func() error {
 		return q.q.All(result)
 	})
 }
 
 func (q *query) Count() (int, error) {
 	var n int
-	err := q.handleDBError(func() error {
+	err := handleDBError(q.s, func() error {
 		var err error
 		n, err = q.q.Count()
 		return err
@@ -95,7 +95,7 @@ func (q *query) Count() (int, error) {
 }
 
 func (q *query) One(result interface{}) error {
-	return q.handleDBError(func() error {
+	return handleDBError(q.s, func() error {
 		return q.q.One(result)
 	})
 }
@@ -113,4 +113,21 @@ func (q *query) Sort(fields ...string) Query {
 func (q *query) Limit(n int) Query {
 	q.q = q.q.Limit(n)
 	return q
+}
+
+type Pipe struct {
+	s *mgo.Session
+	p *mgo.Pipe
+}
+
+func (p *Pipe) All(result interface{}) error {
+	return handleDBError(p.s, func() error {
+		return p.p.All(result)
+	})
+}
+
+func (p *Pipe) One(result interface{}) error {
+	return handleDBError(p.s, func() error {
+		return p.p.One(result)
+	})
 }

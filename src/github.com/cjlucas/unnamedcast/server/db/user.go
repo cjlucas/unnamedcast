@@ -38,6 +38,13 @@ func (db *DB) FindUsers(q interface{}) Query {
 	}
 }
 
+func (db *DB) UserPipeline(pipeline interface{}) *Pipe {
+	return &Pipe{
+		s: db.s,
+		p: db.users().Pipe(pipeline),
+	}
+}
+
 func (db *DB) FindUserByID(id bson.ObjectId) Query {
 	return db.FindUsers(bson.M{"_id": id})
 }

@@ -306,8 +306,55 @@ func (app *App) setupRoutes() {
 	})
 
 	// GET /api/users/:id/states
-	api.GET("/users/:id/states", app.loadUserWithID("id"), func(c *gin.Context) {
-		user := c.MustGet("user").(*db.User)
+	api.GET("/users/:id/states", app.requireUserID("id"), func(c *gin.Context) {
+		userID := c.MustGet("userID").(bson.ObjectId)
+		modifiedSince := c.Query("modified_since")
+
+		var modifiedSinceDate time.Time
+		if modifiedSince != "" {
+			t, err := time.Parse(time.RFC3339, modifiedSince)
+			if err != nil {
+				c.AbortWithError(http.StatusBadRequest, err)
+				return
+			}
+			modifiedSinceDate = t
+		}
+
+		var user db.User
+		if modifiedSinceDate.IsZero() {
+			if err := app.DB.FindUserByID(userID).One(&user); err != nil {
+				c.AbortWithError(http.StatusInternalServerError, err)
+				return
+			}
+		} else {
+			pipeline := []bson.M{
+				{"$match": bson.M{
+					"_id": userID,
+				}},
+				{"$project": bson.M{
+					"states": bson.M{
+						"$filter": bson.M{
+							"input": "$states",
+							"as":    "state",
+							"cond": bson.M{
+								"$gt": []interface{}{
+									"$$state.modification_time",
+									modifiedSinceDate,
+								},
+							},
+						},
+					},
+				},
+				},
+			}
+
+			if err := app.DB.UserPipeline(pipeline).One(&user); err != nil {
+				c.AbortWithError(http.StatusInternalServerError, err)
+				return
+			}
+
+		}
+
 		c.JSON(http.StatusOK, &user.ItemStates)
 	})
 

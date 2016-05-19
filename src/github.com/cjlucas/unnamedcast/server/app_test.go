@@ -297,6 +297,50 @@ func TestGetUserItemStates(t *testing.T) {
 	}
 }
 
+func TestGetUserItemStates_WithModifiedSinceParam(t *testing.T) {
+	app := newTestApp()
+	user := createUser(t, app, "chris", "hithere")
+	user.ItemStates = append(user.ItemStates, db.ItemState{
+		ItemID:   bson.NewObjectId(),
+		Position: 5,
+	})
+
+	if err := app.DB.UpdateUser(user); err != nil {
+		t.Fatal("Could not update user:", err)
+	}
+
+	modTime := user.ItemStates[0].ModificationTime
+
+	urlWithTime := func(modTime time.Time) string {
+		return fmt.Sprintf("/api/users/%s/states?modified_since=%s", user.ID.Hex(), modTime.Format(time.RFC3339))
+	}
+
+	var out []db.ItemState
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      newRequest("GET", urlWithTime(modTime.Add(-1*time.Second)), nil),
+		ExpectedCode: http.StatusOK,
+		ResponseBody: &out,
+	})
+
+	if len(out) != 1 {
+		t.Errorf("Unexpected response length: %d != 1", len(out))
+	}
+
+	out = make([]db.ItemState, 0)
+
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      newRequest("GET", urlWithTime(modTime.Add(1*time.Second)), nil),
+		ExpectedCode: http.StatusOK,
+		ResponseBody: &out,
+	})
+
+	if len(out) != 0 {
+		t.Errorf("Unexpected response length: %d != 0", len(out))
+	}
+}
+
 func TestPutUserFeeds(t *testing.T) {
 	app := newTestApp()
 	user := createUser(t, app, "chris", "hithere")
