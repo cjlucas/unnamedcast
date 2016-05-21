@@ -1,6 +1,7 @@
 package db
 
 import (
+	"errors"
 	"io"
 	"time"
 
@@ -8,6 +9,7 @@ import (
 )
 
 var ErrNotFound = mgo.ErrNotFound
+var ErrOutdatedResource = errors.New("resource is out of date")
 
 func IsDup(err error) bool {
 	return mgo.IsDup(err)

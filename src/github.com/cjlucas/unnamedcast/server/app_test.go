@@ -389,6 +389,40 @@ func TestPutUserItemState(t *testing.T) {
 	}
 }
 
+func TestPutUserItemState_WithOutdatedState(t *testing.T) {
+	app := newTestApp()
+	user := createUser(t, app, "chris", "hithere")
+	item := createItem(t, app, &db.Item{
+		GUID: "http://google.com/1",
+	})
+
+	state := api.ItemState{
+		ItemID:   item.ID.Hex(),
+		Position: 5,
+	}
+
+	fmt.Println(state)
+
+	req := newRequest("PUT", fmt.Sprintf("/api/users/%s/states/%s", user.ID.Hex(), state.ItemID), &state)
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      req,
+		ExpectedCode: http.StatusOK,
+		ResponseBody: &state,
+	})
+
+	fmt.Println(state)
+
+	state.ModificationTime = state.ModificationTime.Add(-1 * time.Second)
+
+	req = newRequest("PUT", fmt.Sprintf("/api/users/%s/states/%s", user.ID.Hex(), state.ItemID), &state)
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      req,
+		ExpectedCode: http.StatusConflict,
+	})
+}
+
 func TestDeleteUserItemState(t *testing.T) {
 	app := newTestApp()
 	user := createUser(t, app, "chris", "hithere")

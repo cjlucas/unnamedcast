@@ -366,12 +366,15 @@ func (app *App) setupRoutes() {
 
 		state.ItemID = itemID
 
-		if err := app.DB.UpsertUserState(userID, &state); err != nil {
+		switch err := app.DB.UpsertUserState(userID, &state); err {
+		case nil:
+			c.JSON(http.StatusOK, &state)
+		case db.ErrOutdatedResource:
+			c.JSON(http.StatusConflict, gin.H{"error": "resource is out of date"})
+			c.Abort()
+		default:
 			c.AbortWithError(http.StatusInternalServerError, err)
-			return
 		}
-
-		c.JSON(http.StatusOK, &state)
 	})
 
 	api.DELETE("/users/:id/states/:itemID", app.requireUserID("id"), app.requireItemID("itemID"), func(c *gin.Context) {

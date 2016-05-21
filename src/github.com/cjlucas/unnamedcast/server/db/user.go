@@ -91,39 +91,65 @@ func (db *DB) UpdateUser(user *User) error {
 }
 
 func (db *DB) UpsertUserState(userID bson.ObjectId, state *ItemState) error {
-	state.ModificationTime = time.Now().UTC()
+	// New steps
+	// 1. Find existing state. If exists, $pull it off (or pull after step 2 on reject)
+	// 2. Compare modification time, if existing state is newer, reject
+	// 3. Prepend state to array always
 
-	sel := bson.M{
-		"_id":            userID,
-		"states.item_id": state.ItemID,
-	}
-
-	err := db.users().Update(sel, bson.M{
-		"$set": bson.M{"states.$": &state},
-	})
-
-	if err == ErrNotFound {
-		sel := bson.M{
-			"_id": userID,
-			"states.item_id": bson.M{
-				"$ne": state.ItemID,
-			},
-		}
-
-		// Push the state on the front of the array to keep the array
-		// sorted by modification time (desc). In a normal use-case, this will
-		// improve the speed of the initial update operation
-		return db.users().Update(sel, bson.M{
-			"$push": bson.M{
-				"states": bson.M{
-					"$each":     []ItemState{*state},
-					"$position": 0,
+	pipeline := []bson.M{
+		{"$match": bson.M{"_id": userID}},
+		{"$project": bson.M{
+			"states": bson.M{
+				"$filter": bson.M{
+					"input": "$states",
+					"as":    "state",
+					"cond": bson.M{
+						"$eq": []interface{}{"$$state.item_id", state.ItemID},
+					},
 				},
 			},
+		}},
+	}
+
+	var user User
+	if err := db.UserPipeline(pipeline).One(&user); err != nil {
+		return ErrNotFound
+	}
+
+	if len(user.ItemStates) > 0 {
+		if state.ModificationTime.Before(user.ItemStates[0].ModificationTime) {
+			return ErrOutdatedResource
+		}
+
+		sel := bson.M{
+			"_id":            userID,
+			"states.item_id": state.ItemID,
+		}
+
+		return db.users().Update(sel, bson.M{
+			"$set": bson.M{"states.$": &state},
 		})
 	}
 
-	return err
+	sel := bson.M{
+		"_id": userID,
+		// $ne operator ensures there will be no race condition
+		"states.item_id": bson.M{
+			"$ne": state.ItemID,
+		},
+	}
+
+	// Push the state on the front of the array to keep the array
+	// sorted by modification time (desc). In a normal use-case, this will
+	// improve the speed of the initial update operation
+	return db.users().Update(sel, bson.M{
+		"$push": bson.M{
+			"states": bson.M{
+				"$each":     []ItemState{*state},
+				"$position": 0,
+			},
+		},
+	})
 }
 
 func (db *DB) DeleteUserState(userID, itemID bson.ObjectId) error {
