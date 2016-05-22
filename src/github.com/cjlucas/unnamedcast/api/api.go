@@ -13,6 +13,14 @@ import (
 
 var httpClient = http.Client{}
 
+type itemState int
+
+const (
+	StateUnplayed   itemState = 0
+	StateInProgress           = 1
+	StatePlayed               = 2
+)
+
 type User struct {
 	ID               string      `json:"id"`
 	Username         string      `json:"username"`
@@ -24,6 +32,7 @@ type User struct {
 
 type ItemState struct {
 	ItemID           string    `json:"item_id"`
+	State            itemState `json:"state"`
 	Position         float64   `json:"position"` // 0 if item is unplayed
 	ModificationTime time.Time `json:"modification_time"`
 }

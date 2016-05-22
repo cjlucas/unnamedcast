@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"time"
 
 	"github.com/cjlucas/unnamedcast/api"
 	"github.com/cjlucas/unnamedcast/koda"
@@ -295,8 +296,9 @@ func (w *UpdateFeedWorker) Work(q *koda.Queue, j *koda.Job) error {
 		user := &users[i]
 		for j := range newItems {
 			err := w.API.UpdateUserItemState(user.ID, api.ItemState{
-				ItemID:   newItems[j].ID,
-				Position: 0,
+				ItemID:           newItems[j].ID,
+				State:            api.StateUnplayed,
+				ModificationTime: time.Now().UTC(),
 			})
 			if err != nil {
 				fmt.Println("Could not update user's item state")

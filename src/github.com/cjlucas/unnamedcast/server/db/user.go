@@ -9,10 +9,19 @@ import (
 	"gopkg.in/mgo.v2/bson"
 )
 
+type itemState int
+
+const (
+	stateUnplayed itemState = 0
+	stateInProgress
+	statePlayed
+)
+
 // ItemState represents the state of an unplayed/in progress items
 // Played items will not have an associated state.
 type ItemState struct {
 	ItemID           bson.ObjectId `json:"item_id" bson:"item_id"`
+	State            itemState     `json:"state" bson:"state"`
 	Position         float64       `json:"position" bson:"position"` // 0 if item is unplayed
 	ModificationTime time.Time     `json:"modification_time" bson:"modification_time"`
 }

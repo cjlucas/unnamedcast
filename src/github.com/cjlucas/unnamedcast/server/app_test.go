@@ -22,7 +22,7 @@ var emptyObjectID bson.ObjectId
 
 func init() {
 	gin.SetMode(gin.TestMode)
-	gin.DefaultWriter, _ = os.Open(os.DevNull)
+	// gin.DefaultWriter, _ = os.Open(os.DevNull)
 }
 
 func newTestApp() *App {
@@ -398,6 +398,7 @@ func TestPutUserItemState_WithOutdatedState(t *testing.T) {
 
 	state := api.ItemState{
 		ItemID:   item.ID.Hex(),
+		State:    api.StateInProgress,
 		Position: 5,
 	}
 
@@ -432,6 +433,7 @@ func TestDeleteUserItemState(t *testing.T) {
 
 	user.ItemStates = append(user.ItemStates, db.ItemState{
 		ItemID:   item.ID,
+		State:    api.StatePlayed,
 		Position: 0,
 	})
 
