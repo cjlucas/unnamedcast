@@ -9,22 +9,31 @@ import (
 	"gopkg.in/mgo.v2/bson"
 )
 
+type itemState int
+
+const (
+	stateUnplayed itemState = 0
+	stateInProgress
+	statePlayed
+)
+
 // ItemState represents the state of an unplayed/in progress items
 // Played items will not have an associated state.
 type ItemState struct {
-	FeedID   bson.ObjectId `json:"feed_id"`
-	ItemGUID string        `json:"item_guid"`
-	Position float64       `json:"position"` // 0 if item is unplayed
+	ItemID           bson.ObjectId `json:"item_id" bson:"item_id"`
+	State            itemState     `json:"state" bson:"state"`
+	Position         float64       `json:"position" bson:"position"` // 0 if item is unplayed
+	ModificationTime time.Time     `json:"modification_time" bson:"modification_time"`
 }
 
 type User struct {
 	ID               bson.ObjectId   `bson:"_id,omitempty" json:"id"`
-	Username         string          `json:"username"`
-	Password         string          `json:"-"` // encrypted
-	FeedIDs          []bson.ObjectId `json:"feeds"`
-	ItemStates       []ItemState     `json:"states"`
-	CreationTime     time.Time       `json:"creation_time"`
-	ModificationTime time.Time       `json:"modification_time"`
+	Username         string          `json:"username" bson:"username"`
+	Password         string          `json:"-" bson:"password"` // encrypted
+	FeedIDs          []bson.ObjectId `json:"feeds" bson:"feed_ids"`
+	ItemStates       []ItemState     `json:"states" bson:"states"`
+	CreationTime     time.Time       `json:"creation_time" bson:"creation_time"`
+	ModificationTime time.Time       `json:"modification_time" bson:"modification_time"`
 }
 
 func (db *DB) users() *mgo.Collection {
@@ -35,6 +44,13 @@ func (db *DB) FindUsers(q interface{}) Query {
 	return &query{
 		s: db.s,
 		q: db.users().Find(q),
+	}
+}
+
+func (db *DB) UserPipeline(pipeline interface{}) *Pipe {
+	return &Pipe{
+		s: db.s,
+		p: db.users().Pipe(pipeline),
 	}
 }
 
@@ -81,6 +97,76 @@ func (db *DB) UpdateUser(user *User) error {
 	}
 
 	return db.users().UpdateId(origUser.ID, &origUser)
+}
+
+func (db *DB) UpsertUserState(userID bson.ObjectId, state *ItemState) error {
+	// New steps
+	// 1. Find existing state. If exists, $pull it off (or pull after step 2 on reject)
+	// 2. Compare modification time, if existing state is newer, reject
+	// 3. Prepend state to array always
+
+	pipeline := []bson.M{
+		{"$match": bson.M{"_id": userID}},
+		{"$project": bson.M{
+			"states": bson.M{
+				"$filter": bson.M{
+					"input": "$states",
+					"as":    "state",
+					"cond": bson.M{
+						"$eq": []interface{}{"$$state.item_id", state.ItemID},
+					},
+				},
+			},
+		}},
+	}
+
+	var user User
+	if err := db.UserPipeline(pipeline).One(&user); err != nil {
+		return ErrNotFound
+	}
+
+	if len(user.ItemStates) > 0 {
+		if state.ModificationTime.Before(user.ItemStates[0].ModificationTime) {
+			return ErrOutdatedResource
+		}
+
+		sel := bson.M{
+			"_id":            userID,
+			"states.item_id": state.ItemID,
+		}
+
+		return db.users().Update(sel, bson.M{
+			"$set": bson.M{"states.$": &state},
+		})
+	}
+
+	sel := bson.M{
+		"_id": userID,
+		// $ne operator ensures there will be no race condition
+		"states.item_id": bson.M{
+			"$ne": state.ItemID,
+		},
+	}
+
+	// Push the state on the front of the array to keep the array
+	// sorted by modification time (desc). In a normal use-case, this will
+	// improve the speed of the initial update operation
+	return db.users().Update(sel, bson.M{
+		"$push": bson.M{
+			"states": bson.M{
+				"$each":     []ItemState{*state},
+				"$position": 0,
+			},
+		},
+	})
+}
+
+func (db *DB) DeleteUserState(userID, itemID bson.ObjectId) error {
+	return db.users().UpdateId(userID, bson.M{
+		"$pull": bson.M{
+			"states": bson.M{"item_id": itemID},
+		},
+	})
 }
 
 func (db *DB) EnsureUserIndex(idx Index) error {

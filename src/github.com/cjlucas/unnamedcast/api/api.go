@@ -13,6 +13,14 @@ import (
 
 var httpClient = http.Client{}
 
+type itemState int
+
+const (
+	StateUnplayed   itemState = 0
+	StateInProgress           = 1
+	StatePlayed               = 2
+)
+
 type User struct {
 	ID               string      `json:"id"`
 	Username         string      `json:"username"`
@@ -23,9 +31,10 @@ type User struct {
 }
 
 type ItemState struct {
-	FeedID   string  `json:"feed_id"`
-	ItemGUID string  `json:"item_guid"`
-	Position float64 `json:"position"` // 0 if item is unplayed
+	ItemID           string    `json:"item_id"`
+	State            itemState `json:"state"`
+	Position         float64   `json:"position"` // 0 if item is unplayed
+	ModificationTime time.Time `json:"modification_time"`
 }
 
 type Feed struct {
@@ -130,6 +139,21 @@ func (api *API) UpdateUserFeeds(userID string, feedIDs []string) error {
 	})
 }
 
+func (api *API) UpdateUserItemState(userID string, state ItemState) error {
+	return api.makeRequest(&apiRoundTrip{
+		Method:      "PUT",
+		Endpoint:    fmt.Sprintf("/api/users/%s/states/%s", userID, state.ItemID),
+		RequestBody: &state,
+	})
+}
+
+func (api *API) DeleteUserItemState(userID, itemID string) error {
+	return api.makeRequest(&apiRoundTrip{
+		Method:   "DELETE",
+		Endpoint: fmt.Sprintf("/api/users/%s/states/%s", userID, itemID),
+	})
+}
+
 func (api *API) GetFeed(feedID string) (*Feed, error) {
 	var feed Feed
 	err := api.makeRequest(&apiRoundTrip{
@@ -191,12 +215,14 @@ func (api *API) FeedForURL(feedURL string) (*Feed, error) {
 
 func (api *API) CreateFeedItem(feedID string, item *Item) error {
 	return api.makeRequest(&apiRoundTrip{
-		Method:      "POST",
-		Endpoint:    fmt.Sprintf("/api/feeds/%s/items", feedID),
-		RequestBody: item,
+		Method:       "POST",
+		Endpoint:     fmt.Sprintf("/api/feeds/%s/items", feedID),
+		RequestBody:  item,
+		ResponseBody: item,
 	})
 }
 
+// TODO: have this modify the passed in item instead of creating a new item
 func (api *API) UpdateFeedItem(feedID string, item *Item) (*Item, error) {
 	var out Item
 	err := api.makeRequest(&apiRoundTrip{
@@ -226,14 +252,6 @@ func (api *API) GetFeedsUsers(feedID string) ([]User, error) {
 		ResponseBody: &users,
 	})
 	return users, err
-}
-
-func (api *API) PutItemStates(userID string, states []ItemState) error {
-	return api.makeRequest(&apiRoundTrip{
-		Method:      "PUT",
-		Endpoint:    fmt.Sprintf("/api/users/%s/states", userID),
-		RequestBody: &states,
-	})
 }
 
 func (api *API) GetUsers() ([]User, error) {

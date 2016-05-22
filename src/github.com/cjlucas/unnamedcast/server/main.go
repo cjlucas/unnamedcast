@@ -133,6 +133,10 @@ func (app *App) loadUserWithID(paramName string) gin.HandlerFunc {
 	}
 }
 
+func (app *App) requireUserID(paramName string) gin.HandlerFunc {
+	return app.requireModelID(app.DB.FindUserByID, paramName, "userID")
+}
+
 func (app *App) requireFeedID(paramName string) gin.HandlerFunc {
 	return app.requireModelID(app.DB.FindFeedByID, paramName, "feedID")
 }
@@ -302,30 +306,87 @@ func (app *App) setupRoutes() {
 	})
 
 	// GET /api/users/:id/states
-	api.GET("/users/:id/states", app.loadUserWithID("id"), func(c *gin.Context) {
-		user := c.MustGet("user").(*db.User)
+	api.GET("/users/:id/states", app.requireUserID("id"), func(c *gin.Context) {
+		userID := c.MustGet("userID").(bson.ObjectId)
+		modifiedSince := c.Query("modified_since")
+
+		var user db.User
+
+		if modifiedSince != "" {
+			t, err := time.Parse(time.RFC3339, modifiedSince)
+			if err != nil {
+				c.AbortWithError(http.StatusBadRequest, err)
+				return
+			}
+			modifiedSinceDate := t
+
+			pipeline := []bson.M{
+				{"$match": bson.M{"_id": userID}},
+				{"$project": bson.M{
+					"states": bson.M{
+						"$filter": bson.M{
+							"input": "$states",
+							"as":    "state",
+							"cond": bson.M{
+								"$gt": []interface{}{
+									"$$state.modification_time",
+									modifiedSinceDate,
+								},
+							},
+						},
+					},
+				},
+				},
+			}
+
+			if err := app.DB.UserPipeline(pipeline).One(&user); err != nil {
+				c.AbortWithError(http.StatusInternalServerError, err)
+				return
+			}
+
+		} else { // if modifiedSince == ""
+			if err := app.DB.FindUserByID(userID).One(&user); err != nil {
+				c.AbortWithError(http.StatusInternalServerError, err)
+				return
+			}
+		}
+
 		c.JSON(http.StatusOK, &user.ItemStates)
 	})
 
-	// PUT /api/users/:id/states
-	api.PUT("/users/:id/states", app.loadUserWithID("id"), func(c *gin.Context) {
-		user := c.MustGet("user").(*db.User)
+	api.PUT("/users/:id/states/:itemID", app.requireUserID("id"), app.requireItemID("itemID"), func(c *gin.Context) {
+		userID := c.MustGet("userID").(bson.ObjectId)
+		itemID := c.MustGet("itemID").(bson.ObjectId)
 
-		var states []db.ItemState
-		if err := c.BindJSON(&states); err != nil {
+		var state db.ItemState
+		if err := c.BindJSON(&state); err != nil {
 			c.AbortWithError(http.StatusBadRequest, err)
 			return
 		}
 
-		user.ItemStates = states
-		if err := app.DB.UpdateUser(user); err != nil {
+		state.ItemID = itemID
+
+		switch err := app.DB.UpsertUserState(userID, &state); err {
+		case nil:
+			c.JSON(http.StatusOK, &state)
+		case db.ErrOutdatedResource:
+			c.JSON(http.StatusConflict, gin.H{"error": "resource is out of date"})
+			c.Abort()
+		default:
+			c.AbortWithError(http.StatusInternalServerError, err)
+		}
+	})
+
+	api.DELETE("/users/:id/states/:itemID", app.requireUserID("id"), app.requireItemID("itemID"), func(c *gin.Context) {
+		userID := c.MustGet("userID").(bson.ObjectId)
+		itemID := c.MustGet("itemID").(bson.ObjectId)
+
+		if err := app.DB.DeleteUserState(userID, itemID); err != nil {
 			c.AbortWithError(http.StatusInternalServerError, err)
 			return
 		}
 
-		// TODO(clucas): Return user instead of user.ItemStates to be consistent
-		// with PUT /api/users/:id/feeds
-		c.JSON(http.StatusOK, &user.ItemStates)
+		c.Status(http.StatusOK)
 	})
 
 	// GET /api/feeds?url=http://url.com
@@ -456,7 +517,7 @@ func (app *App) setupRoutes() {
 	api.GET("/feeds/:id/users", app.requireFeedID("id"), func(c *gin.Context) {
 		id := c.MustGet("feedID").(bson.ObjectId)
 		query := bson.M{
-			"feedids": bson.M{
+			"feed_ids": bson.M{
 				"$in": []bson.ObjectId{id},
 			},
 		}

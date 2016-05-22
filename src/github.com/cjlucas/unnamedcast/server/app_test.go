@@ -13,6 +13,7 @@ import (
 
 	"gopkg.in/mgo.v2/bson"
 
+	"github.com/cjlucas/unnamedcast/api"
 	"github.com/cjlucas/unnamedcast/server/db"
 	"github.com/gin-gonic/gin"
 )
@@ -21,7 +22,7 @@ var emptyObjectID bson.ObjectId
 
 func init() {
 	gin.SetMode(gin.TestMode)
-	gin.DefaultWriter, _ = os.Open(os.DevNull)
+	// gin.DefaultWriter, _ = os.Open(os.DevNull)
 }
 
 func newTestApp() *App {
@@ -271,8 +272,7 @@ func TestGetUserItemStates(t *testing.T) {
 	app := newTestApp()
 	user := createUser(t, app, "chris", "hithere")
 	user.ItemStates = append(user.ItemStates, db.ItemState{
-		FeedID:   bson.NewObjectId(),
-		ItemGUID: "http://google.com",
+		ItemID:   bson.NewObjectId(),
 		Position: 5,
 	})
 
@@ -289,11 +289,55 @@ func TestGetUserItemStates(t *testing.T) {
 	})
 
 	if len(out) == len(user.ItemStates) {
-		if out[0] != user.ItemStates[0] {
-			t.Errorf("ID mismatch: %+v != %+v", out[0], user.ItemStates[0])
+		if out[0].ItemID != user.ItemStates[0].ItemID {
+			t.Errorf("ID mismatch: %s != %s", out[0].ItemID, user.ItemStates[0].ItemID)
 		}
 	} else {
 		t.Errorf("Unexpected # of feed IDs: %d != %d", len(out), len(user.ItemStates))
+	}
+}
+
+func TestGetUserItemStates_WithModifiedSinceParam(t *testing.T) {
+	app := newTestApp()
+	user := createUser(t, app, "chris", "hithere")
+	user.ItemStates = append(user.ItemStates, db.ItemState{
+		ItemID:   bson.NewObjectId(),
+		Position: 5,
+	})
+
+	if err := app.DB.UpdateUser(user); err != nil {
+		t.Fatal("Could not update user:", err)
+	}
+
+	modTime := user.ItemStates[0].ModificationTime
+
+	urlWithTime := func(modTime time.Time) string {
+		return fmt.Sprintf("/api/users/%s/states?modified_since=%s", user.ID.Hex(), modTime.Format(time.RFC3339))
+	}
+
+	var out []db.ItemState
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      newRequest("GET", urlWithTime(modTime.Add(-1*time.Second)), nil),
+		ExpectedCode: http.StatusOK,
+		ResponseBody: &out,
+	})
+
+	if len(out) != 1 {
+		t.Errorf("Unexpected response length: %d != 1", len(out))
+	}
+
+	out = make([]db.ItemState, 0)
+
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      newRequest("GET", urlWithTime(modTime.Add(1*time.Second)), nil),
+		ExpectedCode: http.StatusOK,
+		ResponseBody: &out,
+	})
+
+	if len(out) != 0 {
+		t.Errorf("Unexpected response length: %d != 0", len(out))
 	}
 }
 
@@ -320,19 +364,19 @@ func TestPutUserFeeds(t *testing.T) {
 	}
 }
 
-func TestPutUserItemStates(t *testing.T) {
+func TestPutUserItemState(t *testing.T) {
 	app := newTestApp()
 	user := createUser(t, app, "chris", "hithere")
+	item := createItem(t, app, &db.Item{
+		GUID: "http://google.com/1",
+	})
 
-	states := []db.ItemState{
-		{
-			FeedID:   bson.NewObjectId(),
-			ItemGUID: "http://google.com",
-			Position: 5,
-		},
+	state := api.ItemState{
+		ItemID:   item.ID.Hex(),
+		Position: 5,
 	}
-	req := newRequest("PUT", fmt.Sprintf("/api/users/%s/states", user.ID.Hex()), states)
-	var out []db.ItemState
+	req := newRequest("PUT", fmt.Sprintf("/api/users/%s/states/%s", user.ID.Hex(), state.ItemID), state)
+	var out api.ItemState
 	testEndpoint(t, endpointTestInfo{
 		App:          app,
 		Request:      req,
@@ -340,14 +384,72 @@ func TestPutUserItemStates(t *testing.T) {
 		ResponseBody: &out,
 	})
 
-	if len(out) == len(states) {
-		outFeedID := out[0].FeedID
-		inFeedID := states[0].FeedID
-		if outFeedID != inFeedID {
-			t.Errorf("Feed ID mismatch: %s != %s", outFeedID, inFeedID)
-		}
-	} else {
-		t.Errorf("Unexpected # of feed IDs: %d != %d", len(out), len(states))
+	if out.ItemID != state.ItemID {
+		t.Errorf("Item ID mismatch: %s != %s", out.ItemID, state.ItemID)
+	}
+}
+
+func TestPutUserItemState_WithOutdatedState(t *testing.T) {
+	app := newTestApp()
+	user := createUser(t, app, "chris", "hithere")
+	item := createItem(t, app, &db.Item{
+		GUID: "http://google.com/1",
+	})
+
+	state := api.ItemState{
+		ItemID:   item.ID.Hex(),
+		State:    api.StateInProgress,
+		Position: 5,
+	}
+
+	req := newRequest("PUT", fmt.Sprintf("/api/users/%s/states/%s", user.ID.Hex(), state.ItemID), &state)
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      req,
+		ExpectedCode: http.StatusOK,
+		ResponseBody: &state,
+	})
+
+	state.ModificationTime = state.ModificationTime.Add(-1 * time.Second)
+
+	req = newRequest("PUT", fmt.Sprintf("/api/users/%s/states/%s", user.ID.Hex(), state.ItemID), &state)
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      req,
+		ExpectedCode: http.StatusConflict,
+	})
+}
+
+func TestDeleteUserItemState(t *testing.T) {
+	app := newTestApp()
+	user := createUser(t, app, "chris", "hithere")
+	item := createItem(t, app, &db.Item{
+		GUID: "http://google.com/1",
+	})
+
+	user.ItemStates = append(user.ItemStates, db.ItemState{
+		ItemID:   item.ID,
+		State:    api.StatePlayed,
+		Position: 0,
+	})
+
+	if err := app.DB.UpdateUser(user); err != nil {
+		t.Fatal("Could not update user:", err)
+	}
+
+	req := newRequest("DELETE", fmt.Sprintf("/api/users/%s/states/%s", user.ID.Hex(), item.ID.Hex()), nil)
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      req,
+		ExpectedCode: http.StatusOK,
+	})
+
+	if err := app.DB.FindUserByID(user.ID).One(&user); err != nil {
+		t.Fatal("Could not find user:", err)
+	}
+
+	if len(user.ItemStates) != 0 {
+		t.Errorf("# of item states mismatch: %d != %d", len(user.ItemStates), 0)
 	}
 }
 

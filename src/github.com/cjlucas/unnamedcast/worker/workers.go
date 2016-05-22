@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"time"
 
 	"github.com/cjlucas/unnamedcast/api"
 	"github.com/cjlucas/unnamedcast/koda"
@@ -253,8 +254,8 @@ func (w *UpdateFeedWorker) Work(q *koda.Queue, j *koda.Job) error {
 		}
 	}
 
-	for _, item := range newItems {
-		if err := w.API.CreateFeedItem(payload.FeedID, &item); err != nil {
+	for i := range newItems {
+		if err := w.API.CreateFeedItem(payload.FeedID, &newItems[i]); err != nil {
 			return err
 		}
 	}
@@ -294,16 +295,15 @@ func (w *UpdateFeedWorker) Work(q *koda.Queue, j *koda.Job) error {
 	for i := range users {
 		user := &users[i]
 		for j := range newItems {
-			user.ItemStates = append(user.ItemStates, api.ItemState{
-				FeedID:   feed.ID,
-				ItemGUID: newItems[j].GUID,
-				Position: 0,
+			err := w.API.UpdateUserItemState(user.ID, api.ItemState{
+				ItemID:           newItems[j].ID,
+				State:            api.StateUnplayed,
+				ModificationTime: time.Now().UTC(),
 			})
-		}
-
-		if err := w.API.PutItemStates(user.ID, user.ItemStates); err != nil {
-			fmt.Println("Error saving states (will continue):", err)
-			continue
+			if err != nil {
+				fmt.Println("Could not update user's item state")
+				continue
+			}
 		}
 	}
 
