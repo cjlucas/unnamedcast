@@ -402,8 +402,6 @@ func TestPutUserItemState_WithOutdatedState(t *testing.T) {
 		Position: 5,
 	}
 
-	fmt.Println(state)
-
 	req := newRequest("PUT", fmt.Sprintf("/api/users/%s/states/%s", user.ID.Hex(), state.ItemID), &state)
 	testEndpoint(t, endpointTestInfo{
 		App:          app,
@@ -411,8 +409,6 @@ func TestPutUserItemState_WithOutdatedState(t *testing.T) {
 		ExpectedCode: http.StatusOK,
 		ResponseBody: &state,
 	})
-
-	fmt.Println(state)
 
 	state.ModificationTime = state.ModificationTime.Add(-1 * time.Second)
 
