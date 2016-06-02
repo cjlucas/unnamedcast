@@ -78,6 +78,7 @@ func newRequest(method string, endpoint string, body interface{}) *http.Request 
 		reqBody = bytes.NewReader([]byte{})
 	}
 
+	// Use httptest.NewRequest instead (1.7+ only)
 	r, err := http.NewRequest(method, endpoint, reqBody)
 	if err != nil {
 		panic(err)
