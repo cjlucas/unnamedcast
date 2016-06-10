@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -655,14 +656,24 @@ func main() {
 		dbURL = "mongodb://localhost/cast"
 	}
 
-	port, _ := strconv.Atoi(os.Getenv("API_PORT"))
-	if port == 0 {
-		port = 80
+	apiURL := os.Getenv("API_URL")
+	if apiURL == "" {
+		apiURL = "http://localhost:80"
+	}
+
+	url, err := url.Parse(apiURL)
+	if err != nil {
+		panic(err)
+	}
+
+	port := 80
+	if s := strings.Split(url.Host, ":"); len(s) == 2 {
+		port, _ = strconv.Atoi(s[1])
 	}
 
 	app, err := NewApp(dbURL)
 	if err != nil {
-		panic(err)
+		panic(fmt.Errorf("Failed to connect to DB: %s (%s)", err, dbURL))
 	}
 
 	app.Run(fmt.Sprintf("0.0.0.0:%d", port))
