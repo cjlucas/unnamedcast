@@ -27,6 +27,30 @@ func New(url string) (*DB, error) {
 	return &DB{s: s}, nil
 }
 
+func (db *DB) Users() UserCollection {
+	return UserCollection{
+		collection{c: db.db().C("users")},
+	}
+}
+
+func (db *DB) Feeds() FeedCollection {
+	return FeedCollection{
+		collection{c: db.db().C("feeds")},
+	}
+}
+
+func (db *DB) Items() ItemCollection {
+	return ItemCollection{
+		collection{c: db.db().C("items")},
+	}
+}
+
+func (db *DB) Logs() LogCollection {
+	return LogCollection{
+		collection{c: db.db().C("logs")},
+	}
+}
+
 func (db *DB) Drop() error {
 	return db.db().DropDatabase()
 }

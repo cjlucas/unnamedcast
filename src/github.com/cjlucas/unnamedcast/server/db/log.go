@@ -3,7 +3,6 @@ package db
 import (
 	"time"
 
-	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 )
 
@@ -19,27 +18,20 @@ type Log struct {
 	CreationTime  time.Time           `bson:"creation_time" json:"creation_time"`
 }
 
-func (db *DB) log() *mgo.Collection {
-	return db.db().C("logs")
+type LogCollection struct {
+	collection
 }
 
-func (db *DB) FindLogs(q interface{}) Query {
-	return &query{
-		s: db.s,
-		q: db.log().Find(q),
-	}
-}
-
-func (db *DB) LogByID(id bson.ObjectId) (*Log, error) {
+func (c LogCollection) LogByID(id bson.ObjectId) (*Log, error) {
 	var log Log
-	if err := db.FindLogs(bson.M{"_id": id}).One(&log); err != nil {
+	if err := c.FindByID(id).One(&log); err != nil {
 		return nil, err
 	}
 	return &log, nil
 }
 
-func (db *DB) CreateLog(log *Log) error {
+func (c LogCollection) Create(log *Log) error {
 	log.ID = bson.NewObjectId()
 	log.CreationTime = time.Now().UTC()
-	return db.log().Insert(log)
+	return c.insert(log)
 }

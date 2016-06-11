@@ -22,7 +22,7 @@ var emptyObjectID bson.ObjectId
 
 func init() {
 	gin.SetMode(gin.TestMode)
-	// gin.DefaultWriter, _ = os.Open(os.DevNull)
+	gin.DefaultWriter, _ = os.Open(os.DevNull)
 }
 
 func newTestApp() *App {
@@ -43,21 +43,21 @@ func newTestApp() *App {
 }
 
 func createFeed(t *testing.T, app *App, feed *db.Feed) *db.Feed {
-	if err := app.DB.CreateFeed(feed); err != nil {
+	if err := app.DB.Feeds().Create(feed); err != nil {
 		t.Fatal("Failed to create feed")
 	}
 	return feed
 }
 
 func createItem(t *testing.T, app *App, item *db.Item) *db.Item {
-	if err := app.DB.CreateItem(item); err != nil {
+	if err := app.DB.Items().Create(item); err != nil {
 		t.Fatal("Failed to create item")
 	}
 	return item
 }
 
 func createUser(t *testing.T, app *App, username, password string) *db.User {
-	user, err := app.DB.CreateUser(username, password)
+	user, err := app.DB.Users().Create(username, password)
 	if err != nil {
 		t.Fatal("Failed to create user")
 	}
@@ -248,7 +248,7 @@ func TestGetUserFeeds(t *testing.T) {
 	user := createUser(t, app, "chris", "hithere")
 	user.FeedIDs = append(user.FeedIDs, bson.NewObjectId())
 
-	if err := app.DB.UpdateUser(user); err != nil {
+	if err := app.DB.Users().Update(user); err != nil {
 		t.Fatal("Could not update user:", err)
 	}
 
@@ -277,7 +277,7 @@ func TestGetUserItemStates(t *testing.T) {
 		Position: 5,
 	})
 
-	if err := app.DB.UpdateUser(user); err != nil {
+	if err := app.DB.Users().Update(user); err != nil {
 		t.Fatal("Could not update user:", err)
 	}
 
@@ -306,7 +306,7 @@ func TestGetUserItemStates_WithModifiedSinceParam(t *testing.T) {
 		Position: 5,
 	})
 
-	if err := app.DB.UpdateUser(user); err != nil {
+	if err := app.DB.Users().Update(user); err != nil {
 		t.Fatal("Could not update user:", err)
 	}
 
@@ -434,7 +434,7 @@ func TestDeleteUserItemState(t *testing.T) {
 		Position: 0,
 	})
 
-	if err := app.DB.UpdateUser(user); err != nil {
+	if err := app.DB.Users().Update(user); err != nil {
 		t.Fatal("Could not update user:", err)
 	}
 
@@ -445,7 +445,7 @@ func TestDeleteUserItemState(t *testing.T) {
 		ExpectedCode: http.StatusOK,
 	})
 
-	if err := app.DB.FindUserByID(user.ID).One(&user); err != nil {
+	if err := app.DB.Users().FindByID(user.ID).One(&user); err != nil {
 		t.Fatal("Could not find user:", err)
 	}
 
@@ -640,7 +640,7 @@ func TestPutFeedWithExistingItems(t *testing.T) {
 		ExpectedCode: http.StatusOK,
 	})
 
-	feed, err := app.DB.FeedByID(feed.ID)
+	feed, err := app.DB.Feeds().FeedByID(feed.ID)
 	if err != nil {
 		t.Fatal("Could not find feed")
 	}
@@ -745,7 +745,7 @@ func TestGetFeedsUsers(t *testing.T) {
 	user := createUser(t, app, "chris", "whatever")
 
 	user.FeedIDs = append(user.FeedIDs, feed.ID)
-	if err := app.DB.UpdateUser(user); err != nil {
+	if err := app.DB.Users().Update(user); err != nil {
 		t.Fatal("Failed to update user:", err)
 	}
 
@@ -785,7 +785,7 @@ func TestCreateFeedItem(t *testing.T) {
 		t.Errorf("GUID mismatch: %s != %s", out.GUID, item.GUID)
 	}
 
-	feed, err := app.DB.FeedByID(feedID)
+	feed, err := app.DB.Feeds().FeedByID(feedID)
 	if err != nil {
 		t.Fatal("Could not fetch feed")
 	}

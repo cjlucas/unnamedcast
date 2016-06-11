@@ -5,7 +5,6 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 )
 
@@ -36,29 +35,11 @@ type User struct {
 	ModificationTime time.Time       `json:"modification_time" bson:"modification_time"`
 }
 
-func (db *DB) users() *mgo.Collection {
-	return db.db().C("users")
+type UserCollection struct {
+	collection
 }
 
-func (db *DB) FindUsers(q interface{}) Query {
-	return &query{
-		s: db.s,
-		q: db.users().Find(q),
-	}
-}
-
-func (db *DB) UserPipeline(pipeline interface{}) *Pipe {
-	return &Pipe{
-		s: db.s,
-		p: db.users().Pipe(pipeline),
-	}
-}
-
-func (db *DB) FindUserByID(id bson.ObjectId) Query {
-	return db.FindUsers(bson.M{"_id": id})
-}
-
-func (db *DB) CreateUser(username, password string) (*User, error) {
+func (c UserCollection) Create(username, password string) (*User, error) {
 	pw, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, err
@@ -73,33 +54,14 @@ func (db *DB) CreateUser(username, password string) (*User, error) {
 		ModificationTime: now,
 	}
 
-	if err := db.users().Insert(&user); err != nil {
+	if err := c.c.Insert(&user); err != nil {
 		return nil, err
 	}
 
 	return &user, nil
 }
 
-// UpdateUser updates and existing user. The User must already persist in the
-// database (in other words, it must have a valid ID)
-func (db *DB) UpdateUser(user *User) error {
-	// NOTE: Fetching the user (for possibly a second time in a single context)
-	// may turn out to be overkill. MongoDB supports updating fields selectivly
-	// by using update operators instead of passing in a whole document.
-
-	var origUser User
-	if err := db.FindUserByID(user.ID).One(&origUser); err != nil {
-		return err
-	}
-
-	if CopyModel(&origUser, user, "ID", "Username", "Password") {
-		user.ModificationTime = time.Now().UTC()
-	}
-
-	return db.users().UpdateId(origUser.ID, &origUser)
-}
-
-func (db *DB) UpsertUserState(userID bson.ObjectId, state *ItemState) error {
+func (c UserCollection) UpsertItemState(userID bson.ObjectId, state *ItemState) error {
 	// New steps
 	// 1. Find existing state. If exists, $pull it off (or pull after step 2 on reject)
 	// 2. Compare modification time, if existing state is newer, reject
@@ -121,7 +83,7 @@ func (db *DB) UpsertUserState(userID bson.ObjectId, state *ItemState) error {
 	}
 
 	var user User
-	if err := db.UserPipeline(pipeline).One(&user); err != nil {
+	if err := c.pipeline(pipeline).One(&user); err != nil {
 		return ErrNotFound
 	}
 
@@ -135,7 +97,7 @@ func (db *DB) UpsertUserState(userID bson.ObjectId, state *ItemState) error {
 			"states.item_id": state.ItemID,
 		}
 
-		return db.users().Update(sel, bson.M{
+		return c.c.Update(sel, bson.M{
 			"$set": bson.M{"states.$": &state},
 		})
 	}
@@ -151,7 +113,7 @@ func (db *DB) UpsertUserState(userID bson.ObjectId, state *ItemState) error {
 	// Push the state on the front of the array to keep the array
 	// sorted by modification time (desc). In a normal use-case, this will
 	// improve the speed of the initial update operation
-	return db.users().Update(sel, bson.M{
+	return c.c.Update(sel, bson.M{
 		"$push": bson.M{
 			"states": bson.M{
 				"$each":     []ItemState{*state},
@@ -161,14 +123,57 @@ func (db *DB) UpsertUserState(userID bson.ObjectId, state *ItemState) error {
 	})
 }
 
-func (db *DB) DeleteUserState(userID, itemID bson.ObjectId) error {
-	return db.users().UpdateId(userID, bson.M{
+// Update updates an existing user. The User must already persist in the
+// database (in other words, it must have a valid ID)
+func (c UserCollection) Update(user *User) error {
+	// NOTE: Fetching the user (for possibly a second time in a single context)
+	// may turn out to be overkill. MongoDB supports updating fields selectivly
+	// by using update operators instead of passing in a whole document.
+
+	var origUser User
+	if err := c.FindByID(user.ID).One(&origUser); err != nil {
+		return err
+	}
+
+	if CopyModel(&origUser, user, "ID", "Username", "Password") {
+		user.ModificationTime = time.Now().UTC()
+	}
+
+	return c.c.UpdateId(origUser.ID, &origUser)
+}
+
+func (c UserCollection) DeleteItemState(userID, itemID bson.ObjectId) error {
+	return c.c.UpdateId(userID, bson.M{
 		"$pull": bson.M{
 			"states": bson.M{"item_id": itemID},
 		},
 	})
 }
 
-func (db *DB) EnsureUserIndex(idx Index) error {
-	return db.users().EnsureIndex(mgoIndexForIndex(idx))
+func (c UserCollection) FindItemStatesModifiedSince(userID bson.ObjectId, modTime time.Time) ([]ItemState, error) {
+	pipeline := []bson.M{
+		{"$match": bson.M{"_id": userID}},
+		{"$project": bson.M{
+			"states": bson.M{
+				"$filter": bson.M{
+					"input": "$states",
+					"as":    "state",
+					"cond": bson.M{
+						"$gt": []interface{}{
+							"$$state.modification_time",
+							modTime,
+						},
+					},
+				},
+			},
+		},
+		},
+	}
+
+	var user User
+	if err := c.pipeline(pipeline).One(&user); err != nil {
+		return nil, err
+	}
+
+	return user.ItemStates, nil
 }
