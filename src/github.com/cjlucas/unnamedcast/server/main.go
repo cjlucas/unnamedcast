@@ -394,6 +394,7 @@ func (app *App) setupRoutes() {
 		c.Status(http.StatusOK)
 	})
 
+	// GET /api/feeds
 	// GET /api/feeds?url=http://url.com
 	// GET /api/feeds?itunes_id=43912431
 	api.GET("/feeds", func(c *gin.Context) {
@@ -410,7 +411,13 @@ func (app *App) setupRoutes() {
 		}
 
 		if query == nil {
-			c.AbortWithStatus(http.StatusBadRequest)
+			var feeds []db.Feed
+			if err := app.DB.FindFeeds(nil).All(&feeds); err != nil {
+				c.AbortWithError(http.StatusInternalServerError, err)
+				return
+			}
+
+			c.JSON(http.StatusOK, feeds)
 			return
 		}
 
