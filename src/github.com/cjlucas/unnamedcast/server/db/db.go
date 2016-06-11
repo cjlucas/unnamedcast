@@ -15,8 +15,16 @@ func IsDup(err error) bool {
 	return mgo.IsDup(err)
 }
 
+// DB provides an access layer to the models within the system through collections.
+// It's goal is to abstract all database operations out of the App.
 type DB struct {
-	s *mgo.Session
+	db *mgo.Database
+	s  *mgo.Session
+
+	Users UserCollection
+	Feeds FeedCollection
+	Items ItemCollection
+	Logs  LogCollection
 }
 
 func New(url string) (*DB, error) {
@@ -24,40 +32,37 @@ func New(url string) (*DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &DB{s: s}, nil
-}
 
-func (db *DB) Users() UserCollection {
-	return UserCollection{
-		collection{c: db.db().C("users")},
-	}
-}
+	db := s.DB("")
 
-func (db *DB) Feeds() FeedCollection {
-	return FeedCollection{
-		collection{c: db.db().C("feeds")},
-	}
-}
+	// fetch indexes, replace if changed
+	// TODO: Research EnsureIndex to see if it handles checking if the
+	// index has changed, or if we have to write that ourselves
 
-func (db *DB) Items() ItemCollection {
-	return ItemCollection{
-		collection{c: db.db().C("items")},
-	}
-}
+	return &DB{
+		db: db,
+		s:  s,
 
-func (db *DB) Logs() LogCollection {
-	return LogCollection{
-		collection{c: db.db().C("logs")},
-	}
+		Users: UserCollection{
+			collection{c: db.C("users")},
+		},
+
+		Feeds: FeedCollection{
+			collection{c: db.C("feeds")},
+		},
+
+		Items: ItemCollection{
+			collection{c: db.C("items")},
+		},
+
+		Logs: LogCollection{
+			collection{c: db.C("logs")},
+		},
+	}, nil
 }
 
 func (db *DB) Drop() error {
-	return db.db().DropDatabase()
-}
-
-func (db *DB) db() *mgo.Database {
-	// when given the empty string, database is defered to db name specified in New()
-	return db.s.DB("")
+	return db.db.DropDatabase()
 }
 
 func handleDBError(s *mgo.Session, f func() error) error {

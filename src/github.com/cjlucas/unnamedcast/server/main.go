@@ -85,7 +85,7 @@ func (app *App) logErrors(c *gin.Context) {
 		return
 	}
 
-	app.DB.Logs().Create(&db.Log{
+	app.DB.Logs.Create(&db.Log{
 		Method:        c.Request.Method,
 		RequestHeader: c.Request.Header,
 		RequestBody:   string(body),
@@ -118,7 +118,7 @@ func (app *App) requireModelID(f func(id bson.ObjectId) db.Query, paramName, bou
 func (app *App) loadUserWithID(paramName string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		boundName := "userID"
-		app.requireModelID(app.DB.Users().FindByID, paramName, boundName)(c)
+		app.requireModelID(app.DB.Users.FindByID, paramName, boundName)(c)
 		if c.IsAborted() {
 			return
 		}
@@ -126,7 +126,7 @@ func (app *App) loadUserWithID(paramName string) gin.HandlerFunc {
 		id := c.MustGet(boundName).(bson.ObjectId)
 
 		var user db.User
-		if err := app.DB.Users().FindByID(id).One(&user); err != nil {
+		if err := app.DB.Users.FindByID(id).One(&user); err != nil {
 			c.AbortWithError(http.StatusInternalServerError, err)
 			return
 		}
@@ -135,15 +135,15 @@ func (app *App) loadUserWithID(paramName string) gin.HandlerFunc {
 }
 
 func (app *App) requireUserID(paramName string) gin.HandlerFunc {
-	return app.requireModelID(app.DB.Users().FindByID, paramName, "userID")
+	return app.requireModelID(app.DB.Users.FindByID, paramName, "userID")
 }
 
 func (app *App) requireFeedID(paramName string) gin.HandlerFunc {
-	return app.requireModelID(app.DB.Feeds().FindByID, paramName, "feedID")
+	return app.requireModelID(app.DB.Feeds.FindByID, paramName, "feedID")
 }
 
 func (app *App) requireItemID(paramName string) gin.HandlerFunc {
-	return app.requireModelID(app.DB.Items().FindByID, paramName, "itemID")
+	return app.requireModelID(app.DB.Items.FindByID, paramName, "itemID")
 }
 
 func (app *App) setupIndexes() error {
@@ -160,13 +160,13 @@ func (app *App) setupIndexes() error {
 	}
 
 	for _, idx := range userIndexes {
-		if err := app.DB.Users().EnsureIndex(idx); err != nil {
+		if err := app.DB.Users.EnsureIndex(idx); err != nil {
 			return err
 		}
 	}
 
 	for _, idx := range feedIndexes {
-		if err := app.DB.Feeds().EnsureIndex(idx); err != nil {
+		if err := app.DB.Feeds.EnsureIndex(idx); err != nil {
 			return err
 		}
 	}
@@ -195,7 +195,7 @@ func (app *App) setupRoutes() {
 			return
 		}
 
-		q := app.DB.Feeds().Find(bson.M{
+		q := app.DB.Feeds.Find(bson.M{
 			"$text": bson.M{"$search": query},
 		})
 
@@ -229,7 +229,7 @@ func (app *App) setupRoutes() {
 		}
 
 		var user db.User
-		if err := app.DB.Users().Find(bson.M{"username": username}).One(&user); err != nil {
+		if err := app.DB.Users.Find(bson.M{"username": username}).One(&user); err != nil {
 			c.AbortWithStatus(http.StatusBadRequest)
 			return
 		}
@@ -247,7 +247,7 @@ func (app *App) setupRoutes() {
 	// GET /api/users
 	api.GET("/users", func(c *gin.Context) {
 		var users []db.User
-		if err := app.DB.Users().Find(nil).All(&users); err != nil {
+		if err := app.DB.Users.Find(nil).All(&users); err != nil {
 			c.AbortWithError(http.StatusInternalServerError, err)
 		}
 		c.JSON(http.StatusOK, users)
@@ -263,7 +263,7 @@ func (app *App) setupRoutes() {
 			return
 		}
 
-		switch user, err := app.DB.Users().Create(username, password); {
+		switch user, err := app.DB.Users.Create(username, password); {
 		case err == nil:
 			c.JSON(http.StatusOK, user)
 		case db.IsDup(err):
@@ -299,7 +299,7 @@ func (app *App) setupRoutes() {
 		}
 
 		user.FeedIDs = ids
-		if err := app.DB.Users().Update(user); err != nil {
+		if err := app.DB.Users.Update(user); err != nil {
 			c.AbortWithError(http.StatusInternalServerError, err)
 			return
 		}
@@ -313,7 +313,7 @@ func (app *App) setupRoutes() {
 
 		if modifiedSince == "" {
 			var user db.User
-			if err := app.DB.Users().FindByID(userID).One(&user); err != nil {
+			if err := app.DB.Users.FindByID(userID).One(&user); err != nil {
 				c.AbortWithError(http.StatusInternalServerError, err)
 				return
 			}
@@ -328,7 +328,7 @@ func (app *App) setupRoutes() {
 		}
 		modifiedSinceDate := t
 
-		states, err := app.DB.Users().FindItemStatesModifiedSince(userID, modifiedSinceDate)
+		states, err := app.DB.Users.FindItemStatesModifiedSince(userID, modifiedSinceDate)
 		if err != nil {
 			c.AbortWithError(http.StatusInternalServerError, err)
 			return
@@ -350,7 +350,7 @@ func (app *App) setupRoutes() {
 
 		state.ItemID = itemID
 
-		switch err := app.DB.Users().UpsertItemState(userID, &state); err {
+		switch err := app.DB.Users.UpsertItemState(userID, &state); err {
 		case nil:
 			c.JSON(http.StatusOK, &state)
 		case db.ErrOutdatedResource:
@@ -365,7 +365,7 @@ func (app *App) setupRoutes() {
 		userID := c.MustGet("userID").(bson.ObjectId)
 		itemID := c.MustGet("itemID").(bson.ObjectId)
 
-		if err := app.DB.Users().DeleteItemState(userID, itemID); err != nil {
+		if err := app.DB.Users.DeleteItemState(userID, itemID); err != nil {
 			c.AbortWithError(http.StatusInternalServerError, err)
 			return
 		}
@@ -394,7 +394,7 @@ func (app *App) setupRoutes() {
 		}
 
 		var feed db.Feed
-		if err := app.DB.Feeds().Find(query).One(&feed); err != nil {
+		if err := app.DB.Feeds.Find(query).One(&feed); err != nil {
 			if err == db.ErrNotFound {
 				c.AbortWithStatus(http.StatusNotFound)
 			} else {
@@ -410,7 +410,7 @@ func (app *App) setupRoutes() {
 	api.POST("/feeds", unmarshalFeed, func(c *gin.Context) {
 		feed := c.MustGet("feed").(*db.Feed)
 
-		switch err := app.DB.Feeds().Create(feed); {
+		switch err := app.DB.Feeds.Create(feed); {
 		case db.IsDup(err):
 			c.JSON(http.StatusConflict, gin.H{"reason": "duplicate url found"})
 			c.Abort()
@@ -420,7 +420,7 @@ func (app *App) setupRoutes() {
 			return
 		}
 
-		out, err := app.DB.Feeds().FeedByID(feed.ID)
+		out, err := app.DB.Feeds.FeedByID(feed.ID)
 		if err != nil {
 			c.AbortWithError(http.StatusInternalServerError, err)
 			return
@@ -431,7 +431,7 @@ func (app *App) setupRoutes() {
 	// GET /api/feeds/:id
 	api.GET("/feeds/:id", app.requireFeedID("id"), func(c *gin.Context) {
 		id := c.MustGet("feedID").(bson.ObjectId)
-		feed, err := app.DB.Feeds().FeedByID(id)
+		feed, err := app.DB.Feeds.FeedByID(id)
 		if err != nil {
 			c.AbortWithError(http.StatusInternalServerError, err)
 			return
@@ -444,7 +444,7 @@ func (app *App) setupRoutes() {
 		feed := c.MustGet("feed").(*db.Feed)
 		feed.ID = c.MustGet("feedID").(bson.ObjectId)
 
-		existingFeed, err := app.DB.Feeds().FeedByID(feed.ID)
+		existingFeed, err := app.DB.Feeds.FeedByID(feed.ID)
 		if err != nil {
 			c.AbortWithError(http.StatusInternalServerError, err)
 			return
@@ -452,7 +452,7 @@ func (app *App) setupRoutes() {
 		// Persist existing items
 		feed.Items = existingFeed.Items
 
-		if err := app.DB.Feeds().Update(feed); err != nil {
+		if err := app.DB.Feeds.Update(feed); err != nil {
 			c.AbortWithError(http.StatusInternalServerError, err)
 			return
 		}
@@ -476,7 +476,7 @@ func (app *App) setupRoutes() {
 			modifiedSinceDate = t
 		}
 
-		feed, err := app.DB.Feeds().FeedByID(feedID)
+		feed, err := app.DB.Feeds.FeedByID(feedID)
 		if err != nil {
 			c.AbortWithError(http.StatusInternalServerError, err)
 			return
@@ -489,7 +489,7 @@ func (app *App) setupRoutes() {
 			itemsQuery["modification_time"] = bson.M{"$gt": modifiedSinceDate}
 		}
 		var items []db.Item
-		if err := app.DB.Items().Find(itemsQuery).All(&items); err != nil {
+		if err := app.DB.Items.Find(itemsQuery).All(&items); err != nil {
 			c.AbortWithError(http.StatusInternalServerError, err)
 			return
 		}
@@ -507,7 +507,7 @@ func (app *App) setupRoutes() {
 		}
 
 		var users []db.User
-		if err := app.DB.Users().Find(query).All(&users); err != nil {
+		if err := app.DB.Users.Find(query).All(&users); err != nil {
 			c.AbortWithError(http.StatusInternalServerError, err)
 			return
 		}
@@ -523,7 +523,7 @@ func (app *App) setupRoutes() {
 			return
 		}
 
-		if err := app.DB.Items().Create(&item); err != nil {
+		if err := app.DB.Items.Create(&item); err != nil {
 			if db.IsDup(err) {
 				c.JSON(http.StatusConflict, gin.H{
 					"reason": "duplicate id",
@@ -535,14 +535,14 @@ func (app *App) setupRoutes() {
 		}
 
 		id := c.MustGet("feedID").(bson.ObjectId)
-		feed, err := app.DB.Feeds().FeedByID(id)
+		feed, err := app.DB.Feeds.FeedByID(id)
 		if err != nil {
 			c.AbortWithError(http.StatusInternalServerError, err)
 			return
 		}
 		feed.Items = append(feed.Items, item.ID)
 
-		if err := app.DB.Feeds().Update(feed); err != nil {
+		if err := app.DB.Feeds.Update(feed); err != nil {
 			c.AbortWithError(http.StatusInternalServerError, err)
 			return
 		}
@@ -557,7 +557,7 @@ func (app *App) setupRoutes() {
 		feedID := c.MustGet("feedID").(bson.ObjectId)
 		itemID := c.MustGet("itemID").(bson.ObjectId)
 
-		feed, err := app.DB.Feeds().FeedByID(feedID)
+		feed, err := app.DB.Feeds.FeedByID(feedID)
 		if err != nil {
 			c.AbortWithError(http.StatusInternalServerError, err)
 			return
@@ -569,7 +569,7 @@ func (app *App) setupRoutes() {
 		}
 
 		var item db.Item
-		if err := app.DB.Items().FindByID(itemID).One(&item); err != nil {
+		if err := app.DB.Items.FindByID(itemID).One(&item); err != nil {
 			c.AbortWithError(http.StatusInternalServerError, err)
 			return
 		}
@@ -589,7 +589,7 @@ func (app *App) setupRoutes() {
 		}
 		item.ID = itemID
 
-		feed, err := app.DB.Feeds().FeedByID(feedID)
+		feed, err := app.DB.Feeds.FeedByID(feedID)
 		if err != nil {
 			c.AbortWithError(http.StatusInternalServerError, err)
 			return
@@ -600,7 +600,7 @@ func (app *App) setupRoutes() {
 			return
 		}
 
-		if err := app.DB.Items().Update(&item); err != nil {
+		if err := app.DB.Items.Update(&item); err != nil {
 			c.AbortWithError(http.StatusInternalServerError, err)
 			return
 		}
