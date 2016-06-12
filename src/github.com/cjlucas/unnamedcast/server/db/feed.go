@@ -8,14 +8,14 @@ import (
 
 type Feed struct {
 	ID                bson.ObjectId   `bson:"_id,omitempty" json:"id"`
-	Title             string          `json:"title" bson:"title"`
-	URL               string          `json:"url" bson:"url"`
+	Title             string          `json:"title" bson:"title" index:",text"`
+	URL               string          `json:"url" bson:"url" index:",unique"`
 	Author            string          `json:"author" bson:"author"`
 	Items             []bson.ObjectId `json:"items" bson:"items"`
 	CreationTime      time.Time       `json:"creation_time" bson:"creation_time"`
-	ModificationTime  time.Time       `json:"modification_time" bson:"modification_time"`
+	ModificationTime  time.Time       `json:"modification_time" bson:"modification_time" index:"modification_time"`
 	ImageURL          string          `json:"image_url" bson:"image_url"`
-	ITunesID          int             `json:"itunes_id" bson:"itunes_id"`
+	ITunesID          int             `json:"itunes_id" bson:"itunes_id" index:"itunes_id"`
 	ITunesReviewCount int             `json:"itunes_review_count" bson:"itunes_review_count"`
 	ITunesRatingCount int             `json:"itunes_rating_count" bson:"itunes_rating_count"`
 

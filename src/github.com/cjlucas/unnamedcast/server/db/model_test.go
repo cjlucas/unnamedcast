@@ -62,6 +62,7 @@ func TestNewModelInfo(t *testing.T) {
 		{
 			In: struct {
 				A int `json:"a" bson:"a" index:"a,unique"`
+				B int `json:"b" bson:"b" index:",unique"`
 			}{},
 			ExpectedFields: []FieldInfo{
 				{
@@ -70,11 +71,22 @@ func TestNewModelInfo(t *testing.T) {
 					IndexName:   "a",
 					IndexUnique: true,
 				},
+				{
+					JSONName:    "b",
+					BSONName:    "b",
+					IndexName:   "b",
+					IndexUnique: true,
+				},
 			},
 			ExpectedIndexes: map[string]Index{
 				"a": {
 					Name:   "a",
 					Key:    []string{"a"},
+					Unique: true,
+				},
+				"b": {
+					Name:   "b",
+					Key:    []string{"b"},
 					Unique: true,
 				},
 			},

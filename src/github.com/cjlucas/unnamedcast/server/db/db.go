@@ -2,6 +2,7 @@ package db
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"time"
 
@@ -16,10 +17,10 @@ func IsDup(err error) bool {
 }
 
 // DB provides an access layer to the models within the system through collections.
-// It's goal is to abstract all database operations out of the App.
 type DB struct {
-	db *mgo.Database
-	s  *mgo.Session
+	s           *mgo.Session
+	cfg         Config
+	collections []*collection
 
 	Users UserCollection
 	Feeds FeedCollection
@@ -27,19 +28,24 @@ type DB struct {
 	Logs  LogCollection
 }
 
-func New(url string) (*DB, error) {
-	s, err := mgo.DialWithTimeout(url, 2*time.Second)
+type Config struct {
+	URL                string
+	Clean              bool
+	ForceIndexCreation bool
+}
+
+func New(cfg Config) (*DB, error) {
+	fmt.Println(cfg.URL)
+	s, err := mgo.DialWithTimeout(cfg.URL, 2*time.Second)
 	if err != nil {
 		return nil, err
 	}
+	ret := &DB{s: s}
 
-	// fetch indexes, replace if changed
-	// TODO: Research EnsureIndex to see if it handles checking if the
-	// index has changed, or if we have to write that ourselves
-
-	ret := &DB{
-		db: s.DB(""),
-		s:  s,
+	if cfg.Clean {
+		if err := ret.Drop(); err != nil {
+			return nil, fmt.Errorf("error dropping database: %s", err)
+		}
 	}
 
 	ret.addCollection("users", &ret.Users.collection, User{})
@@ -47,16 +53,28 @@ func New(url string) (*DB, error) {
 	ret.addCollection("items", &ret.Items.collection, Item{})
 	ret.addCollection("logs", &ret.Logs.collection, Log{})
 
+	for _, c := range ret.collections {
+		if err := c.CreateIndexes(cfg.ForceIndexCreation); err != nil {
+			return nil, fmt.Errorf("error creating indexes: %s", err)
+		}
+	}
+
 	return ret, nil
 }
 
+func (db *DB) db() *mgo.Database {
+	// db specified in url will be used if empty string is given
+	return db.s.DB("")
+}
+
 func (db *DB) addCollection(name string, c *collection, m interface{}) {
-	c.c = db.db.C(name)
-	c.ModelInfo = ModelInfo{}
+	db.collections = append(db.collections, c)
+	c.c = db.db().C(name)
+	c.ModelInfo = newModelInfo(m)
 }
 
 func (db *DB) Drop() error {
-	return db.db.DropDatabase()
+	return db.db().DropDatabase()
 }
 
 func handleDBError(s *mgo.Session, f func() error) error {

@@ -27,21 +27,20 @@ type App struct {
 	g  *gin.Engine
 }
 
-func NewApp(dbURL string) (*App, error) {
+type Config struct {
+	DBConfig db.Config
+}
+
+func NewApp(cfg Config) (*App, error) {
 	app := App{}
 
-	db, err := db.New(dbURL)
+	db, err := db.New(cfg.DBConfig)
 	if err != nil {
 		return nil, err
 	}
 	app.DB = db
 
-	if err := app.setupIndexes(); err != nil {
-		return nil, err
-	}
-
 	app.setupRoutes()
-
 	return &app, nil
 }
 
@@ -144,34 +143,6 @@ func (app *App) requireFeedID(paramName string) gin.HandlerFunc {
 
 func (app *App) requireItemID(paramName string) gin.HandlerFunc {
 	return app.requireModelID(app.DB.Items.FindByID, paramName, "itemID")
-}
-
-func (app *App) setupIndexes() error {
-	userIndexes := []db.Index{
-		{Key: []string{"username"}, Unique: true},
-		{Key: []string{"feedids"}},
-	}
-
-	feedIndexes := []db.Index{
-		{Key: []string{"url"}, Unique: true},
-		{Key: []string{"itunes_id"}},
-		{Key: []string{"modification_time"}},
-		{Key: []string{"$text:title"}},
-	}
-
-	for _, idx := range userIndexes {
-		if err := app.DB.Users.EnsureIndex(idx); err != nil {
-			return err
-		}
-	}
-
-	for _, idx := range feedIndexes {
-		if err := app.DB.Feeds.EnsureIndex(idx); err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
 
 func (app *App) setupRoutes() {
@@ -670,7 +641,11 @@ func main() {
 		port, _ = strconv.Atoi(s[1])
 	}
 
-	app, err := NewApp(dbURL)
+	app, err := NewApp(Config{
+		DBConfig: db.Config{
+			URL: dbURL,
+		},
+	})
 	if err != nil {
 		panic(fmt.Errorf("Failed to connect to DB: %s (%s)", err, dbURL))
 	}

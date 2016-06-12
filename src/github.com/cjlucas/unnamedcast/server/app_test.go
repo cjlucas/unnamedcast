@@ -26,15 +26,14 @@ func init() {
 }
 
 func newTestApp() *App {
-	dbURL := os.Getenv("DB_URL")
-
-	// Ensure a clean DB
-	db, err := db.New(dbURL)
-	if err := db.Drop(); err != nil {
-		panic(err)
-	}
-
-	app, err := NewApp(dbURL)
+	// Initialize app with a clean database
+	app, err := NewApp(Config{
+		DBConfig: db.Config{
+			URL:                os.Getenv("DB_URL"),
+			Clean:              true,
+			ForceIndexCreation: true,
+		},
+	})
 	if err != nil {
 		panic(err)
 	}

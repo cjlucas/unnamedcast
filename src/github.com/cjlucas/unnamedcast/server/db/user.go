@@ -27,9 +27,9 @@ type ItemState struct {
 
 type User struct {
 	ID               bson.ObjectId   `bson:"_id,omitempty" json:"id"`
-	Username         string          `json:"username" bson:"username"`
+	Username         string          `json:"username" bson:"username" index:",unique"`
 	Password         string          `json:"-" bson:"password"` // encrypted
-	FeedIDs          []bson.ObjectId `json:"feeds" bson:"feed_ids"`
+	FeedIDs          []bson.ObjectId `json:"feeds" bson:"feed_ids" index:"feed_ids"`
 	ItemStates       []ItemState     `json:"states" bson:"states"`
 	CreationTime     time.Time       `json:"creation_time" bson:"creation_time"`
 	ModificationTime time.Time       `json:"modification_time" bson:"modification_time"`

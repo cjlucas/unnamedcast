@@ -246,8 +246,24 @@ func (c collection) FindByID(id bson.ObjectId) Cursor {
 	}
 }
 
-func (c collection) EnsureIndex(idx Index) error {
-	return c.c.EnsureIndex(mgoIndexForIndex(idx))
+func (c collection) createIndex(index Index, force bool) error {
+	if force {
+		c.c.DropIndexName(index.Name)
+	}
+
+	return c.c.EnsureIndex(mgoIndexForIndex(index))
+}
+
+// CreateIndexes creates all indexes in ModelInfo. If force is set, the existing
+// index will be dropped prior to recreating the index.
+func (c collection) CreateIndexes(force bool) error {
+	for _, idx := range c.ModelInfo.Indexes {
+		if err := c.createIndex(idx, force); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (c collection) insert(model interface{}) error {
