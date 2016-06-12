@@ -4,66 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
-
-	"gopkg.in/mgo.v2"
-	"gopkg.in/mgo.v2/bson"
 )
-
-// CopyModel copies all the fields from m2 into m1 excluding any fields
-// specified by ignoredFields. A boolean is returned representing whether
-// any data has changed in m1 as a result of the copy.
-func CopyModel(m1, m2 interface{}, ignoredFields ...string) bool {
-	isIgnoredField := func(name string) bool {
-		for _, s := range ignoredFields {
-			if s == name {
-				return true
-			}
-		}
-		return false
-	}
-
-	// Get the underlying struct as a Value
-	s1 := reflect.ValueOf(m1).Elem()
-	s2 := reflect.ValueOf(m2).Elem()
-	t := s1.Type()
-
-	for _, v := range []reflect.Value{s1, s2} {
-		if v.Kind() == reflect.Ptr {
-			panic("CopyModel was called with a double pointer type")
-		}
-	}
-
-	changed := false
-	for i := 0; i < s1.NumField(); i++ {
-		f := s1.Field(i)
-		f2 := s2.Field(i)
-		fieldName := t.Field(i).Name
-
-		// CanInterface tells us if a field is unexported
-		if !f.CanInterface() || isIgnoredField(fieldName) {
-			continue
-		}
-
-		if !reflect.DeepEqual(f.Interface(), f2.Interface()) {
-			changed = true
-			if !f.CanSet() {
-				panic(fmt.Sprintf("Cannot set field %s", fieldName))
-			}
-			f.Set(f2)
-		}
-	}
-
-	return changed
-}
-
-type Query struct {
-	Filter         bson.M
-	SortField      string
-	SortDesc       bool
-	SelectedFields []string
-	OmittedFields  []string
-	Limit          int
-}
 
 type FieldInfo struct {
 	JSONName      string
@@ -195,84 +136,49 @@ func newModelInfo(m interface{}) ModelInfo {
 	return info
 }
 
-type collection struct {
-	c         *mgo.Collection
-	ModelInfo ModelInfo
-}
+// CopyModel copies all the fields from m2 into m1 excluding any fields
+// specified by ignoredFields. A boolean is returned representing whether
+// any data has changed in m1 as a result of the copy.
+func CopyModel(m1, m2 interface{}, ignoredFields ...string) bool {
+	isIgnoredField := func(name string) bool {
+		for _, s := range ignoredFields {
+			if s == name {
+				return true
+			}
+		}
+		return false
+	}
 
-func (c collection) Find(q *Query) Cursor {
-	if q == nil {
-		return &query{
-			s: c.c.Database.Session,
-			q: c.c.Find(nil),
+	// Get the underlying struct as a Value
+	s1 := reflect.ValueOf(m1).Elem()
+	s2 := reflect.ValueOf(m2).Elem()
+	t := s1.Type()
+
+	for _, v := range []reflect.Value{s1, s2} {
+		if v.Kind() == reflect.Ptr {
+			panic("CopyModel was called with a double pointer type")
 		}
 	}
 
-	cur := &query{
-		s: c.c.Database.Session,
-		q: c.c.Find(q.Filter),
-	}
+	changed := false
+	for i := 0; i < s1.NumField(); i++ {
+		f := s1.Field(i)
+		f2 := s2.Field(i)
+		fieldName := t.Field(i).Name
 
-	sel := make(map[string]int)
-	for _, s := range q.SelectedFields {
-		sel[s] = 1
-	}
-	for _, s := range q.OmittedFields {
-		sel[s] = -1
-	}
-	if len(sel) > 0 {
-		cur.Select(sel)
-	}
-
-	if q.SortField != "" {
-		sortField := q.SortField
-		if q.SortDesc {
-			sortField = "-" + sortField
+		// CanInterface tells us if a field is unexported
+		if !f.CanInterface() || isIgnoredField(fieldName) {
+			continue
 		}
-		cur.Sort(sortField)
-	}
 
-	if q.Limit > 0 {
-		cur.Limit(q.Limit)
-	}
-
-	return cur
-}
-
-func (c collection) FindByID(id bson.ObjectId) Cursor {
-	return &query{
-		s: c.c.Database.Session,
-		q: c.c.FindId(id),
-	}
-}
-
-func (c collection) createIndex(index Index, force bool) error {
-	if force {
-		c.c.DropIndexName(index.Name)
-	}
-
-	return c.c.EnsureIndex(mgoIndexForIndex(index))
-}
-
-// CreateIndexes creates all indexes in ModelInfo. If force is set, the existing
-// index will be dropped prior to recreating the index.
-func (c collection) CreateIndexes(force bool) error {
-	for _, idx := range c.ModelInfo.Indexes {
-		if err := c.createIndex(idx, force); err != nil {
-			return err
+		if !reflect.DeepEqual(f.Interface(), f2.Interface()) {
+			changed = true
+			if !f.CanSet() {
+				panic(fmt.Sprintf("Cannot set field %s", fieldName))
+			}
+			f.Set(f2)
 		}
 	}
 
-	return nil
-}
-
-func (c collection) insert(model interface{}) error {
-	return c.c.Insert(model)
-}
-
-func (c collection) pipeline(pipeline interface{}) *Pipe {
-	return &Pipe{
-		s: c.c.Database.Session,
-		p: c.c.Pipe(pipeline),
-	}
+	return changed
 }

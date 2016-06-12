@@ -35,7 +35,6 @@ type Config struct {
 }
 
 func New(cfg Config) (*DB, error) {
-	fmt.Println(cfg.URL)
 	s, err := mgo.DialWithTimeout(cfg.URL, 2*time.Second)
 	if err != nil {
 		return nil, err
