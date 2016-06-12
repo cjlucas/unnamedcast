@@ -78,8 +78,6 @@ type FieldInfo struct {
 }
 
 func parseFieldTag(tag reflect.StructTag) FieldInfo {
-	tagInfo := FieldInfo{}
-
 	type option struct {
 		Key  string
 		Flag *bool
@@ -104,6 +102,8 @@ func parseFieldTag(tag reflect.StructTag) FieldInfo {
 		}
 	}
 
+	tagInfo := FieldInfo{}
+
 	parseTag("json", &tagInfo.JSONName, []option{
 		{Key: "omitempty", Flag: &tagInfo.JSONOmitEmpty},
 	})
@@ -125,7 +125,8 @@ func parseFieldTag(tag reflect.StructTag) FieldInfo {
 	return tagInfo
 }
 
-// Each collection should have a model info
+// ModelInfo describes the API-DB relationship.
+// This struct is not designed to be initialized directly.
 type ModelInfo struct {
 	// Get Field names
 	Fields []FieldInfo

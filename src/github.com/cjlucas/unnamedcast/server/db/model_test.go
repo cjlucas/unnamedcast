@@ -91,3 +91,21 @@ func TestNewModelInfo(t *testing.T) {
 		}
 	}
 }
+
+func TestModelInfo_LookupAPIName(t *testing.T) {
+	info := newModelInfo(struct {
+		A int `json:"a" bson:"a"`
+	}{})
+	if _, ok := info.LookupAPIName("a"); !ok {
+		t.Error("field not found")
+	}
+}
+
+func TestModelInfo_LookupDBName(t *testing.T) {
+	info := newModelInfo(struct {
+		A int `json:"a" bson:"a"`
+	}{})
+	if _, ok := info.LookupDBName("a"); !ok {
+		t.Error("field not found")
+	}
+}
