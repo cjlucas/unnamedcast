@@ -33,32 +33,26 @@ func New(url string) (*DB, error) {
 		return nil, err
 	}
 
-	db := s.DB("")
-
 	// fetch indexes, replace if changed
 	// TODO: Research EnsureIndex to see if it handles checking if the
 	// index has changed, or if we have to write that ourselves
 
-	return &DB{
-		db: db,
+	ret := &DB{
+		db: s.DB(""),
 		s:  s,
+	}
 
-		Users: UserCollection{
-			collection{c: db.C("users")},
-		},
+	ret.addCollection("users", &ret.Users.collection, User{})
+	ret.addCollection("feeds", &ret.Feeds.collection, Feed{})
+	ret.addCollection("items", &ret.Items.collection, Item{})
+	ret.addCollection("logs", &ret.Logs.collection, Log{})
 
-		Feeds: FeedCollection{
-			collection{c: db.C("feeds")},
-		},
+	return ret, nil
+}
 
-		Items: ItemCollection{
-			collection{c: db.C("items")},
-		},
-
-		Logs: LogCollection{
-			collection{c: db.C("logs")},
-		},
-	}, nil
+func (db *DB) addCollection(name string, c *collection, m interface{}) {
+	c.c = db.db.C(name)
+	c.ModelInfo = ModelInfo{}
 }
 
 func (db *DB) Drop() error {

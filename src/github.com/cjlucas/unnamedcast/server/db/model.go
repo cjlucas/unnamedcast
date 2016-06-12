@@ -3,6 +3,7 @@ package db
 import (
 	"fmt"
 	"reflect"
+	"strings"
 
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
@@ -55,9 +56,55 @@ func CopyModel(m1, m2 interface{}, ignoredFields ...string) bool {
 	return changed
 }
 
+type NewQuery struct {
+	Filter    map[string]interface{}
+	SortField string
+	SortAsc   bool
+	Limit     int
+}
+
+// Each collection should have a model info
+type ModelInfo struct {
+	// Get Field names
+	Fields []string
+
+	// Map JSON to BSON (vice-versa?)
+	APIToDBNameMap map[string]string
+	// (needed for validating REST query parameters)
+
+	// Indexed colums? (could allow index creation to be moved to)
+	// Add ability to delegate index creation/rebuilding/deleting to collection
+	// Instead of in app setup
+}
+
+// Build a Model Info from a given struct
+func newModelInfo(m interface{}) ModelInfo {
+	info := ModelInfo{
+		APIToDBNameMap: make(map[string]string),
+	}
+	model := reflect.TypeOf(m)
+
+	for i := 0; i < model.NumField(); i++ {
+		f := model.Field(i)
+		jsonInfo := f.Tag.Get("json")
+		if jsonInfo == "" || jsonInfo == "-" {
+			continue
+		}
+
+		jsonName := strings.Split(jsonInfo, ",")[0]
+		info.Fields = append(info.Fields, jsonName)
+
+		if bsonInfo := f.Tag.Get("bson"); bsonInfo != "" && bsonInfo != "-" {
+			info.APIToDBNameMap[jsonName] = strings.Split(bsonInfo, ",")[0]
+		}
+	}
+
+	return info
+}
+
 type collection struct {
-	DB *DB
-	c  *mgo.Collection
+	c         *mgo.Collection
+	ModelInfo ModelInfo
 }
 
 func (c collection) Find(q interface{}) Query {

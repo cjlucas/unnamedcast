@@ -1,6 +1,9 @@
 package db
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 type foo struct {
 	A string
@@ -29,5 +32,38 @@ func TestCopyModel_IgnoredFields(t *testing.T) {
 
 	if f2.A != "" {
 		t.Errorf("Mismatch: %s != \"\"", f2.A)
+	}
+}
+
+func TestNewModelInfo(t *testing.T) {
+	cases := []struct {
+		In              interface{}
+		ExpectedFeeds   []string
+		ExpectedNameMap map[string]string
+	}{
+		{
+			In: struct {
+				A int    `json:"a" bson:"a"`
+				B string `json:"b" bson:"b"`
+				C string `json:"-"`
+				D int
+			}{},
+			ExpectedFeeds: []string{"a", "b"},
+			ExpectedNameMap: map[string]string{
+				"a": "a",
+				"b": "b",
+			},
+		},
+	}
+
+	for _, c := range cases {
+		out := newModelInfo(c.In)
+		if !reflect.DeepEqual(out.Fields, c.ExpectedFeeds) {
+			t.Errorf("Fields mismatch %#v != %#v", out.Fields, c.ExpectedFeeds)
+		}
+
+		if !reflect.DeepEqual(out.APIToDBNameMap, c.ExpectedNameMap) {
+			t.Errorf("Fields mismatch %#v != %#v", out.APIToDBNameMap, c.ExpectedNameMap)
+		}
 	}
 }
