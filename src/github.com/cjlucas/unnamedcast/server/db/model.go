@@ -28,16 +28,21 @@ func parseFieldTag(tag reflect.StructTag) FieldInfo {
 	// [<name>][,<opt1>][,<opt2>]
 	// Name can be omitted like so: ",opt1,opt2"
 	parseTag := func(tagName string, name *string, opts []option) {
-		if info := tag.Get(tagName); info != "-" && info != "" {
-			split := strings.Split(info, ",")
-			*name = split[0]
-			if len(split) > 1 {
-				for _, s := range split[1:] {
-					for _, opt := range opts {
-						if s == opt.Key {
-							*opt.Flag = true
-						}
-					}
+		info := tag.Get(tagName)
+		if info == "-" || info == "" {
+			return
+		}
+
+		split := strings.Split(info, ",")
+		*name = split[0]
+		if len(split) == 1 {
+			return
+		}
+
+		for _, s := range split[1:] {
+			for _, opt := range opts {
+				if s == opt.Key {
+					*opt.Flag = true
 				}
 			}
 		}
