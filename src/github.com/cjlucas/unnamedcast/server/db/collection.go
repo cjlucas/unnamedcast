@@ -65,7 +65,9 @@ func (c collection) createIndex(index Index, force bool) error {
 }
 
 // CreateIndexes creates all indexes in ModelInfo. If force is set, the existing
-// index will be dropped prior to recreating the index.
+// index will be dropped prior to recreating the index. An error will
+// be returned if an index already exists only if it's options differ.
+// This is intentional as we don't want to recreate indexes on the fly.
 func (c collection) CreateIndexes(force bool) error {
 	for _, idx := range c.ModelInfo.Indexes {
 		if err := c.createIndex(idx, force); err != nil {
