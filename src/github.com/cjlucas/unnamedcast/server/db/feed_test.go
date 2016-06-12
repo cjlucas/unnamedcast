@@ -3,7 +3,7 @@ package db
 import "testing"
 
 func createFeed(t *testing.T, db *DB, feed *Feed) *Feed {
-	if err := db.CreateFeed(feed); err != nil {
+	if err := db.Feeds.Create(feed); err != nil {
 		t.Fatal("Could not create feed:", err)
 	}
 
@@ -29,13 +29,13 @@ func TestUpdateItem_NoModification(t *testing.T) {
 		GUID: "http://google.com/1",
 	}
 
-	if err := db.CreateItem(item); err != nil {
+	if err := db.Items.Create(item); err != nil {
 		t.Fatal("Could not create item:", err)
 	}
 
 	modTime := item.ModificationTime
 
-	if err := db.UpdateItem(item); err != nil {
+	if err := db.Items.Update(item); err != nil {
 		t.Fatal("Could not update item:", err)
 	}
 

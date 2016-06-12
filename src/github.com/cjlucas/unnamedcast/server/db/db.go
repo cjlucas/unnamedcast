@@ -2,6 +2,7 @@ package db
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"time"
 
@@ -15,25 +16,64 @@ func IsDup(err error) bool {
 	return mgo.IsDup(err)
 }
 
+// DB provides an access layer to the models within the system through collections.
 type DB struct {
-	s *mgo.Session
+	s           *mgo.Session
+	cfg         Config
+	collections []*collection
+
+	Users UserCollection
+	Feeds FeedCollection
+	Items ItemCollection
+	Logs  LogCollection
 }
 
-func New(url string) (*DB, error) {
-	s, err := mgo.DialWithTimeout(url, 2*time.Second)
+type Config struct {
+	URL                string
+	Clean              bool
+	ForceIndexCreation bool
+}
+
+func New(cfg Config) (*DB, error) {
+	s, err := mgo.DialWithTimeout(cfg.URL, 2*time.Second)
 	if err != nil {
 		return nil, err
 	}
-	return &DB{s: s}, nil
+	ret := &DB{s: s}
+
+	if cfg.Clean {
+		if err := ret.Drop(); err != nil {
+			return nil, fmt.Errorf("error dropping database: %s", err)
+		}
+	}
+
+	ret.addCollection("users", &ret.Users.collection, User{})
+	ret.addCollection("feeds", &ret.Feeds.collection, Feed{})
+	ret.addCollection("items", &ret.Items.collection, Item{})
+	ret.addCollection("logs", &ret.Logs.collection, Log{})
+
+	for _, c := range ret.collections {
+		if err := c.CreateIndexes(cfg.ForceIndexCreation); err != nil {
+			return nil, fmt.Errorf("error creating indexes: %s", err)
+		}
+	}
+
+	return ret, nil
+}
+
+func (db *DB) db() *mgo.Database {
+	// db specified in url will be used if empty string is given
+	return db.s.DB("")
+}
+
+func (db *DB) addCollection(name string, c *collection, m interface{}) {
+	db.collections = append(db.collections, c)
+	c.c = db.db().C(name)
+	c.ModelInfo = newModelInfo(m)
 }
 
 func (db *DB) Drop() error {
 	return db.db().DropDatabase()
-}
-
-func (db *DB) db() *mgo.Database {
-	// when given the empty string, database is defered to db name specified in New()
-	return db.s.DB("")
 }
 
 func handleDBError(s *mgo.Session, f func() error) error {
@@ -47,15 +87,6 @@ func handleDBError(s *mgo.Session, f func() error) error {
 	}
 
 	return nil
-}
-
-type Query interface {
-	All(result interface{}) error
-	Count() (int, error)
-	One(result interface{}) error
-	Select(selector interface{}) Query
-	Sort(fields ...string) Query
-	Limit(n int) Query
 }
 
 type Index struct {
@@ -72,6 +103,12 @@ func mgoIndexForIndex(idx Index) mgo.Index {
 		Background: true,
 		DropDups:   true,
 	}
+}
+
+type Cursor interface {
+	All(result interface{}) error
+	One(result interface{}) error
+	Count() (int, error)
 }
 
 type query struct {
@@ -102,17 +139,17 @@ func (q *query) One(result interface{}) error {
 	})
 }
 
-func (q *query) Select(selector interface{}) Query {
+func (q *query) Select(selector interface{}) Cursor {
 	q.q = q.q.Select(selector)
 	return q
 }
 
-func (q *query) Sort(fields ...string) Query {
+func (q *query) Sort(fields ...string) Cursor {
 	q.q = q.q.Sort(fields...)
 	return q
 }
 
-func (q *query) Limit(n int) Query {
+func (q *query) Limit(n int) Cursor {
 	q.q = q.q.Limit(n)
 	return q
 }

@@ -3,20 +3,19 @@ package db
 import (
 	"time"
 
-	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 )
 
 type Feed struct {
 	ID                bson.ObjectId   `bson:"_id,omitempty" json:"id"`
-	Title             string          `json:"title" bson:"title"`
-	URL               string          `json:"url" bson:"url"`
+	Title             string          `json:"title" bson:"title" index:",text"`
+	URL               string          `json:"url" bson:"url" index:",unique"`
 	Author            string          `json:"author" bson:"author"`
 	Items             []bson.ObjectId `json:"items" bson:"items"`
 	CreationTime      time.Time       `json:"creation_time" bson:"creation_time"`
-	ModificationTime  time.Time       `json:"modification_time" bson:"modification_time"`
+	ModificationTime  time.Time       `json:"modification_time" bson:"modification_time" index:"modification_time"`
 	ImageURL          string          `json:"image_url" bson:"image_url"`
-	ITunesID          int             `json:"itunes_id" bson:"itunes_id"`
+	ITunesID          int             `json:"itunes_id" bson:"itunes_id" index:"itunes_id"`
 	ITunesReviewCount int             `json:"itunes_review_count" bson:"itunes_review_count"`
 	ITunesRatingCount int             `json:"itunes_rating_count" bson:"itunes_rating_count"`
 
@@ -53,44 +52,32 @@ type Item struct {
 	ImageURL         string        `json:"image_url" bson:"image_url"`
 }
 
-func (db *DB) feeds() *mgo.Collection {
-	return db.db().C("feeds")
+type FeedCollection struct {
+	collection
 }
 
-func (db *DB) FindFeeds(q interface{}) Query {
-	return &query{
-		s: db.s,
-		q: db.feeds().Find(q),
-	}
-}
-
-func (db *DB) FindFeedByID(id bson.ObjectId) Query {
-	return db.FindFeeds(bson.M{"_id": id})
-}
-
-func (db *DB) FeedByID(id bson.ObjectId) (*Feed, error) {
+func (c FeedCollection) FeedByID(id bson.ObjectId) (*Feed, error) {
 	var feed Feed
-	if err := db.FindFeedByID(id).One(&feed); err != nil {
+	if err := c.FindByID(id).One(&feed); err != nil {
 		return nil, err
 	}
 	return &feed, nil
 }
 
-func (db *DB) CreateFeed(feed *Feed) error {
+func (c FeedCollection) Create(feed *Feed) error {
 	feed.ID = bson.NewObjectId()
 	feed.CreationTime = time.Now().UTC()
 	feed.ModificationTime = time.Now().UTC()
-	return db.feeds().Insert(feed)
+	return c.insert(feed)
 }
 
-func (db *DB) UpdateFeed(feed *Feed) error {
-	var origFeed Feed
-	if err := db.FindFeedByID(feed.ID).One(&origFeed); err != nil {
+func (c FeedCollection) Update(feed *Feed) error {
+	origFeed, err := c.FeedByID(feed.ID)
+	if err != nil {
 		return err
 	}
 
 	ignoredFields := []string{"ID", "CreationTime", "ModificationTime"}
-
 	// Ignore Category if both are equal in the case where both subcats are 0 len
 	// This is necessary due to how DeepEqual and JSON/BSON unmarshalling work.
 	// BSON unmarshalling will still make the slice even if there is no subcat,
@@ -106,31 +93,27 @@ func (db *DB) UpdateFeed(feed *Feed) error {
 		ignoredFields = append(ignoredFields, "Category")
 	}
 
-	if CopyModel(&origFeed, feed, ignoredFields...) {
+	if CopyModel(origFeed, feed, ignoredFields...) {
 		origFeed.ModificationTime = time.Now().UTC()
 	}
 
-	return db.feeds().UpdateId(origFeed.ID, &origFeed)
+	return c.c.UpdateId(origFeed.ID, &origFeed)
 }
 
-func (db *DB) EnsureFeedIndex(idx Index) error {
-	return db.feeds().EnsureIndex(mgoIndexForIndex(idx))
+type ItemCollection struct {
+	collection
 }
 
-func (db *DB) items() *mgo.Collection {
-	return db.db().C("items")
-}
-
-func (db *DB) CreateItem(item *Item) error {
+func (c ItemCollection) Create(item *Item) error {
 	item.ID = bson.NewObjectId()
 	item.CreationTime = time.Now().UTC()
 	item.ModificationTime = time.Now().UTC()
-	return db.items().Insert(item)
+	return c.insert(item)
 }
 
-func (db *DB) UpdateItem(item *Item) error {
+func (c ItemCollection) Update(item *Item) error {
 	var origItem Item
-	if err := db.FindItemByID(item.ID).One(&origItem); err != nil {
+	if err := c.FindByID(item.ID).One(&origItem); err != nil {
 		return err
 	}
 
@@ -146,16 +129,5 @@ func (db *DB) UpdateItem(item *Item) error {
 		item.ModificationTime = time.Now().UTC()
 	}
 
-	return db.items().UpdateId(origItem.ID, &origItem)
-}
-
-func (db *DB) FindItems(q interface{}) Query {
-	return &query{
-		s: db.s,
-		q: db.items().Find(q),
-	}
-}
-
-func (db *DB) FindItemByID(id bson.ObjectId) Query {
-	return db.FindItems(bson.M{"_id": id})
+	return c.c.UpdateId(origItem.ID, &origItem)
 }

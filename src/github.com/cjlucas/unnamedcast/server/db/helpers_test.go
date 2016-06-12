@@ -3,12 +3,13 @@ package db
 import "os"
 
 func newDB() *DB {
-	db, err := New(os.Getenv("DB_URL"))
-	if err != nil {
-		panic(err)
-	}
+	db, err := New(Config{
+		URL:                os.Getenv("DB_URL"),
+		Clean:              true,
+		ForceIndexCreation: true,
+	})
 
-	if err := db.Drop(); err != nil {
+	if err != nil {
 		panic(err)
 	}
 
