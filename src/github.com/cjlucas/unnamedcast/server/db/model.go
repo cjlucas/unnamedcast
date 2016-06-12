@@ -65,39 +65,129 @@ type Query struct {
 	Limit          int
 }
 
+type FieldInfo struct {
+	JSONName      string
+	JSONOmitEmpty bool
+
+	BSONName      string
+	BSONOmitEmpty bool
+
+	IndexName   string
+	IndexUnique bool
+	IndexText   bool
+}
+
+func parseFieldTag(tag reflect.StructTag) FieldInfo {
+	tagInfo := FieldInfo{}
+
+	type option struct {
+		Key  string
+		Flag *bool
+	}
+
+	// Parse encoding/json styled tags where the format is the following:
+	// [<name>][,<opt1>][,<opt2>]
+	// Name can be omitted like so: ",opt1,opt2"
+	parseTag := func(tagName string, name *string, opts []option) {
+		if info := tag.Get(tagName); info != "-" && info != "" {
+			split := strings.Split(info, ",")
+			*name = split[0]
+			if len(split) > 1 {
+				for _, s := range split[1:] {
+					for _, opt := range opts {
+						if s == opt.Key {
+							*opt.Flag = true
+						}
+					}
+				}
+			}
+		}
+	}
+
+	parseTag("json", &tagInfo.JSONName, []option{
+		{Key: "omitempty", Flag: &tagInfo.JSONOmitEmpty},
+	})
+
+	parseTag("bson", &tagInfo.BSONName, []option{
+		{Key: "omitempty", Flag: &tagInfo.JSONOmitEmpty},
+	})
+
+	parseTag("index", &tagInfo.IndexName, []option{
+		{Key: "unique", Flag: &tagInfo.IndexUnique},
+		{Key: "text", Flag: &tagInfo.IndexText},
+	})
+
+	// If index name is omitted, default to bson name
+	if tag.Get("index") != "" && tagInfo.IndexName == "" {
+		tagInfo.IndexName = tagInfo.BSONName
+	}
+
+	return tagInfo
+}
+
 // Each collection should have a model info
 type ModelInfo struct {
 	// Get Field names
-	Fields []string
+	Fields []FieldInfo
 
-	// Map JSON to BSON (vice-versa?)
-	APIToDBNameMap map[string]string
-	// (needed for validating REST query parameters)
+	jsonNameMap map[string]int
+	bsonNameMap map[string]int
 
 	// Indexed colums? (could allow index creation to be moved to)
 	// Add ability to delegate index creation/rebuilding/deleting to collection
 	// Instead of in app setup
+	Indexes map[string]Index
+}
+
+func (info *ModelInfo) addField(field FieldInfo) {
+	info.Fields = append(info.Fields, field)
+	info.jsonNameMap[field.JSONName] = len(info.Fields) - 1
+	info.bsonNameMap[field.BSONName] = len(info.Fields) - 1
+}
+
+func (info *ModelInfo) lookupName(name string, nameMap map[string]int) (FieldInfo, bool) {
+	if i, ok := nameMap[name]; ok {
+		return info.Fields[i], true
+	}
+	return FieldInfo{}, false
+}
+
+func (info *ModelInfo) LookupAPIName(name string) (FieldInfo, bool) {
+	return info.lookupName(name, info.jsonNameMap)
+}
+
+func (info *ModelInfo) LookupDBName(name string) (FieldInfo, bool) {
+	return info.lookupName(name, info.bsonNameMap)
 }
 
 // Build a Model Info from a given struct
 func newModelInfo(m interface{}) ModelInfo {
 	info := ModelInfo{
-		APIToDBNameMap: make(map[string]string),
+		jsonNameMap: make(map[string]int),
+		bsonNameMap: make(map[string]int),
+		Indexes:     make(map[string]Index),
 	}
 	model := reflect.TypeOf(m)
 
 	for i := 0; i < model.NumField(); i++ {
 		f := model.Field(i)
-		jsonInfo := f.Tag.Get("json")
-		if jsonInfo == "" || jsonInfo == "-" {
+		tag := parseFieldTag(f.Tag)
+		if tag.JSONName == "" || tag.BSONName == "" {
 			continue
 		}
 
-		jsonName := strings.Split(jsonInfo, ",")[0]
-		info.Fields = append(info.Fields, jsonName)
+		info.addField(tag)
 
-		if bsonInfo := f.Tag.Get("bson"); bsonInfo != "" && bsonInfo != "-" {
-			info.APIToDBNameMap[jsonName] = strings.Split(bsonInfo, ",")[0]
+		if tag.IndexName != "" {
+			if idx, ok := info.Indexes[tag.IndexName]; ok {
+				idx.Key = append(idx.Key, tag.BSONName)
+			} else {
+				info.Indexes[tag.IndexName] = Index{
+					Name:   tag.IndexName,
+					Key:    []string{tag.BSONName},
+					Unique: tag.IndexUnique,
+				}
+			}
 		}
 	}
 

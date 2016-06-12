@@ -38,8 +38,8 @@ func TestCopyModel_IgnoredFields(t *testing.T) {
 func TestNewModelInfo(t *testing.T) {
 	cases := []struct {
 		In              interface{}
-		ExpectedFeeds   []string
-		ExpectedNameMap map[string]string
+		ExpectedFields  []FieldInfo
+		ExpectedIndexes map[string]Index
 	}{
 		{
 			In: struct {
@@ -48,22 +48,46 @@ func TestNewModelInfo(t *testing.T) {
 				C string `json:"-"`
 				D int
 			}{},
-			ExpectedFeeds: []string{"a", "b"},
-			ExpectedNameMap: map[string]string{
-				"a": "a",
-				"b": "b",
+			ExpectedFields: []FieldInfo{
+				{
+					JSONName: "a",
+					BSONName: "a",
+				},
+				{
+					JSONName: "b",
+					BSONName: "b",
+				},
+			},
+		},
+		{
+			In: struct {
+				A int `json:"a" bson:"a" index:"a,unique"`
+			}{},
+			ExpectedFields: []FieldInfo{
+				{
+					JSONName:    "a",
+					BSONName:    "a",
+					IndexName:   "a",
+					IndexUnique: true,
+				},
+			},
+			ExpectedIndexes: map[string]Index{
+				"a": {
+					Name:   "a",
+					Key:    []string{"a"},
+					Unique: true,
+				},
 			},
 		},
 	}
 
 	for _, c := range cases {
 		out := newModelInfo(c.In)
-		if !reflect.DeepEqual(out.Fields, c.ExpectedFeeds) {
-			t.Errorf("Fields mismatch %#v != %#v", out.Fields, c.ExpectedFeeds)
+		if len(c.ExpectedFields) > 0 && !reflect.DeepEqual(out.Fields, c.ExpectedFields) {
+			t.Errorf("Fields mismatch %#v != %#v", out.Fields, c.ExpectedFields)
 		}
-
-		if !reflect.DeepEqual(out.APIToDBNameMap, c.ExpectedNameMap) {
-			t.Errorf("Fields mismatch %#v != %#v", out.APIToDBNameMap, c.ExpectedNameMap)
+		if len(c.ExpectedIndexes) > 0 && !reflect.DeepEqual(out.Indexes, c.ExpectedIndexes) {
+			t.Errorf("Indexes mismatch %#v != %#v", out.Indexes, c.ExpectedIndexes)
 		}
 	}
 }
