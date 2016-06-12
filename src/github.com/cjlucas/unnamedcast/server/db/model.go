@@ -56,11 +56,13 @@ func CopyModel(m1, m2 interface{}, ignoredFields ...string) bool {
 	return changed
 }
 
-type NewQuery struct {
-	Filter    map[string]interface{}
-	SortField string
-	SortAsc   bool
-	Limit     int
+type Query struct {
+	Filter         bson.M
+	SortField      string
+	SortDesc       bool
+	SelectedFields []string
+	OmittedFields  []string
+	Limit          int
 }
 
 // Each collection should have a model info
@@ -107,14 +109,46 @@ type collection struct {
 	ModelInfo ModelInfo
 }
 
-func (c collection) Find(q interface{}) Query {
-	return &query{
-		s: c.c.Database.Session,
-		q: c.c.Find(q),
+func (c collection) Find(q *Query) Cursor {
+	if q == nil {
+		return &query{
+			s: c.c.Database.Session,
+			q: c.c.Find(nil),
+		}
 	}
+
+	cur := &query{
+		s: c.c.Database.Session,
+		q: c.c.Find(q.Filter),
+	}
+
+	sel := make(map[string]int)
+	for _, s := range q.SelectedFields {
+		sel[s] = 1
+	}
+	for _, s := range q.OmittedFields {
+		sel[s] = -1
+	}
+	if len(sel) > 0 {
+		cur.Select(sel)
+	}
+
+	if q.SortField != "" {
+		sortField := q.SortField
+		if q.SortDesc {
+			sortField = "-" + sortField
+		}
+		cur.Sort(sortField)
+	}
+
+	if q.Limit > 0 {
+		cur.Limit(q.Limit)
+	}
+
+	return cur
 }
 
-func (c collection) FindByID(id bson.ObjectId) Query {
+func (c collection) FindByID(id bson.ObjectId) Cursor {
 	return &query{
 		s: c.c.Database.Session,
 		q: c.c.FindId(id),

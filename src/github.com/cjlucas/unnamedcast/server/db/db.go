@@ -72,15 +72,6 @@ func handleDBError(s *mgo.Session, f func() error) error {
 	return nil
 }
 
-type Query interface {
-	All(result interface{}) error
-	Count() (int, error)
-	One(result interface{}) error
-	Select(selector interface{}) Query
-	Sort(fields ...string) Query
-	Limit(n int) Query
-}
-
 type Index struct {
 	Name   string
 	Key    []string
@@ -95,6 +86,12 @@ func mgoIndexForIndex(idx Index) mgo.Index {
 		Background: true,
 		DropDups:   true,
 	}
+}
+
+type Cursor interface {
+	All(result interface{}) error
+	One(result interface{}) error
+	Count() (int, error)
 }
 
 type query struct {
@@ -125,17 +122,17 @@ func (q *query) One(result interface{}) error {
 	})
 }
 
-func (q *query) Select(selector interface{}) Query {
+func (q *query) Select(selector interface{}) Cursor {
 	q.q = q.q.Select(selector)
 	return q
 }
 
-func (q *query) Sort(fields ...string) Query {
+func (q *query) Sort(fields ...string) Cursor {
 	q.q = q.q.Sort(fields...)
 	return q
 }
 
-func (q *query) Limit(n int) Query {
+func (q *query) Limit(n int) Cursor {
 	q.q = q.q.Limit(n)
 	return q
 }

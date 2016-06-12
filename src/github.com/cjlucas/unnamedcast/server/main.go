@@ -96,7 +96,7 @@ func (app *App) logErrors(c *gin.Context) {
 	})
 }
 
-func (app *App) requireModelID(f func(id bson.ObjectId) db.Query, paramName, boundName string) gin.HandlerFunc {
+func (app *App) requireModelID(f func(id bson.ObjectId) db.Cursor, paramName, boundName string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id, err := newObjectIDFromHex(c.Param(paramName))
 		if err != nil {
@@ -195,19 +195,17 @@ func (app *App) setupRoutes() {
 			return
 		}
 
-		q := app.DB.Feeds.Find(bson.M{
-			"$text": bson.M{"$search": query},
+		cur := app.DB.Feeds.Find(&db.Query{
+			Filter: bson.M{
+				"$text": bson.M{"$search": query},
+			},
+			SelectedFields: []string{"title", "category", "image_url"},
+			SortField:      "$textScore:score",
+			Limit:          limit,
 		})
 
-		q.Select(bson.M{
-			"score":     bson.M{"$meta": "textScore"},
-			"title":     1,
-			"category":  1,
-			"image_url": 1,
-		}).Sort("$textScore:score").Limit(limit)
-
 		var results []db.Feed
-		if err := q.All(&results); err != nil {
+		if err := cur.All(&results); err != nil {
 			c.AbortWithError(500, err)
 		}
 
@@ -228,8 +226,13 @@ func (app *App) setupRoutes() {
 			return
 		}
 
+		cur := app.DB.Users.Find(&db.Query{
+			Filter: bson.M{"username": username},
+			Limit:  1,
+		})
+
 		var user db.User
-		if err := app.DB.Users.Find(bson.M{"username": username}).One(&user); err != nil {
+		if err := cur.One(&user); err != nil {
 			c.AbortWithStatus(http.StatusBadRequest)
 			return
 		}
@@ -376,25 +379,30 @@ func (app *App) setupRoutes() {
 	// GET /api/feeds?url=http://url.com
 	// GET /api/feeds?itunes_id=43912431
 	api.GET("/feeds", func(c *gin.Context) {
-		var query bson.M
+		var filter bson.M
 		if val := c.Query("url"); val != "" {
-			query = bson.M{"url": val}
+			filter = bson.M{"url": val}
 		} else if val := c.Query("itunes_id"); val != "" {
 			id, err := strconv.Atoi(val)
 			if err != nil {
 				c.AbortWithError(http.StatusBadRequest, err)
 				return
 			}
-			query = bson.M{"itunes_id": id}
+			filter = bson.M{"itunes_id": id}
 		}
 
-		if query == nil {
+		if filter == nil {
 			c.AbortWithStatus(http.StatusBadRequest)
 			return
 		}
 
+		cur := app.DB.Feeds.Find(&db.Query{
+			Filter: filter,
+		})
+
+		// TODO: use a switch here
 		var feed db.Feed
-		if err := app.DB.Feeds.Find(query).One(&feed); err != nil {
+		if err := cur.One(&feed); err != nil {
 			if err == db.ErrNotFound {
 				c.AbortWithStatus(http.StatusNotFound)
 			} else {
@@ -482,14 +490,19 @@ func (app *App) setupRoutes() {
 			return
 		}
 
-		itemsQuery := bson.M{
+		filter := bson.M{
 			"_id": bson.M{"$in": feed.Items},
 		}
 		if !modifiedSinceDate.IsZero() {
-			itemsQuery["modification_time"] = bson.M{"$gt": modifiedSinceDate}
+			filter["modification_time"] = bson.M{"$gt": modifiedSinceDate}
 		}
+
+		cur := app.DB.Items.Find(&db.Query{
+			Filter: filter,
+		})
+
 		var items []db.Item
-		if err := app.DB.Items.Find(itemsQuery).All(&items); err != nil {
+		if err := cur.All(&items); err != nil {
 			c.AbortWithError(http.StatusInternalServerError, err)
 			return
 		}
@@ -500,14 +513,17 @@ func (app *App) setupRoutes() {
 	// GET /api/feeds/:id/users
 	api.GET("/feeds/:id/users", app.requireFeedID("id"), func(c *gin.Context) {
 		id := c.MustGet("feedID").(bson.ObjectId)
-		query := bson.M{
-			"feed_ids": bson.M{
-				"$in": []bson.ObjectId{id},
+
+		cur := app.DB.Users.Find(&db.Query{
+			Filter: bson.M{
+				"feed_ids": bson.M{
+					"$in": []bson.ObjectId{id},
+				},
 			},
-		}
+		})
 
 		var users []db.User
-		if err := app.DB.Users.Find(query).All(&users); err != nil {
+		if err := cur.All(&users); err != nil {
 			c.AbortWithError(http.StatusInternalServerError, err)
 			return
 		}
