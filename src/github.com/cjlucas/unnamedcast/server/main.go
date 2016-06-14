@@ -423,12 +423,7 @@ func (app *App) setupRoutes() {
 		}
 
 		if query.Filter == nil {
-			var feeds []db.Feed
-			if err := app.DB.Feeds.Find(query).All(&feeds); err != nil {
-				c.AbortWithError(http.StatusInternalServerError, err)
-			} else {
-				c.JSON(http.StatusOK, feeds)
-			}
+			c.AbortWithStatus(http.StatusBadRequest)
 			return
 		}
 
