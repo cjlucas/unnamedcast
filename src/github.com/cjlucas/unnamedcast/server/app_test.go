@@ -22,7 +22,7 @@ var emptyObjectID bson.ObjectId
 
 func init() {
 	gin.SetMode(gin.TestMode)
-	// gin.DefaultWriter, _ = os.Open(os.DevNull)
+	gin.DefaultWriter, _ = os.Open(os.DevNull)
 }
 
 func newTestApp() *App {
