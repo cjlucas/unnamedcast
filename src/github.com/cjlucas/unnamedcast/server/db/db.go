@@ -51,6 +51,7 @@ func New(cfg Config) (*DB, error) {
 	ret.addCollection("feeds", &ret.Feeds.collection, Feed{})
 	ret.addCollection("items", &ret.Items.collection, Item{})
 	ret.addCollection("logs", &ret.Logs.collection, Log{})
+	ret.addSubCollection(&ret.Users.ItemStateCollection, ItemState{})
 
 	for _, c := range ret.collections {
 		if err := c.CreateIndexes(cfg.ForceIndexCreation); err != nil {
@@ -69,6 +70,11 @@ func (db *DB) db() *mgo.Database {
 func (db *DB) addCollection(name string, c *collection, m interface{}) {
 	db.collections = append(db.collections, c)
 	c.c = db.db().C(name)
+	c.ModelInfo = newModelInfo(m)
+}
+
+func (db *DB) addSubCollection(c *collection, m interface{}) {
+	db.collections = append(db.collections, c)
 	c.ModelInfo = newModelInfo(m)
 }
 

@@ -8,6 +8,7 @@ import (
 )
 
 type collection struct {
+	// c can be nil if collection is really a subcollection in the db
 	c         *mgo.Collection
 	ModelInfo ModelInfo
 }
@@ -93,8 +94,6 @@ func (c collection) insert(model interface{}) error {
 func (c collection) filterCond(query Query, varName string) bson.M {
 	// This code only handles the trivial case, as that is all that's needed currently
 	cond := make(bson.M)
-
-	fmt.Printf("%#v\n", c.ModelInfo)
 
 	for field, expr := range query.Filter {
 		if _, ok := c.ModelInfo.LookupDBName(field); !ok {
