@@ -68,6 +68,69 @@ func unmarshalFeed(c *gin.Context) {
 	c.Set("feed", &feed)
 }
 
+func ensureQueryExists(c *gin.Context) *db.Query {
+	if q, ok := c.Get("query"); ok {
+		return q.(*db.Query)
+	}
+
+	q := &db.Query{}
+	c.Set("query", q)
+	return q
+}
+
+func parseSortParams(mi db.ModelInfo, sortableFields ...string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		field := c.Query("sort_by")
+		order := c.Query("sort_order")
+		if field == "" {
+			return
+		}
+		if order == "" {
+			c.AbortWithError(http.StatusBadRequest, errors.New("sort_by given without sort_order"))
+			return
+		}
+
+		found := false
+		for _, f := range sortableFields {
+			if field == f {
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("\"%s\" is not a sortable field", field))
+			return
+		}
+
+		info, ok := mi.LookupAPIName(field)
+		if !ok {
+			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("\"%s\" is not a known field", field))
+			return
+		}
+		field = info.BSONName
+
+		query := ensureQueryExists(c)
+		query.SortField = field
+		query.SortDesc = (order == "desc")
+	}
+}
+
+func parseLimitParams(c *gin.Context) {
+	limit := c.Query("limit")
+	if limit == "" {
+		return
+	}
+
+	n, err := strconv.Atoi(limit)
+	if err != nil {
+		c.AbortWithError(http.StatusBadRequest, errors.New("limit value is invalid"))
+	}
+
+	query := ensureQueryExists(c)
+	query.Limit = n
+}
+
 func (app *App) logErrors(c *gin.Context) {
 	body, err := ioutil.ReadAll(c.Request.Body)
 	c.Request.Body.Close()
@@ -149,6 +212,7 @@ func (app *App) setupRoutes() {
 	app.g = gin.Default()
 
 	// GET /search_feeds
+	// TODO: use parseLimitLimit
 	app.g.GET("/search_feeds", func(c *gin.Context) {
 		var limit int
 		if limitStr := c.Query("limit"); limitStr == "" {
@@ -219,13 +283,17 @@ func (app *App) setupRoutes() {
 	api := app.g.Group("/api", app.logErrors)
 
 	// GET /api/users
-	api.GET("/users", func(c *gin.Context) {
-		var users []db.User
-		if err := app.DB.Users.Find(nil).All(&users); err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-		}
-		c.JSON(http.StatusOK, users)
-	})
+	api.GET("/users",
+		parseSortParams(app.DB.Users.ModelInfo, "modification_time"),
+		parseLimitParams,
+		func(c *gin.Context) {
+			var users []db.User
+			if err := app.DB.Users.Find(nil).All(&users); err != nil {
+				c.AbortWithError(http.StatusInternalServerError, err)
+			}
+			c.JSON(http.StatusOK, users)
+		},
+	)
 
 	// POST /api/users
 	api.POST("/users", func(c *gin.Context) {
@@ -335,55 +403,68 @@ func (app *App) setupRoutes() {
 		}
 	})
 
-	api.DELETE("/users/:id/states/:itemID", app.requireUserID("id"), app.requireItemID("itemID"), func(c *gin.Context) {
-		userID := c.MustGet("userID").(bson.ObjectId)
-		itemID := c.MustGet("itemID").(bson.ObjectId)
+	api.DELETE("/users/:id/states/:itemID",
+		app.requireUserID("id"),
+		app.requireItemID("itemID"),
+		func(c *gin.Context) {
+			userID := c.MustGet("userID").(bson.ObjectId)
+			itemID := c.MustGet("itemID").(bson.ObjectId)
 
-		if err := app.DB.Users.DeleteItemState(userID, itemID); err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-			return
-		}
-
-		c.Status(http.StatusOK)
-	})
-
-	// GET /api/feeds?url=http://url.com
-	// GET /api/feeds?itunes_id=43912431
-	api.GET("/feeds", func(c *gin.Context) {
-		var filter bson.M
-		if val := c.Query("url"); val != "" {
-			filter = bson.M{"url": val}
-		} else if val := c.Query("itunes_id"); val != "" {
-			id, err := strconv.Atoi(val)
-			if err != nil {
-				c.AbortWithError(http.StatusBadRequest, err)
+			if err := app.DB.Users.DeleteItemState(userID, itemID); err != nil {
+				c.AbortWithError(http.StatusInternalServerError, err)
 				return
 			}
-			filter = bson.M{"itunes_id": id}
-		}
 
-		if filter == nil {
-			c.AbortWithStatus(http.StatusBadRequest)
-			return
-		}
+			c.Status(http.StatusOK)
+		},
+	)
 
-		cur := app.DB.Feeds.Find(&db.Query{
-			Filter: filter,
-		})
+	// GET /api/feeds
+	// GET /api/feeds?url=http://url.com
+	// GET /api/feeds?itunes_id=43912431
+	//
+	// TODO: modify the ?url and ?itunes_id variants to return a list for consistency
+	api.GET("/feeds",
+		parseSortParams(app.DB.Feeds.ModelInfo, "modification_time"),
+		parseLimitParams,
+		func(c *gin.Context) {
+			query := ensureQueryExists(c)
 
-		// TODO: use a switch here
-		var feed db.Feed
-		if err := cur.One(&feed); err != nil {
-			if err == db.ErrNotFound {
-				c.AbortWithStatus(http.StatusNotFound)
-			} else {
-				c.AbortWithError(http.StatusInternalServerError, err)
+			if val := c.Query("url"); val != "" {
+				query.Filter = bson.M{"url": val}
+			} else if val := c.Query("itunes_id"); val != "" {
+				id, err := strconv.Atoi(val)
+				if err != nil {
+					c.AbortWithError(http.StatusBadRequest, err)
+					return
+				}
+				query.Filter = bson.M{"itunes_id": id}
 			}
-			return
-		}
 
-		c.JSON(200, &feed)
-	})
+			if query.Filter == nil {
+				var feeds []db.Feed
+				if err := app.DB.Feeds.Find(query).All(&feeds); err != nil {
+					c.AbortWithError(http.StatusInternalServerError, err)
+				} else {
+					c.JSON(http.StatusOK, feeds)
+				}
+				return
+			}
+
+			// TODO: use a switch here
+			var feed db.Feed
+			if err := app.DB.Feeds.Find(query).One(&feed); err != nil {
+				if err == db.ErrNotFound {
+					c.AbortWithStatus(http.StatusNotFound)
+				} else {
+					c.AbortWithError(http.StatusInternalServerError, err)
+				}
+				return
+			}
+
+			c.JSON(http.StatusOK, &feed)
+		},
+	)
 
 	// POST /api/feeds
 	api.POST("/feeds", unmarshalFeed, func(c *gin.Context) {
@@ -441,45 +522,46 @@ func (app *App) setupRoutes() {
 
 	// GET /api/feeds/:id/items[?modified_since=2006-01-02T15:04:05Z07:00]
 	// NOTE: modified_since date check is strictly greater than
-	api.GET("/feeds/:id/items", app.requireFeedID("id"), func(c *gin.Context) {
-		feedID := c.MustGet("feedID").(bson.ObjectId)
-		modifiedSince := c.Query("modified_since")
+	api.GET("/feeds/:id/items",
+		parseSortParams(app.DB.Items.ModelInfo, "modification_time"),
+		parseLimitParams,
+		app.requireFeedID("id"),
+		func(c *gin.Context) {
+			query := ensureQueryExists(c)
+			feedID := c.MustGet("feedID").(bson.ObjectId)
+			modifiedSince := c.Query("modified_since")
 
-		var modifiedSinceDate time.Time
-		if modifiedSince != "" {
-			t, err := time.Parse(time.RFC3339, modifiedSince)
+			var modifiedSinceDate time.Time
+			if modifiedSince != "" {
+				t, err := time.Parse(time.RFC3339, modifiedSince)
+				if err != nil {
+					c.AbortWithError(http.StatusBadRequest, err)
+					return
+				}
+				modifiedSinceDate = t
+			}
+
+			feed, err := app.DB.Feeds.FeedByID(feedID)
 			if err != nil {
-				c.AbortWithError(http.StatusBadRequest, err)
+				c.AbortWithError(http.StatusInternalServerError, err)
 				return
 			}
-			modifiedSinceDate = t
-		}
 
-		feed, err := app.DB.Feeds.FeedByID(feedID)
-		if err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-			return
-		}
+			query.Filter = bson.M{
+				"_id": bson.M{"$in": feed.Items},
+			}
+			if !modifiedSinceDate.IsZero() {
+				query.Filter["modification_time"] = bson.M{"$gt": modifiedSinceDate}
+			}
 
-		filter := bson.M{
-			"_id": bson.M{"$in": feed.Items},
-		}
-		if !modifiedSinceDate.IsZero() {
-			filter["modification_time"] = bson.M{"$gt": modifiedSinceDate}
-		}
+			var items []db.Item
+			if err := app.DB.Items.Find(query).All(&items); err != nil {
+				c.AbortWithError(http.StatusInternalServerError, err)
+				return
+			}
 
-		cur := app.DB.Items.Find(&db.Query{
-			Filter: filter,
+			c.JSON(http.StatusOK, &items)
 		})
-
-		var items []db.Item
-		if err := cur.All(&items); err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-			return
-		}
-
-		c.JSON(http.StatusOK, &items)
-	})
 
 	// GET /api/feeds/:id/users
 	api.GET("/feeds/:id/users", app.requireFeedID("id"), func(c *gin.Context) {
