@@ -131,6 +131,20 @@ func parseLimitParams(c *gin.Context) {
 	query.Limit = n
 }
 
+func parseQueryParams(spec interface{}) gin.HandlerFunc {
+	info := NewQueryParamInfo(spec)
+
+	return func(c *gin.Context) {
+		params, err := info.Parse(c.Request.URL.Query())
+		if err != nil {
+			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("failed to parse query params: %s", err))
+			return
+		}
+
+		c.Set("params", params)
+	}
+}
+
 func (app *App) logErrors(c *gin.Context) {
 	body, err := ioutil.ReadAll(c.Request.Body)
 	c.Request.Body.Close()
@@ -424,21 +438,24 @@ func (app *App) setupRoutes() {
 	// GET /api/feeds?itunes_id=43912431
 	//
 	// TODO: modify the ?url and ?itunes_id variants to return a list for consistency
+
+	type GetFeedsQueryParams struct {
+		URL      string
+		ITunesID int `param:"itunes_id"`
+	}
+
 	api.GET("/feeds",
+		parseQueryParams(GetFeedsQueryParams{}),
 		parseSortParams(app.DB.Feeds.ModelInfo, "modification_time"),
 		parseLimitParams,
 		func(c *gin.Context) {
+			params := c.MustGet("params").(*GetFeedsQueryParams)
 			query := ensureQueryExists(c)
 
-			if val := c.Query("url"); val != "" {
-				query.Filter = bson.M{"url": val}
-			} else if val := c.Query("itunes_id"); val != "" {
-				id, err := strconv.Atoi(val)
-				if err != nil {
-					c.AbortWithError(http.StatusBadRequest, err)
-					return
-				}
-				query.Filter = bson.M{"itunes_id": id}
+			if params.URL != "" {
+				query.Filter = bson.M{"url": params.URL}
+			} else if params.ITunesID != 0 {
+				query.Filter = bson.M{"itunes_id": params.ITunesID}
 			}
 
 			if query.Filter == nil {
