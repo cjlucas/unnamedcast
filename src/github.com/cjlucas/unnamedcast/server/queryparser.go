@@ -28,8 +28,12 @@ func NewQueryParamInfo(spec interface{}) QueryParamInfo {
 	t := v.Type()
 
 	for i := 0; i < v.NumField(); i++ {
+		paramName := t.Field(i).Tag.Get("param")
+		if paramName == "" {
+			paramName = strings.ToLower(t.Field(i).Name)
+		}
 		info.Params = append(info.Params, QueryParam{
-			Name: strings.ToLower(t.Field(i).Name),
+			Name: paramName,
 		})
 	}
 

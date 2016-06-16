@@ -27,6 +27,12 @@ func TestParseQueryParams(t *testing.T) {
 			},
 		},
 		{
+			Query: "custom=val",
+			Expected: struct {
+				X string `param:"custom"`
+			}{X: "val"},
+		},
+		{
 			Query:       "x=notanum",
 			ShouldError: true,
 			Expected: struct {
@@ -68,7 +74,7 @@ func BenchmarkParseQueryParams(b *testing.B) {
 	}
 
 	info := NewQueryParamInfo(spec{})
-
+	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		info.Parse(vals)
 	}
