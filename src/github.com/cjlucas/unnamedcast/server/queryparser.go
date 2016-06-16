@@ -9,20 +9,45 @@ import (
 	"time"
 )
 
-func parseQueryParams(vals url.Values, spec interface{}) error {
-	v := reflect.ValueOf(spec).Elem()
+type QueryParam struct {
+	Name     string
+	Required bool
+}
+
+type QueryParamInfo struct {
+	spec   interface{}
+	Params []QueryParam
+}
+
+func NewQueryParamInfo(spec interface{}) QueryParamInfo {
+	info := QueryParamInfo{
+		spec: spec,
+	}
+
+	v := reflect.ValueOf(spec)
 	t := v.Type()
+
+	for i := 0; i < v.NumField(); i++ {
+		info.Params = append(info.Params, QueryParam{
+			Name: strings.ToLower(t.Field(i).Name),
+		})
+	}
+
+	return info
+}
+
+func (info *QueryParamInfo) newSpec() interface{} {
+	return reflect.New(reflect.TypeOf(info.spec)).Interface()
+}
+
+func (info *QueryParamInfo) Parse(vals url.Values) (interface{}, error) {
+	spec := info.newSpec()
+	v := reflect.ValueOf(spec).Elem()
+
 	for i := 0; i < v.NumField(); i++ {
 		vf := v.Field(i)
-		tf := t.Field(i)
-		opts := tf.Tag.Get("param")
-
-		fieldName := strings.ToLower(t.Field(i).Name)
-		if opts != "" {
-			fieldName = opts
-		}
-
-		val := vals.Get(fieldName)
+		param := info.Params[i]
+		val := vals.Get(param.Name)
 		if val == "" {
 			continue
 		}
@@ -33,25 +58,25 @@ func parseQueryParams(vals url.Values, spec interface{}) error {
 		case int, int64:
 			n, err := strconv.ParseInt(val, 10, 0)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			vf.SetInt(n)
 		case uint, uint64:
 			n, err := strconv.ParseUint(val, 10, 0)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			vf.SetUint(n)
 		case time.Time:
 			t, err := time.Parse(time.RFC3339Nano, val)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			vf.Set(reflect.ValueOf(t))
 		default:
-			return fmt.Errorf("unknown type for field: \"%s\"", fieldName)
+			return nil, fmt.Errorf("unknown type for field: \"%s\"", param.Name)
 		}
 	}
 
-	return nil
+	return spec, nil
 }
