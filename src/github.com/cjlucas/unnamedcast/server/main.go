@@ -547,6 +547,8 @@ func (app *App) setupRoutes() {
 	type GetFeedItemsParams struct {
 		sortParams
 		limitParams
+
+		ModifiedSince time.Time `param:"modified_since"`
 	}
 
 	api.GET("/feeds/:id/items",
@@ -555,19 +557,9 @@ func (app *App) setupRoutes() {
 		parseLimitParams,
 		app.requireFeedID("id"),
 		func(c *gin.Context) {
+			params := c.MustGet("params").(*GetFeedItemsParams)
 			query := ensureQueryExists(c)
 			feedID := c.MustGet("feedID").(bson.ObjectId)
-			modifiedSince := c.Query("modified_since")
-
-			var modifiedSinceDate time.Time
-			if modifiedSince != "" {
-				t, err := time.Parse(time.RFC3339, modifiedSince)
-				if err != nil {
-					c.AbortWithError(http.StatusBadRequest, err)
-					return
-				}
-				modifiedSinceDate = t
-			}
 
 			feed, err := app.DB.Feeds.FeedByID(feedID)
 			if err != nil {
@@ -578,8 +570,8 @@ func (app *App) setupRoutes() {
 			query.Filter = bson.M{
 				"_id": bson.M{"$in": feed.Items},
 			}
-			if !modifiedSinceDate.IsZero() {
-				query.Filter["modification_time"] = bson.M{"$gt": modifiedSinceDate}
+			if !params.ModifiedSince.IsZero() {
+				query.Filter["modification_time"] = bson.M{"$gt": params.ModifiedSince}
 			}
 
 			var items []db.Item
