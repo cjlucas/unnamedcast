@@ -47,19 +47,21 @@ func readFields(v reflect.Value) []rawField {
 }
 
 func NewQueryParamInfo(spec interface{}) QueryParamInfo {
+	fields := readFields(reflect.ValueOf(spec))
 	info := QueryParamInfo{
-		spec: spec,
+		spec:   spec,
+		Params: make([]QueryParam, len(fields)),
 	}
 
-	for _, f := range readFields(reflect.ValueOf(spec)) {
+	for i, f := range fields {
 		paramName := f.F.Tag.Get("param")
 		if paramName == "" {
 			paramName = strings.ToLower(f.F.Name)
 		}
 
-		info.Params = append(info.Params, QueryParam{
+		info.Params[i] = QueryParam{
 			Name: paramName,
-		})
+		}
 	}
 
 	return info

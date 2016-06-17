@@ -80,13 +80,13 @@ func ensureQueryExists(c *gin.Context) *db.Query {
 
 func parseSortParams(mi db.ModelInfo, sortableFields ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		field := c.Query("sort_by")
-		order := c.Query("sort_order")
-		if field == "" {
-			return
+		params, ok := c.MustGet("params").(SortParams)
+		if !ok {
+			panic("parseSortParams called with invalid configuration")
 		}
-		if order == "" {
-			c.AbortWithError(http.StatusBadRequest, errors.New("sort_by given without sort_order"))
+
+		field := params.SortField()
+		if field == "" {
 			return
 		}
 
@@ -112,23 +112,18 @@ func parseSortParams(mi db.ModelInfo, sortableFields ...string) gin.HandlerFunc 
 
 		query := ensureQueryExists(c)
 		query.SortField = field
-		query.SortDesc = (order == "desc")
+		query.SortDesc = params.Desc()
 	}
 }
 
 func parseLimitParams(c *gin.Context) {
-	limit := c.Query("limit")
-	if limit == "" {
-		return
-	}
-
-	n, err := strconv.Atoi(limit)
-	if err != nil {
-		c.AbortWithError(http.StatusBadRequest, errors.New("limit value is invalid"))
+	params, ok := c.MustGet("params").(LimitParams)
+	if !ok {
+		panic("parseLimitParams called with invalid configuration")
 	}
 
 	query := ensureQueryExists(c)
-	query.Limit = n
+	query.Limit = params.Limit()
 }
 
 func parseQueryParams(spec interface{}) gin.HandlerFunc {
@@ -296,13 +291,20 @@ func (app *App) setupRoutes() {
 
 	api := app.g.Group("/api", app.logErrors)
 
+	type GetUsersParams struct {
+		sortParams
+		limitParams
+	}
+
 	// GET /api/users
 	api.GET("/users",
+		parseQueryParams(GetUsersParams{}),
 		parseSortParams(app.DB.Users.ModelInfo, "modification_time"),
 		parseLimitParams,
 		func(c *gin.Context) {
+			query := c.MustGet("query").(*db.Query)
 			var users []db.User
-			if err := app.DB.Users.Find(nil).All(&users); err != nil {
+			if err := app.DB.Users.Find(query).All(&users); err != nil {
 				c.AbortWithError(http.StatusInternalServerError, err)
 			}
 			c.JSON(http.StatusOK, users)
@@ -440,6 +442,8 @@ func (app *App) setupRoutes() {
 	// TODO: modify the ?url and ?itunes_id variants to return a list for consistency
 
 	type GetFeedsQueryParams struct {
+		sortParams
+		limitParams
 		URL      string
 		ITunesID int `param:"itunes_id"`
 	}
@@ -539,7 +543,14 @@ func (app *App) setupRoutes() {
 
 	// GET /api/feeds/:id/items[?modified_since=2006-01-02T15:04:05Z07:00]
 	// NOTE: modified_since date check is strictly greater than
+
+	type GetFeedItemsParams struct {
+		sortParams
+		limitParams
+	}
+
 	api.GET("/feeds/:id/items",
+		parseQueryParams(GetFeedItemsParams{}),
 		parseSortParams(app.DB.Items.ModelInfo, "modification_time"),
 		parseLimitParams,
 		app.requireFeedID("id"),
