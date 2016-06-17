@@ -19,19 +19,44 @@ type QueryParamInfo struct {
 	Params []QueryParam
 }
 
+type rawField struct {
+	V reflect.Value
+	F reflect.StructField
+}
+
+func readFields(v reflect.Value) []rawField {
+	var fields []rawField
+
+	t := v.Type()
+	for i := 0; i < v.NumField(); i++ {
+		vf := v.Field(i)
+		tf := t.Field(i)
+
+		if vf.Kind() == reflect.Struct && tf.Anonymous {
+			fields = append(fields, readFields(vf)...)
+			continue
+		}
+
+		fields = append(fields, rawField{
+			V: vf,
+			F: tf,
+		})
+	}
+
+	return fields
+}
+
 func NewQueryParamInfo(spec interface{}) QueryParamInfo {
 	info := QueryParamInfo{
 		spec: spec,
 	}
 
-	v := reflect.ValueOf(spec)
-	t := v.Type()
-
-	for i := 0; i < v.NumField(); i++ {
-		paramName := t.Field(i).Tag.Get("param")
+	for _, f := range readFields(reflect.ValueOf(spec)) {
+		paramName := f.F.Tag.Get("param")
 		if paramName == "" {
-			paramName = strings.ToLower(t.Field(i).Name)
+			paramName = strings.ToLower(f.F.Name)
 		}
+
 		info.Params = append(info.Params, QueryParam{
 			Name: paramName,
 		})
@@ -40,45 +65,39 @@ func NewQueryParamInfo(spec interface{}) QueryParamInfo {
 	return info
 }
 
-func (info *QueryParamInfo) newSpec() interface{} {
-	return reflect.New(reflect.TypeOf(info.spec)).Interface()
-}
-
 func (info *QueryParamInfo) Parse(vals url.Values) (interface{}, error) {
-	spec := info.newSpec()
+	spec := reflect.New(reflect.TypeOf(info.spec)).Interface()
 	v := reflect.ValueOf(spec).Elem()
 
-	for i := 0; i < v.NumField(); i++ {
-		vf := v.Field(i)
-		param := info.Params[i]
-		val := vals.Get(param.Name)
+	for i, f := range readFields(v) {
+		val := vals.Get(info.Params[i].Name)
 		if val == "" {
 			continue
 		}
 
-		switch vf.Interface().(type) {
+		switch f.V.Interface().(type) {
 		case string:
-			vf.SetString(val)
+			f.V.SetString(val)
 		case int, int64:
 			n, err := strconv.ParseInt(val, 10, 0)
 			if err != nil {
 				return nil, err
 			}
-			vf.SetInt(n)
+			f.V.SetInt(n)
 		case uint, uint64:
 			n, err := strconv.ParseUint(val, 10, 0)
 			if err != nil {
 				return nil, err
 			}
-			vf.SetUint(n)
+			f.V.SetUint(n)
 		case time.Time:
 			t, err := time.Parse(time.RFC3339Nano, val)
 			if err != nil {
 				return nil, err
 			}
-			vf.Set(reflect.ValueOf(t))
+			f.V.Set(reflect.ValueOf(t))
 		default:
-			return nil, fmt.Errorf("unknown type for field: \"%s\"", param.Name)
+			return nil, fmt.Errorf("unknown type for field: \"%s\"", f.F.Name)
 		}
 	}
 

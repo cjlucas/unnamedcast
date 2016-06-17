@@ -8,6 +8,11 @@ import (
 )
 
 func TestParseQueryParams(t *testing.T) {
+	type embed struct {
+		A string
+		B string
+	}
+
 	cases := []struct {
 		// URL encoded query
 		Query       string
@@ -38,6 +43,19 @@ func TestParseQueryParams(t *testing.T) {
 			Expected: struct {
 				X int
 			}{},
+		},
+		{
+			Query: "a=a&b=b&c=c",
+			Expected: struct {
+				embed
+				C string
+			}{
+				embed: embed{
+					A: "a",
+					B: "b",
+				},
+				C: "c",
+			},
 		},
 	}
 
