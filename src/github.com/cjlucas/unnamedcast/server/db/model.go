@@ -86,27 +86,6 @@ type ModelInfo struct {
 	Indexes map[string]Index
 }
 
-func (info *ModelInfo) addField(field FieldInfo) {
-	info.Fields = append(info.Fields, field)
-	info.jsonNameMap[field.JSONName] = len(info.Fields) - 1
-	info.bsonNameMap[field.BSONName] = len(info.Fields) - 1
-}
-
-func (info *ModelInfo) lookupName(name string, nameMap map[string]int) (FieldInfo, bool) {
-	if i, ok := nameMap[name]; ok {
-		return info.Fields[i], true
-	}
-	return FieldInfo{}, false
-}
-
-func (info *ModelInfo) LookupAPIName(name string) (FieldInfo, bool) {
-	return info.lookupName(name, info.jsonNameMap)
-}
-
-func (info *ModelInfo) LookupDBName(name string) (FieldInfo, bool) {
-	return info.lookupName(name, info.bsonNameMap)
-}
-
 // Build a Model Info from a given struct
 func newModelInfo(m interface{}) ModelInfo {
 	info := ModelInfo{
@@ -139,6 +118,27 @@ func newModelInfo(m interface{}) ModelInfo {
 	}
 
 	return info
+}
+
+func (info *ModelInfo) addField(field FieldInfo) {
+	info.Fields = append(info.Fields, field)
+	info.jsonNameMap[field.JSONName] = len(info.Fields) - 1
+	info.bsonNameMap[field.BSONName] = len(info.Fields) - 1
+}
+
+func (info *ModelInfo) lookupName(name string, nameMap map[string]int) (FieldInfo, bool) {
+	if i, ok := nameMap[name]; ok {
+		return info.Fields[i], true
+	}
+	return FieldInfo{}, false
+}
+
+func (info *ModelInfo) LookupAPIName(name string) (FieldInfo, bool) {
+	return info.lookupName(name, info.jsonNameMap)
+}
+
+func (info *ModelInfo) LookupDBName(name string) (FieldInfo, bool) {
+	return info.lookupName(name, info.bsonNameMap)
 }
 
 // CopyModel copies all the fields from m2 into m1 excluding any fields

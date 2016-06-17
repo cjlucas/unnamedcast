@@ -1,11 +1,14 @@
 package db
 
 import (
+	"fmt"
+
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 )
 
 type collection struct {
+	// c can be nil if collection is really a subcollection in the db
 	c         *mgo.Collection
 	ModelInfo ModelInfo
 }
@@ -80,6 +83,37 @@ func (c collection) CreateIndexes(force bool) error {
 
 func (c collection) insert(model interface{}) error {
 	return c.c.Insert(model)
+}
+
+// filterCond builds the "cond" value of a $filter operation from a Query.
+// More specifically, it converts the specified query.Filter into the expression
+// format required by the aggregation. varName is the variable name specified
+// by the "as" option.
+//
+// Example: {"field": {"$ge": 5} would be transformed into {"$ge": ["field", 5]}
+func (c collection) filterCond(query Query, varName string) bson.M {
+	// This code only handles the trivial case, as that is all that's needed currently
+	cond := make(bson.M)
+
+	for field, expr := range query.Filter {
+		if _, ok := c.ModelInfo.LookupDBName(field); !ok {
+			panic(fmt.Errorf("\"%s\" is not a valid field", field))
+		}
+
+		if expr, ok := expr.(bson.M); ok {
+			for op, val := range expr {
+				cond[op] = []interface{}{
+					fmt.Sprintf("$$%s.%s", varName, field),
+					val,
+				}
+			}
+		} else {
+			panic("unexpected expression")
+		}
+
+	}
+
+	return cond
 }
 
 func (c collection) pipeline(pipeline interface{}) *Pipe {

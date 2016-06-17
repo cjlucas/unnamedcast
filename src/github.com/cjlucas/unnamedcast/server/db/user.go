@@ -37,6 +37,8 @@ type User struct {
 
 type UserCollection struct {
 	collection
+
+	ItemStateCollection collection
 }
 
 func (c UserCollection) Create(username, password string) (*User, error) {
@@ -150,7 +152,7 @@ func (c UserCollection) DeleteItemState(userID, itemID bson.ObjectId) error {
 	})
 }
 
-func (c UserCollection) FindItemStatesModifiedSince(userID bson.ObjectId, modTime time.Time) ([]ItemState, error) {
+func (c UserCollection) FindItemStates(userID bson.ObjectId, query Query) ([]ItemState, error) {
 	pipeline := []bson.M{
 		{"$match": bson.M{"_id": userID}},
 		{"$project": bson.M{
@@ -158,12 +160,7 @@ func (c UserCollection) FindItemStatesModifiedSince(userID bson.ObjectId, modTim
 				"$filter": bson.M{
 					"input": "$states",
 					"as":    "state",
-					"cond": bson.M{
-						"$gt": []interface{}{
-							"$$state.modification_time",
-							modTime,
-						},
-					},
+					"cond":  c.ItemStateCollection.filterCond(query, "state"),
 				},
 			},
 		},

@@ -369,31 +369,23 @@ func (app *App) setupRoutes() {
 		userID := c.MustGet("userID").(bson.ObjectId)
 		modifiedSince := c.Query("modified_since")
 
-		if modifiedSince == "" {
-			var user db.User
-			if err := app.DB.Users.FindByID(userID).One(&user); err != nil {
-				c.AbortWithError(http.StatusInternalServerError, err)
+		query := db.Query{Filter: make(bson.M)}
+		if modifiedSince != "" {
+			t, err := time.Parse(time.RFC3339, modifiedSince)
+			if err != nil {
+				c.AbortWithError(http.StatusBadRequest, err)
 				return
 			}
-
-			c.JSON(http.StatusOK, user.ItemStates)
+			query.Filter["modification_time"] = bson.M{"$gt": t}
 		}
 
-		t, err := time.Parse(time.RFC3339, modifiedSince)
-		if err != nil {
-			c.AbortWithError(http.StatusBadRequest, err)
-			return
-		}
-		modifiedSinceDate := t
-
-		states, err := app.DB.Users.FindItemStatesModifiedSince(userID, modifiedSinceDate)
+		states, err := app.DB.Users.FindItemStates(userID, query)
 		if err != nil {
 			c.AbortWithError(http.StatusInternalServerError, err)
 			return
 		}
 
 		c.JSON(http.StatusOK, states)
-		return
 	})
 
 	api.PUT("/users/:id/states/:itemID", app.requireUserID("id"), app.requireItemID("itemID"), func(c *gin.Context) {
