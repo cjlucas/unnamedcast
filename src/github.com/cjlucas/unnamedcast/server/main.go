@@ -78,7 +78,7 @@ func ensureQueryExists(c *gin.Context) *db.Query {
 	return q
 }
 
-func parseSortParams(sortableFields ...string) gin.HandlerFunc {
+func parseSortParams(mi db.ModelInfo, sortableFields ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		field := c.Query("sort_by")
 		order := c.Query("sort_order")
@@ -87,6 +87,7 @@ func parseSortParams(sortableFields ...string) gin.HandlerFunc {
 		}
 		if order == "" {
 			c.AbortWithError(http.StatusBadRequest, errors.New("sort_by given without sort_order"))
+			return
 		}
 
 		found := false
@@ -99,7 +100,15 @@ func parseSortParams(sortableFields ...string) gin.HandlerFunc {
 
 		if !found {
 			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("\"%s\" is not a sortable field", field))
+			return
 		}
+
+		info, ok := mi.LookupAPIName(field)
+		if !ok {
+			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("\"%s\" is not a known field", field))
+			return
+		}
+		field = info.BSONName
 
 		query := ensureQueryExists(c)
 		query.SortField = field
@@ -274,13 +283,17 @@ func (app *App) setupRoutes() {
 	api := app.g.Group("/api", app.logErrors)
 
 	// GET /api/users
-	api.GET("/users", func(c *gin.Context) {
-		var users []db.User
-		if err := app.DB.Users.Find(nil).All(&users); err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-		}
-		c.JSON(http.StatusOK, users)
-	})
+	api.GET("/users",
+		parseSortParams(app.DB.Users.ModelInfo, "modification_time"),
+		parseLimitParams,
+		func(c *gin.Context) {
+			var users []db.User
+			if err := app.DB.Users.Find(nil).All(&users); err != nil {
+				c.AbortWithError(http.StatusInternalServerError, err)
+			}
+			c.JSON(http.StatusOK, users)
+		},
+	)
 
 	// POST /api/users
 	api.POST("/users", func(c *gin.Context) {
@@ -382,7 +395,7 @@ func (app *App) setupRoutes() {
 		}
 	})
 
-	api.DELETE("/users/:id/states/:itemID", []gin.HandlerFunc{
+	api.DELETE("/users/:id/states/:itemID",
 		app.requireUserID("id"),
 		app.requireItemID("itemID"),
 		func(c *gin.Context) {
@@ -396,42 +409,54 @@ func (app *App) setupRoutes() {
 
 			c.Status(http.StatusOK)
 		},
-	}...)
+	)
 
+	// GET /api/feeds
 	// GET /api/feeds?url=http://url.com
 	// GET /api/feeds?itunes_id=43912431
-	api.GET("/feeds", parseSortParams("modification_time"), parseLimitParams, func(c *gin.Context) {
-		query := ensureQueryExists(c)
+	//
+	// TODO: modify the ?url and ?itunes_id variants to return a list for consistency
+	api.GET("/feeds",
+		parseSortParams(app.DB.Feeds.ModelInfo, "modification_time"),
+		parseLimitParams,
+		func(c *gin.Context) {
+			query := ensureQueryExists(c)
 
-		if val := c.Query("url"); val != "" {
-			query.Filter = bson.M{"url": val}
-		} else if val := c.Query("itunes_id"); val != "" {
-			id, err := strconv.Atoi(val)
-			if err != nil {
-				c.AbortWithError(http.StatusBadRequest, err)
+			if val := c.Query("url"); val != "" {
+				query.Filter = bson.M{"url": val}
+			} else if val := c.Query("itunes_id"); val != "" {
+				id, err := strconv.Atoi(val)
+				if err != nil {
+					c.AbortWithError(http.StatusBadRequest, err)
+					return
+				}
+				query.Filter = bson.M{"itunes_id": id}
+			}
+
+			if query.Filter == nil {
+				var feeds []db.Feed
+				if err := app.DB.Feeds.Find(query).All(&feeds); err != nil {
+					c.AbortWithError(http.StatusInternalServerError, err)
+				} else {
+					c.JSON(http.StatusOK, feeds)
+				}
 				return
 			}
-			query.Filter = bson.M{"itunes_id": id}
-		}
 
-		if query.Filter == nil {
-			c.AbortWithStatus(http.StatusBadRequest)
-			return
-		}
-
-		// TODO: use a switch here
-		var feed db.Feed
-		if err := app.DB.Feeds.Find(query).One(&feed); err != nil {
-			if err == db.ErrNotFound {
-				c.AbortWithStatus(http.StatusNotFound)
-			} else {
-				c.AbortWithError(http.StatusInternalServerError, err)
+			// TODO: use a switch here
+			var feed db.Feed
+			if err := app.DB.Feeds.Find(query).One(&feed); err != nil {
+				if err == db.ErrNotFound {
+					c.AbortWithStatus(http.StatusNotFound)
+				} else {
+					c.AbortWithError(http.StatusInternalServerError, err)
+				}
+				return
 			}
-			return
-		}
 
-		c.JSON(200, &feed)
-	})
+			c.JSON(http.StatusOK, &feed)
+		},
+	)
 
 	// POST /api/feeds
 	api.POST("/feeds", unmarshalFeed, func(c *gin.Context) {
@@ -489,42 +514,46 @@ func (app *App) setupRoutes() {
 
 	// GET /api/feeds/:id/items[?modified_since=2006-01-02T15:04:05Z07:00]
 	// NOTE: modified_since date check is strictly greater than
-	api.GET("/feeds/:id/items", parseSortParams("modification_time"), parseLimitParams, app.requireFeedID("id"), func(c *gin.Context) {
-		query := ensureQueryExists(c)
-		feedID := c.MustGet("feedID").(bson.ObjectId)
-		modifiedSince := c.Query("modified_since")
+	api.GET("/feeds/:id/items",
+		parseSortParams(app.DB.Items.ModelInfo, "modification_time"),
+		parseLimitParams,
+		app.requireFeedID("id"),
+		func(c *gin.Context) {
+			query := ensureQueryExists(c)
+			feedID := c.MustGet("feedID").(bson.ObjectId)
+			modifiedSince := c.Query("modified_since")
 
-		var modifiedSinceDate time.Time
-		if modifiedSince != "" {
-			t, err := time.Parse(time.RFC3339, modifiedSince)
+			var modifiedSinceDate time.Time
+			if modifiedSince != "" {
+				t, err := time.Parse(time.RFC3339, modifiedSince)
+				if err != nil {
+					c.AbortWithError(http.StatusBadRequest, err)
+					return
+				}
+				modifiedSinceDate = t
+			}
+
+			feed, err := app.DB.Feeds.FeedByID(feedID)
 			if err != nil {
-				c.AbortWithError(http.StatusBadRequest, err)
+				c.AbortWithError(http.StatusInternalServerError, err)
 				return
 			}
-			modifiedSinceDate = t
-		}
 
-		feed, err := app.DB.Feeds.FeedByID(feedID)
-		if err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-			return
-		}
+			query.Filter = bson.M{
+				"_id": bson.M{"$in": feed.Items},
+			}
+			if !modifiedSinceDate.IsZero() {
+				query.Filter["modification_time"] = bson.M{"$gt": modifiedSinceDate}
+			}
 
-		query.Filter = bson.M{
-			"_id": bson.M{"$in": feed.Items},
-		}
-		if !modifiedSinceDate.IsZero() {
-			query.Filter["modification_time"] = bson.M{"$gt": modifiedSinceDate}
-		}
+			var items []db.Item
+			if err := app.DB.Items.Find(query).All(&items); err != nil {
+				c.AbortWithError(http.StatusInternalServerError, err)
+				return
+			}
 
-		var items []db.Item
-		if err := app.DB.Items.Find(query).All(&items); err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-			return
-		}
-
-		c.JSON(http.StatusOK, &items)
-	})
+			c.JSON(http.StatusOK, &items)
+		})
 
 	// GET /api/feeds/:id/users
 	api.GET("/feeds/:id/users", app.requireFeedID("id"), func(c *gin.Context) {

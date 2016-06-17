@@ -525,10 +525,56 @@ func TestGetFeed(t *testing.T) {
 }
 
 func TestGetFeedWithoutParams(t *testing.T) {
+	app := newTestApp()
+	createFeed(t, app, &db.Feed{URL: "http://google.com"})
+	createFeed(t, app, &db.Feed{URL: "http://google2.com"})
+
+	var out []db.Feed
 	testEndpoint(t, endpointTestInfo{
+		App:          app,
 		Request:      newRequest("GET", "/api/feeds", nil),
-		ExpectedCode: http.StatusBadRequest,
+		ExpectedCode: http.StatusOK,
+		ResponseBody: &out,
 	})
+
+	if len(out) != 2 {
+		t.Errorf("Feed count mismatch: %d != %d", len(out), 2)
+	}
+}
+
+func TestGetFeedSortedByModificationTime(t *testing.T) {
+	app := newTestApp()
+	feed1 := createFeed(t, app, &db.Feed{
+		URL:              "http://google.com",
+		ModificationTime: time.Now(),
+	})
+	feed2 := createFeed(t, app, &db.Feed{
+		URL:              "http://google2.com",
+		ModificationTime: time.Now(),
+	})
+
+	var out []db.Feed
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      newRequest("GET", "/api/feeds?sort_by=modification_time&sort_order=asc", nil),
+		ExpectedCode: http.StatusOK,
+		ResponseBody: &out,
+	})
+
+	if len(out) != 2 || out[0].URL != feed1.URL || out[1].URL != feed2.URL {
+		t.Error("feed order is incorrect sort_order=asc")
+	}
+
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      newRequest("GET", "/api/feeds?sort_by=modification_time&sort_order=desc", nil),
+		ExpectedCode: http.StatusOK,
+		ResponseBody: &out,
+	})
+
+	if len(out) != 2 || out[0].URL != feed2.URL || out[1].URL != feed1.URL {
+		t.Error("feed order is incorrect sort_order=desc")
+	}
 }
 
 func TestGetFeedByURL(t *testing.T) {
