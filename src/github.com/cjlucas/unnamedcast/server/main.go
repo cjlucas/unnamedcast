@@ -365,28 +365,30 @@ func (app *App) setupRoutes() {
 	})
 
 	// GET /api/users/:id/states
-	api.GET("/users/:id/states", app.requireUserID("id"), func(c *gin.Context) {
-		userID := c.MustGet("userID").(bson.ObjectId)
-		modifiedSince := c.Query("modified_since")
+	type GetUserItemStatesParams struct {
+		ModifiedSince time.Time `param:"modified_since"`
+	}
 
-		query := db.Query{Filter: make(bson.M)}
-		if modifiedSince != "" {
-			t, err := time.Parse(time.RFC3339, modifiedSince)
+	api.GET("/users/:id/states",
+		parseQueryParams(GetUserItemStatesParams{}),
+		app.requireUserID("id"),
+		func(c *gin.Context) {
+			params := c.MustGet("params").(*GetUserItemStatesParams)
+			userID := c.MustGet("userID").(bson.ObjectId)
+
+			query := db.Query{Filter: make(bson.M)}
+			if !params.ModifiedSince.IsZero() {
+				query.Filter["modification_time"] = bson.M{"$gt": params.ModifiedSince}
+			}
+
+			states, err := app.DB.Users.FindItemStates(userID, query)
 			if err != nil {
-				c.AbortWithError(http.StatusBadRequest, err)
+				c.AbortWithError(http.StatusInternalServerError, err)
 				return
 			}
-			query.Filter["modification_time"] = bson.M{"$gt": t}
-		}
 
-		states, err := app.DB.Users.FindItemStates(userID, query)
-		if err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-			return
-		}
-
-		c.JSON(http.StatusOK, states)
-	})
+			c.JSON(http.StatusOK, states)
+		})
 
 	api.PUT("/users/:id/states/:itemID", app.requireUserID("id"), app.requireItemID("itemID"), func(c *gin.Context) {
 		userID := c.MustGet("userID").(bson.ObjectId)

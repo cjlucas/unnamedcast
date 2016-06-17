@@ -301,8 +301,9 @@ func TestGetUserItemStates_WithModifiedSinceParam(t *testing.T) {
 	app := newTestApp()
 	user := createUser(t, app, "chris", "hithere")
 	user.ItemStates = append(user.ItemStates, db.ItemState{
-		ItemID:   bson.NewObjectId(),
-		Position: 5,
+		ItemID:           bson.NewObjectId(),
+		Position:         5,
+		ModificationTime: time.Now(),
 	})
 
 	if err := app.DB.Users.Update(user); err != nil {
