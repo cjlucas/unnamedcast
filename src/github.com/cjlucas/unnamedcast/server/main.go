@@ -302,7 +302,7 @@ func (app *App) setupRoutes() {
 		parseSortParams(app.DB.Users.ModelInfo, "modification_time"),
 		parseLimitParams,
 		func(c *gin.Context) {
-			query := c.MustGet("query").(*db.Query)
+			query := ensureQueryExists(c)
 			var users []db.User
 			if err := app.DB.Users.Find(query).All(&users); err != nil {
 				c.AbortWithError(http.StatusInternalServerError, err)
@@ -551,8 +551,8 @@ func (app *App) setupRoutes() {
 		parseLimitParams,
 		app.requireFeedID("id"),
 		func(c *gin.Context) {
-			params := c.MustGet("params").(*GetFeedItemsParams)
 			query := ensureQueryExists(c)
+			params := c.MustGet("params").(*GetFeedItemsParams)
 			feedID := c.MustGet("feedID").(bson.ObjectId)
 
 			feed, err := app.DB.Feeds.FeedByID(feedID)
