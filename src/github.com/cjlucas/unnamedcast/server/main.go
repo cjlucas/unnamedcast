@@ -257,33 +257,35 @@ func (app *App) setupRoutes() {
 		})
 
 	// GET /login
-	app.g.GET("/login", func(c *gin.Context) {
-		username := strings.TrimSpace(c.Query("username"))
-		password := strings.TrimSpace(c.Query("password"))
 
-		if username == "" || password == "" {
-			c.AbortWithStatus(http.StatusBadRequest)
-			return
-		}
+	type LoginParams struct {
+		Username string `param:",require"`
+		Password string `param:",require"`
+	}
 
-		cur := app.DB.Users.Find(&db.Query{
-			Filter: bson.M{"username": username},
-			Limit:  1,
+	app.g.GET("/login",
+		parseQueryParams(LoginParams{}),
+		func(c *gin.Context) {
+			params := c.MustGet("params").(*LoginParams)
+
+			cur := app.DB.Users.Find(&db.Query{
+				Filter: bson.M{"username": params.Username},
+				Limit:  1,
+			})
+
+			var user db.User
+			if err := cur.One(&user); err != nil {
+				c.AbortWithStatus(http.StatusBadRequest)
+				return
+			}
+
+			if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(params.Password)); err != nil {
+				c.AbortWithStatus(http.StatusUnauthorized)
+				return
+			}
+
+			c.JSON(http.StatusOK, &user)
 		})
-
-		var user db.User
-		if err := cur.One(&user); err != nil {
-			c.AbortWithStatus(http.StatusBadRequest)
-			return
-		}
-
-		if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
-			c.AbortWithStatus(http.StatusUnauthorized)
-			return
-		}
-
-		c.JSON(200, &user)
-	})
 
 	api := app.g.Group("/api", app.logErrors)
 
@@ -308,28 +310,33 @@ func (app *App) setupRoutes() {
 		},
 	)
 
-	// POST /api/users
-	api.POST("/users", func(c *gin.Context) {
-		username := strings.TrimSpace(c.Query("username"))
-		password := strings.TrimSpace(c.Query("password"))
+	// POST /api/users (TODO: this endpoint needs to be refactored)
 
-		if username == "" || password == "" {
-			c.AbortWithStatus(http.StatusBadRequest)
-			return
-		}
+	type CreateUserParams struct {
+		Username string `param:",require"`
+		Password string `param:",require"`
+	}
 
-		switch user, err := app.DB.Users.Create(username, password); {
-		case err == nil:
-			c.JSON(http.StatusOK, user)
-		case db.IsDup(err):
-			c.JSON(http.StatusConflict, gin.H{
-				"reason": "user already exists",
-			})
-			c.Abort()
-		default:
-			c.AbortWithError(http.StatusInternalServerError, err)
-		}
-	})
+	api.POST("/users",
+		parseQueryParams(CreateUserParams{}),
+		func(c *gin.Context) {
+			params := c.MustGet("params").(*CreateUserParams)
+			for _, s := range []*string{&params.Username, &params.Password} {
+				*s = strings.TrimSpace(*s)
+			}
+
+			switch user, err := app.DB.Users.Create(params.Username, params.Password); {
+			case err == nil:
+				c.JSON(http.StatusOK, user)
+			case db.IsDup(err):
+				c.JSON(http.StatusConflict, gin.H{
+					"reason": "user already exists",
+				})
+				c.Abort()
+			default:
+				c.AbortWithError(http.StatusInternalServerError, err)
+			}
+		})
 
 	// GET /api/users/:id
 	api.GET("/users/:id", app.loadUserWithID("id"), func(c *gin.Context) {
