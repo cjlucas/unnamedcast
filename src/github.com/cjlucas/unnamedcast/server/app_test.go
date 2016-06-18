@@ -114,6 +114,22 @@ func testEndpoint(t *testing.T, info endpointTestInfo) {
 	}
 }
 
+func TestSearchFeeds(t *testing.T) {
+	t.Skip("skip until text search index is fixed")
+
+	testEndpoint(t, endpointTestInfo{
+		Request:      newRequest("GET", "/search_feeds?q=test", nil),
+		ExpectedCode: http.StatusOK,
+	})
+}
+
+func TestSearchFeeds_WithoutQuery(t *testing.T) {
+	testEndpoint(t, endpointTestInfo{
+		Request:      newRequest("GET", "/search_feeds", nil),
+		ExpectedCode: http.StatusBadRequest,
+	})
+}
+
 func TestLoginInvalidParameters(t *testing.T) {
 	app := newTestApp()
 	createUser(t, app, "chris", "hithere")
@@ -301,8 +317,9 @@ func TestGetUserItemStates_WithModifiedSinceParam(t *testing.T) {
 	app := newTestApp()
 	user := createUser(t, app, "chris", "hithere")
 	user.ItemStates = append(user.ItemStates, db.ItemState{
-		ItemID:   bson.NewObjectId(),
-		Position: 5,
+		ItemID:           bson.NewObjectId(),
+		Position:         5,
+		ModificationTime: time.Now(),
 	})
 
 	if err := app.DB.Users.Update(user); err != nil {

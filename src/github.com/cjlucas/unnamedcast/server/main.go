@@ -80,13 +80,13 @@ func ensureQueryExists(c *gin.Context) *db.Query {
 
 func parseSortParams(mi db.ModelInfo, sortableFields ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		field := c.Query("sort_by")
-		order := c.Query("sort_order")
-		if field == "" {
-			return
+		params, ok := c.MustGet("params").(SortParams)
+		if !ok {
+			panic("parseSortParams called with invalid configuration")
 		}
-		if order == "" {
-			c.AbortWithError(http.StatusBadRequest, errors.New("sort_by given without sort_order"))
+
+		field := params.SortField()
+		if field == "" {
 			return
 		}
 
@@ -112,23 +112,32 @@ func parseSortParams(mi db.ModelInfo, sortableFields ...string) gin.HandlerFunc 
 
 		query := ensureQueryExists(c)
 		query.SortField = field
-		query.SortDesc = (order == "desc")
+		query.SortDesc = params.Desc()
 	}
 }
 
 func parseLimitParams(c *gin.Context) {
-	limit := c.Query("limit")
-	if limit == "" {
-		return
-	}
-
-	n, err := strconv.Atoi(limit)
-	if err != nil {
-		c.AbortWithError(http.StatusBadRequest, errors.New("limit value is invalid"))
+	params, ok := c.MustGet("params").(LimitParams)
+	if !ok {
+		panic("parseLimitParams called with invalid configuration")
 	}
 
 	query := ensureQueryExists(c)
-	query.Limit = n
+	query.Limit = params.Limit()
+}
+
+func parseQueryParams(spec interface{}) gin.HandlerFunc {
+	info := NewQueryParamInfo(spec)
+
+	return func(c *gin.Context) {
+		params, err := info.Parse(c.Request.URL.Query())
+		if err != nil {
+			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("failed to parse query params: %s", err))
+			return
+		}
+
+		c.Set("params", params)
+	}
 }
 
 func (app *App) logErrors(c *gin.Context) {
@@ -212,111 +221,122 @@ func (app *App) setupRoutes() {
 	app.g = gin.Default()
 
 	// GET /search_feeds
-	// TODO: use parseLimitLimit
-	app.g.GET("/search_feeds", func(c *gin.Context) {
-		var limit int
-		if limitStr := c.Query("limit"); limitStr == "" {
-			limit = 50
-		} else if i, err := strconv.Atoi(limitStr); err != nil {
-			c.AbortWithError(500, errors.New("Error parsing limit"))
-			return
-		} else {
-			limit = i
-		}
+	type SearchFeedsParams struct {
+		limitParams
+		Query string `param:"q,require"`
+	}
 
-		query := c.Query("q")
-		if query == "" {
-			c.AbortWithError(400, errors.New("No query given"))
-			return
-		}
+	app.g.GET("/search_feeds",
+		parseQueryParams(SearchFeedsParams{}),
+		func(c *gin.Context) {
+			params := c.MustGet("params").(*SearchFeedsParams)
+			query := &db.Query{
+				Filter: bson.M{
+					"$text": bson.M{"$search": params.Query},
+				},
+				SortField: "$textScore:score",
+				SortDesc:  true,
+				Limit:     params.Limit(),
+			}
 
-		cur := app.DB.Feeds.Find(&db.Query{
-			Filter: bson.M{
-				"$text": bson.M{"$search": query},
-			},
-			SelectedFields: []string{"title", "category", "image_url"},
-			SortField:      "$textScore:score",
-			Limit:          limit,
+			if query.Limit > 50 {
+				query.Limit = 50
+			}
+
+			var results []db.Feed
+			if err := app.DB.Feeds.Find(query).All(&results); err != nil {
+				c.AbortWithError(http.StatusInternalServerError, err)
+				return
+			}
+
+			if results == nil {
+				results = make([]db.Feed, 0)
+			}
+
+			c.JSON(http.StatusOK, results)
 		})
-
-		var results []db.Feed
-		if err := cur.All(&results); err != nil {
-			c.AbortWithError(500, err)
-		}
-
-		if results == nil {
-			results = make([]db.Feed, 0)
-		}
-
-		c.JSON(200, results)
-	})
 
 	// GET /login
-	app.g.GET("/login", func(c *gin.Context) {
-		username := strings.TrimSpace(c.Query("username"))
-		password := strings.TrimSpace(c.Query("password"))
 
-		if username == "" || password == "" {
-			c.AbortWithStatus(http.StatusBadRequest)
-			return
-		}
+	type LoginParams struct {
+		Username string `param:",require"`
+		Password string `param:",require"`
+	}
 
-		cur := app.DB.Users.Find(&db.Query{
-			Filter: bson.M{"username": username},
-			Limit:  1,
+	app.g.GET("/login",
+		parseQueryParams(LoginParams{}),
+		func(c *gin.Context) {
+			params := c.MustGet("params").(*LoginParams)
+
+			cur := app.DB.Users.Find(&db.Query{
+				Filter: bson.M{"username": params.Username},
+				Limit:  1,
+			})
+
+			var user db.User
+			if err := cur.One(&user); err != nil {
+				c.AbortWithStatus(http.StatusBadRequest)
+				return
+			}
+
+			if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(params.Password)); err != nil {
+				c.AbortWithStatus(http.StatusUnauthorized)
+				return
+			}
+
+			c.JSON(http.StatusOK, &user)
 		})
-
-		var user db.User
-		if err := cur.One(&user); err != nil {
-			c.AbortWithStatus(http.StatusBadRequest)
-			return
-		}
-
-		if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
-			c.AbortWithStatus(http.StatusUnauthorized)
-			return
-		}
-
-		c.JSON(200, &user)
-	})
 
 	api := app.g.Group("/api", app.logErrors)
 
+	type GetUsersParams struct {
+		sortParams
+		limitParams
+	}
+
 	// GET /api/users
 	api.GET("/users",
+		parseQueryParams(GetUsersParams{}),
 		parseSortParams(app.DB.Users.ModelInfo, "modification_time"),
 		parseLimitParams,
 		func(c *gin.Context) {
+			query := ensureQueryExists(c)
 			var users []db.User
-			if err := app.DB.Users.Find(nil).All(&users); err != nil {
+			if err := app.DB.Users.Find(query).All(&users); err != nil {
 				c.AbortWithError(http.StatusInternalServerError, err)
+				return
 			}
 			c.JSON(http.StatusOK, users)
 		},
 	)
 
-	// POST /api/users
-	api.POST("/users", func(c *gin.Context) {
-		username := strings.TrimSpace(c.Query("username"))
-		password := strings.TrimSpace(c.Query("password"))
+	// POST /api/users (TODO: this endpoint needs to be refactored)
 
-		if username == "" || password == "" {
-			c.AbortWithStatus(http.StatusBadRequest)
-			return
-		}
+	type CreateUserParams struct {
+		Username string `param:",require"`
+		Password string `param:",require"`
+	}
 
-		switch user, err := app.DB.Users.Create(username, password); {
-		case err == nil:
-			c.JSON(http.StatusOK, user)
-		case db.IsDup(err):
-			c.JSON(http.StatusConflict, gin.H{
-				"reason": "user already exists",
-			})
-			c.Abort()
-		default:
-			c.AbortWithError(http.StatusInternalServerError, err)
-		}
-	})
+	api.POST("/users",
+		parseQueryParams(CreateUserParams{}),
+		func(c *gin.Context) {
+			params := c.MustGet("params").(*CreateUserParams)
+			for _, s := range []*string{&params.Username, &params.Password} {
+				*s = strings.TrimSpace(*s)
+			}
+
+			switch user, err := app.DB.Users.Create(params.Username, params.Password); {
+			case err == nil:
+				c.JSON(http.StatusOK, user)
+			case db.IsDup(err):
+				c.JSON(http.StatusConflict, gin.H{
+					"reason": "user already exists",
+				})
+				c.Abort()
+			default:
+				c.AbortWithError(http.StatusInternalServerError, err)
+			}
+		})
 
 	// GET /api/users/:id
 	api.GET("/users/:id", app.loadUserWithID("id"), func(c *gin.Context) {
@@ -349,28 +369,30 @@ func (app *App) setupRoutes() {
 	})
 
 	// GET /api/users/:id/states
-	api.GET("/users/:id/states", app.requireUserID("id"), func(c *gin.Context) {
-		userID := c.MustGet("userID").(bson.ObjectId)
-		modifiedSince := c.Query("modified_since")
+	type GetUserItemStatesParams struct {
+		ModifiedSince time.Time `param:"modified_since"`
+	}
 
-		query := db.Query{Filter: make(bson.M)}
-		if modifiedSince != "" {
-			t, err := time.Parse(time.RFC3339, modifiedSince)
+	api.GET("/users/:id/states",
+		parseQueryParams(GetUserItemStatesParams{}),
+		app.requireUserID("id"),
+		func(c *gin.Context) {
+			params := c.MustGet("params").(*GetUserItemStatesParams)
+			userID := c.MustGet("userID").(bson.ObjectId)
+
+			query := db.Query{Filter: make(bson.M)}
+			if !params.ModifiedSince.IsZero() {
+				query.Filter["modification_time"] = bson.M{"$gt": params.ModifiedSince}
+			}
+
+			states, err := app.DB.Users.FindItemStates(userID, query)
 			if err != nil {
-				c.AbortWithError(http.StatusBadRequest, err)
+				c.AbortWithError(http.StatusInternalServerError, err)
 				return
 			}
-			query.Filter["modification_time"] = bson.M{"$gt": t}
-		}
 
-		states, err := app.DB.Users.FindItemStates(userID, query)
-		if err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-			return
-		}
-
-		c.JSON(http.StatusOK, states)
-	})
+			c.JSON(http.StatusOK, states)
+		})
 
 	api.PUT("/users/:id/states/:itemID", app.requireUserID("id"), app.requireItemID("itemID"), func(c *gin.Context) {
 		userID := c.MustGet("userID").(bson.ObjectId)
@@ -416,21 +438,26 @@ func (app *App) setupRoutes() {
 	// GET /api/feeds?itunes_id=43912431
 	//
 	// TODO: modify the ?url and ?itunes_id variants to return a list for consistency
+
+	type GetFeedsQueryParams struct {
+		sortParams
+		limitParams
+		URL      string
+		ITunesID int `param:"itunes_id"`
+	}
+
 	api.GET("/feeds",
+		parseQueryParams(GetFeedsQueryParams{}),
 		parseSortParams(app.DB.Feeds.ModelInfo, "modification_time"),
 		parseLimitParams,
 		func(c *gin.Context) {
+			params := c.MustGet("params").(*GetFeedsQueryParams)
 			query := ensureQueryExists(c)
 
-			if val := c.Query("url"); val != "" {
-				query.Filter = bson.M{"url": val}
-			} else if val := c.Query("itunes_id"); val != "" {
-				id, err := strconv.Atoi(val)
-				if err != nil {
-					c.AbortWithError(http.StatusBadRequest, err)
-					return
-				}
-				query.Filter = bson.M{"itunes_id": id}
+			if params.URL != "" {
+				query.Filter = bson.M{"url": params.URL}
+			} else if params.ITunesID != 0 {
+				query.Filter = bson.M{"itunes_id": params.ITunesID}
 			}
 
 			if query.Filter == nil {
@@ -514,24 +541,23 @@ func (app *App) setupRoutes() {
 
 	// GET /api/feeds/:id/items[?modified_since=2006-01-02T15:04:05Z07:00]
 	// NOTE: modified_since date check is strictly greater than
+
+	type GetFeedItemsParams struct {
+		sortParams
+		limitParams
+
+		ModifiedSince time.Time `param:"modified_since"`
+	}
+
 	api.GET("/feeds/:id/items",
+		parseQueryParams(GetFeedItemsParams{}),
 		parseSortParams(app.DB.Items.ModelInfo, "modification_time"),
 		parseLimitParams,
 		app.requireFeedID("id"),
 		func(c *gin.Context) {
 			query := ensureQueryExists(c)
+			params := c.MustGet("params").(*GetFeedItemsParams)
 			feedID := c.MustGet("feedID").(bson.ObjectId)
-			modifiedSince := c.Query("modified_since")
-
-			var modifiedSinceDate time.Time
-			if modifiedSince != "" {
-				t, err := time.Parse(time.RFC3339, modifiedSince)
-				if err != nil {
-					c.AbortWithError(http.StatusBadRequest, err)
-					return
-				}
-				modifiedSinceDate = t
-			}
 
 			feed, err := app.DB.Feeds.FeedByID(feedID)
 			if err != nil {
@@ -542,8 +568,8 @@ func (app *App) setupRoutes() {
 			query.Filter = bson.M{
 				"_id": bson.M{"$in": feed.Items},
 			}
-			if !modifiedSinceDate.IsZero() {
-				query.Filter["modification_time"] = bson.M{"$gt": modifiedSinceDate}
+			if !params.ModifiedSince.IsZero() {
+				query.Filter["modification_time"] = bson.M{"$gt": params.ModifiedSince}
 			}
 
 			var items []db.Item
