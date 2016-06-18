@@ -7,6 +7,54 @@ import (
 	"time"
 )
 
+func TestNewQueryParamInfo(t *testing.T) {
+	cases := []struct {
+		In             interface{}
+		ExpectedParams []QueryParam
+	}{
+		{
+			In: struct {
+				A int
+				B string `param:"foo"`
+				C string `param:"c,require"`
+				D string `param:",require"`
+			}{},
+			ExpectedParams: []QueryParam{
+				{
+					Name:     "a",
+					Required: false,
+				},
+				{
+					Name:     "foo",
+					Required: false,
+				},
+				{
+					Name:     "c",
+					Required: true,
+				},
+				{
+					Name:     "d",
+					Required: true,
+				},
+			},
+		},
+	}
+
+	for _, c := range cases {
+		out := NewQueryParamInfo(c.In)
+		if len(out.Params) != len(c.ExpectedParams) {
+			t.Fatalf("Params length mismatch: %d != %d", len(out.Params), len(c.ExpectedParams))
+		}
+
+		for i, p1 := range out.Params {
+			p2 := c.ExpectedParams[i]
+			if p1 != p2 {
+				t.Errorf("Param mismatch: %#v != %#v\n", p1, p2)
+			}
+		}
+	}
+}
+
 func TestParseQueryParams(t *testing.T) {
 	type embed struct {
 		A string
@@ -45,6 +93,13 @@ func TestParseQueryParams(t *testing.T) {
 			}{},
 		},
 		{
+			Query:       "a=something",
+			ShouldError: true,
+			Expected: struct {
+				X int `param:",require"`
+			}{},
+		},
+		{
 			Query: "a=a&b=b&c=c",
 			Expected: struct {
 				embed
@@ -73,6 +128,8 @@ func TestParseQueryParams(t *testing.T) {
 			continue
 		} else if err != nil && !c.ShouldError {
 			t.Error("parseQueryParams failed:", err)
+		} else if err == nil && c.ShouldError {
+			t.Error("parseQueryParams unexpected succeeded")
 		}
 
 		// Use the concrete type of out when comparing against c.Expected

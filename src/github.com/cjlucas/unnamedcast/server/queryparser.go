@@ -54,14 +54,25 @@ func NewQueryParamInfo(spec interface{}) QueryParamInfo {
 	}
 
 	for i, f := range fields {
-		paramName := f.F.Tag.Get("param")
-		if paramName == "" {
-			paramName = strings.ToLower(f.F.Name)
+		opts := strings.Split(f.F.Tag.Get("param"), ",")
+		p := QueryParam{}
+
+		if len(opts) > 0 && opts[0] != "" {
+			p.Name = opts[0]
+		} else {
+			p.Name = strings.ToLower(f.F.Name)
 		}
 
-		info.Params[i] = QueryParam{
-			Name: paramName,
+		if len(opts) > 1 {
+			for _, opt := range opts[1:] {
+				switch opt {
+				case "require":
+					p.Required = true
+				}
+			}
 		}
+
+		info.Params[i] = p
 	}
 
 	return info
@@ -72,8 +83,12 @@ func (info *QueryParamInfo) Parse(vals url.Values) (interface{}, error) {
 	v := reflect.ValueOf(spec).Elem()
 
 	for i, f := range readFields(v) {
-		val := vals.Get(info.Params[i].Name)
+		p := info.Params[i]
+		val := vals.Get(p.Name)
 		if val == "" {
+			if p.Required {
+				return nil, fmt.Errorf("required param not found: %s", p.Name)
+			}
 			continue
 		}
 
