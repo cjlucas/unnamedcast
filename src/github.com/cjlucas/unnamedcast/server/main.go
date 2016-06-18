@@ -82,7 +82,7 @@ func parseSortParams(mi db.ModelInfo, sortableFields ...string) gin.HandlerFunc 
 	return func(c *gin.Context) {
 		params, ok := c.MustGet("params").(SortParams)
 		if !ok {
-			panic("parseSortParams called with invalid configuration")
+			panic("parseSortParams called with an invalid configuration")
 		}
 
 		field := params.SortField()
@@ -119,7 +119,7 @@ func parseSortParams(mi db.ModelInfo, sortableFields ...string) gin.HandlerFunc 
 func parseLimitParams(c *gin.Context) {
 	params, ok := c.MustGet("params").(LimitParams)
 	if !ok {
-		panic("parseLimitParams called with invalid configuration")
+		panic("parseLimitParams called with an invalid configuration")
 	}
 
 	query := ensureQueryExists(c)
