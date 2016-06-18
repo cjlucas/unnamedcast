@@ -22,8 +22,6 @@ import (
 	"gopkg.in/mgo.v2/bson"
 )
 
-type ContextKey string
-
 const (
 	feedCtxKey   = "feed"
 	userCtxKey   = "user"
