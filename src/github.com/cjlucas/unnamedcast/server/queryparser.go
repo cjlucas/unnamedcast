@@ -68,6 +68,8 @@ func NewQueryParamInfo(spec interface{}) QueryParamInfo {
 				switch opt {
 				case "require":
 					p.Required = true
+				default:
+					panic(fmt.Errorf("unexpected option: %s", opt))
 				}
 			}
 		}
