@@ -221,44 +221,40 @@ func (app *App) setupRoutes() {
 	app.g = gin.Default()
 
 	// GET /search_feeds
-	// TODO: use parseLimitLimit
-	app.g.GET("/search_feeds", func(c *gin.Context) {
-		var limit int
-		if limitStr := c.Query("limit"); limitStr == "" {
-			limit = 50
-		} else if i, err := strconv.Atoi(limitStr); err != nil {
-			c.AbortWithError(500, errors.New("Error parsing limit"))
-			return
-		} else {
-			limit = i
-		}
+	type SearchFeedsParams struct {
+		limitParams
+		Query string `param:"q,require"`
+	}
 
-		query := c.Query("q")
-		if query == "" {
-			c.AbortWithError(400, errors.New("No query given"))
-			return
-		}
+	app.g.GET("/search_feeds",
+		parseQueryParams(SearchFeedsParams{}),
+		func(c *gin.Context) {
+			params := c.MustGet("params").(*SearchFeedsParams)
+			query := &db.Query{
+				Filter: bson.M{
+					"$text": bson.M{"$search": params.Query},
+				},
+				SortField: "$textScore:score",
+				SortDesc:  true,
+				Limit:     params.Limit(),
+			}
 
-		cur := app.DB.Feeds.Find(&db.Query{
-			Filter: bson.M{
-				"$text": bson.M{"$search": query},
-			},
-			SelectedFields: []string{"title", "category", "image_url"},
-			SortField:      "$textScore:score",
-			Limit:          limit,
+			if query.Limit > 50 {
+				query.Limit = 50
+			}
+
+			var results []db.Feed
+			if err := app.DB.Feeds.Find(query).All(&results); err != nil {
+				c.AbortWithError(http.StatusInternalServerError, err)
+				return
+			}
+
+			if results == nil {
+				results = make([]db.Feed, 0)
+			}
+
+			c.JSON(http.StatusOK, results)
 		})
-
-		var results []db.Feed
-		if err := cur.All(&results); err != nil {
-			c.AbortWithError(500, err)
-		}
-
-		if results == nil {
-			results = make([]db.Feed, 0)
-		}
-
-		c.JSON(200, results)
-	})
 
 	// GET /login
 	app.g.GET("/login", func(c *gin.Context) {
@@ -306,6 +302,7 @@ func (app *App) setupRoutes() {
 			var users []db.User
 			if err := app.DB.Users.Find(query).All(&users); err != nil {
 				c.AbortWithError(http.StatusInternalServerError, err)
+				return
 			}
 			c.JSON(http.StatusOK, users)
 		},
