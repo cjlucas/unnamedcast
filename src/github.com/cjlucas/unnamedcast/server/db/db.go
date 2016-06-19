@@ -26,6 +26,7 @@ type DB struct {
 	Feeds FeedCollection
 	Items ItemCollection
 	Logs  LogCollection
+	Jobs  JobCollection
 }
 
 type Config struct {
@@ -51,6 +52,7 @@ func New(cfg Config) (*DB, error) {
 	ret.addCollection("feeds", &ret.Feeds.collection, Feed{})
 	ret.addCollection("items", &ret.Items.collection, Item{})
 	ret.addCollection("logs", &ret.Logs.collection, Log{})
+	ret.addCollection("jobs", &ret.Jobs.collection, Job{})
 	ret.addSubCollection(&ret.Users.ItemStateCollection, ItemState{})
 
 	for _, c := range ret.collections {

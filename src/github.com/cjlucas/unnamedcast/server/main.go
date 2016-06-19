@@ -38,20 +38,16 @@ type App struct {
 }
 
 type Config struct {
-	DBConfig db.Config
+	DB *db.DB
 }
 
-func NewApp(cfg Config) (*App, error) {
-	app := App{}
-
-	db, err := db.New(cfg.DBConfig)
-	if err != nil {
-		return nil, err
+func NewApp(cfg Config) *App {
+	app := App{
+		DB: cfg.DB,
 	}
-	app.DB = db
 
 	app.setupRoutes()
-	return &app, nil
+	return &app
 }
 
 func newObjectIDFromHex(idHex string) (bson.ObjectId, error) {
@@ -704,6 +700,27 @@ func (app *App) setupRoutes() {
 
 		c.JSON(http.StatusOK, &item)
 	})
+
+	api.POST("/jobs", func(c *gin.Context) {
+		var job db.Job
+		if err := c.BindJSON(&job); err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
+		}
+
+		if job.Queue == "" {
+			c.AbortWithStatus(http.StatusBadRequest)
+			return
+		}
+
+		job, err := app.DB.Jobs.Create(job)
+		if err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
+		}
+
+		c.JSON(http.StatusOK, &job)
+	})
 }
 
 func (app *App) Run(addr string) error {
@@ -721,15 +738,6 @@ func main() {
 	koda.Configure(&koda.Options{
 		URL: rdbURL,
 	})
-
-	c.AddFunc("0 */10 * * * *", func() {
-		fmt.Println("Updating user feeds")
-		if _, err := koda.Submit("update-user-feeds", 0, nil); err != nil {
-			fmt.Println("Error updating user feeds:", err)
-		}
-	})
-
-	c.Start()
 
 	dbURL := os.Getenv("DB_URL")
 	if dbURL == "" {
@@ -751,14 +759,33 @@ func main() {
 		port, _ = strconv.Atoi(s[1])
 	}
 
-	app, err := NewApp(Config{
-		DBConfig: db.Config{
-			URL: dbURL,
-		},
+	dbConn, err := db.New(db.Config{
+		URL: dbURL,
 	})
 	if err != nil {
 		panic(fmt.Errorf("Failed to connect to DB: %s (%s)", err, dbURL))
 	}
+
+	app := NewApp(Config{
+		DB: dbConn,
+	})
+
+	c.AddFunc("0 * * * * *", func() {
+		fmt.Println("Updating user feeds")
+		job, err := koda.Submit("update-user-feeds", 0, nil)
+		if err != nil {
+			fmt.Println("Error updating user feeds:", err)
+			return
+		}
+
+		app.DB.Jobs.Create(db.Job{
+			KodaID:   job.ID,
+			Queue:    "update-user-feeds",
+			Priority: 0,
+		})
+	})
+
+	c.Start()
 
 	app.Run(fmt.Sprintf("0.0.0.0:%d", port))
 }

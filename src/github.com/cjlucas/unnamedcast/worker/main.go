@@ -12,6 +12,7 @@ import (
 
 	"github.com/cjlucas/unnamedcast/api"
 	"github.com/cjlucas/unnamedcast/koda"
+	"github.com/cjlucas/unnamedcast/server/db"
 )
 
 const (
@@ -53,6 +54,59 @@ func (l *queueOptList) Set(s string) error {
 	return nil
 }
 
+type PersistedJob struct {
+	Job *db.Job
+}
+
+func (j PersistedJob) AppendLogf(format string, args ...interface{}) {
+	fmt.Println("here1")
+	line := fmt.Sprintf(format, args...)
+	if j.Job == nil {
+		fmt.Println(line)
+		return
+	}
+
+	fmt.Println("here2")
+	jobCollection.AppendLog(j.Job.ID, line)
+}
+
+func (j PersistedJob) UpdateState(state koda.JobState) {
+	if j.Job == nil {
+		return
+	}
+	var s string
+	switch state {
+	case koda.Working:
+		s = "working"
+	case koda.Finished:
+		s = "finished"
+	case koda.Dead:
+		s = "dead"
+	default:
+		panic(fmt.Errorf("unknown state: %d", state))
+	}
+	jobCollection.UpdateState(j.Job.ID, s)
+}
+
+var jobCollection *db.JobCollection
+
+func persistedJobByID(kodaID int) PersistedJob {
+	var persistedJob PersistedJob
+
+	if jobCollection == nil {
+		return persistedJob
+	}
+
+	var job db.Job
+	if err := jobCollection.FindByKodaID(kodaID).One(&job); err != nil {
+		fmt.Println("Error fetching persisted job, log will not persist")
+	} else {
+		persistedJob.Job = &job
+	}
+
+	return persistedJob
+}
+
 func runQueueWorker(wg *sync.WaitGroup, q *koda.Queue, w Worker) {
 	defer wg.Done()
 
@@ -64,19 +118,24 @@ func runQueueWorker(wg *sync.WaitGroup, q *koda.Queue, w Worker) {
 		}
 
 		fmt.Printf("Job %d: Dequeued\n", j.ID)
+		persistedJob := persistedJobByID(j.ID)
 
+		persistedJob.UpdateState(koda.Working)
 		if err := w.Work(q, j); err != nil {
-			fmt.Printf("Job %d: Failed with error: %s\n", j.ID, err)
+			persistedJob.AppendLogf("Job %d: Failed with error: %s", j.ID, err)
 			if j.NumAttempts == MaxAttempts {
-				fmt.Printf("Job %d: Max attempts reached, killing job\n", j.ID)
+				persistedJob.AppendLogf("Job %d: Max attempts reached, killing job", j.ID)
+				persistedJob.UpdateState(koda.Dead)
 				j.Kill()
 			} else {
-				fmt.Printf("Job %d: Failed on attempt %d, will retry\n", j.ID, j.NumAttempts)
+				persistedJob.AppendLogf("Job %d: Failed on attempt %d, will retry\n", j.ID, j.NumAttempts)
 				j.Retry(5 * time.Minute)
 			}
 			continue
 		}
 		fmt.Printf("Job %d: Done\n", j.ID)
+		persistedJob.AppendLogf("Job completed successfully")
+		persistedJob.UpdateState(koda.Finished)
 		j.Finish()
 	}
 }
@@ -98,6 +157,18 @@ func main() {
 	//
 	// koda.Submit(queueUpdateUserFeeds, 0, nil)
 	var wg sync.WaitGroup
+
+	dbURL := os.Getenv("DB_URL")
+	if dbURL == "" {
+		panic("DB_URL not specified")
+	}
+	dbConn, err := db.New(db.Config{URL: dbURL})
+	if err == nil {
+		fmt.Println("setting job collection")
+		jobCollection = &dbConn.Jobs
+	} else {
+		fmt.Println("error connecting to db", err)
+	}
 
 	apiURL := os.Getenv("API_URL")
 	if apiURL == "" {

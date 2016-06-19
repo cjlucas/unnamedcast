@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/cjlucas/unnamedcast/server/db"
 )
 
 var httpClient = http.Client{}
@@ -262,4 +264,13 @@ func (api *API) GetUsers() ([]User, error) {
 		ResponseBody: &users,
 	})
 	return users, err
+}
+
+// TODO: create own struct
+func (api *API) CreateJob(job db.Job) error {
+	return api.makeRequest(&apiRoundTrip{
+		Method:      "POST",
+		Endpoint:    "/api/jobs",
+		RequestBody: job,
+	})
 }

@@ -9,6 +9,7 @@ import (
 
 	"github.com/cjlucas/unnamedcast/api"
 	"github.com/cjlucas/unnamedcast/koda"
+	"github.com/cjlucas/unnamedcast/server/db"
 	"github.com/cjlucas/unnamedcast/worker/itunes"
 	"github.com/cjlucas/unnamedcast/worker/rss"
 )
@@ -315,15 +316,29 @@ type UpdateUserFeedsWorker struct {
 }
 
 func (w *UpdateUserFeedsWorker) Work(q *koda.Queue, j *koda.Job) error {
+	persistedJob := persistedJobByID(j.ID)
+
 	users, err := w.API.GetUsers()
 	if err != nil {
 		return err
 	}
 
+	persistedJob.AppendLogf("Found %d users", len(users))
+
 	for i := range users {
 		feedIDs := users[i].FeedIDs
 		for _, id := range feedIDs {
-			koda.Submit(queueUpdateFeed, 0, &UpdateFeedPayload{FeedID: id})
+			job, err := koda.Submit(queueUpdateFeed, 0, &UpdateFeedPayload{FeedID: id})
+			if err != nil {
+				persistedJob.AppendLogf("Error creating update feed job feed_id=%s", id)
+				continue
+			}
+
+			w.API.CreateJob(db.Job{
+				KodaID:  job.ID,
+				Queue:   queueUpdateFeed,
+				Payload: &UpdateFeedPayload{FeedID: id},
+			})
 		}
 	}
 
