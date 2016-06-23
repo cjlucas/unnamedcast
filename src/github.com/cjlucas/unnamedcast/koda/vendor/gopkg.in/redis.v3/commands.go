@@ -2,9 +2,10 @@ package redis
 
 import (
 	"io"
-	"log"
 	"strconv"
 	"time"
+
+	"gopkg.in/redis.v3/internal"
 )
 
 func formatInt(i int64) string {
@@ -32,8 +33,8 @@ func usePrecise(dur time.Duration) bool {
 
 func formatMs(dur time.Duration) string {
 	if dur > 0 && dur < time.Millisecond {
-		log.Printf(
-			"redis: specified duration is %s, but minimal supported value is %s",
+		internal.Logf(
+			"specified duration is %s, but minimal supported value is %s",
 			dur, time.Millisecond,
 		)
 	}
@@ -42,8 +43,8 @@ func formatMs(dur time.Duration) string {
 
 func formatSec(dur time.Duration) string {
 	if dur > 0 && dur < time.Second {
-		log.Printf(
-			"redis: specified duration is %s, but minimal supported value is %s",
+		internal.Logf(
+			"specified duration is %s, but minimal supported value is %s",
 			dur, time.Second,
 		)
 	}
@@ -270,7 +271,7 @@ type Sort struct {
 	Store         string
 }
 
-func (c *commandable) Sort(key string, sort Sort) *StringSliceCmd {
+func (sort *Sort) args(key string) []interface{} {
 	args := []interface{}{"SORT", key}
 	if sort.By != "" {
 		args = append(args, "BY", sort.By)
@@ -290,7 +291,17 @@ func (c *commandable) Sort(key string, sort Sort) *StringSliceCmd {
 	if sort.Store != "" {
 		args = append(args, "STORE", sort.Store)
 	}
-	cmd := NewStringSliceCmd(args...)
+	return args
+}
+
+func (c *commandable) Sort(key string, sort Sort) *StringSliceCmd {
+	cmd := NewStringSliceCmd(sort.args(key)...)
+	c.Process(cmd)
+	return cmd
+}
+
+func (c *commandable) SortInterfaces(key string, sort Sort) *SliceCmd {
+	cmd := NewSliceCmd(sort.args(key)...)
 	c.Process(cmd)
 	return cmd
 }
@@ -574,7 +585,7 @@ func (c *commandable) SetNX(key string, value interface{}, expiration time.Durat
 // Redis `SET key value [expiration] XX` command.
 //
 // Zero expiration means the key has no expiration time.
-func (c *Client) SetXX(key string, value interface{}, expiration time.Duration) *BoolCmd {
+func (c *commandable) SetXX(key string, value interface{}, expiration time.Duration) *BoolCmd {
 	var cmd *BoolCmd
 	if usePrecise(expiration) {
 		cmd = NewBoolCmd("SET", key, value, "PX", formatMs(expiration), "XX")
@@ -679,6 +690,21 @@ func (c *commandable) HMSet(key, field, value string, pairs ...string) *StatusCm
 	args[3] = value
 	for i, pair := range pairs {
 		args[4+i] = pair
+	}
+	cmd := NewStatusCmd(args...)
+	c.Process(cmd)
+	return cmd
+}
+
+func (c *commandable) HMSetMap(key string, fields map[string]string) *StatusCmd {
+	args := make([]interface{}, 2+len(fields)*2)
+	args[0] = "HMSET"
+	args[1] = key
+	i := 2
+	for k, v := range fields {
+		args[i] = k
+		args[i+1] = v
+		i += 2
 	}
 	cmd := NewStatusCmd(args...)
 	c.Process(cmd)
@@ -933,8 +959,16 @@ func (c *commandable) SMove(source, destination string, member interface{}) *Boo
 	return cmd
 }
 
+// Redis `SPOP key` command.
 func (c *commandable) SPop(key string) *StringCmd {
 	cmd := NewStringCmd("SPOP", key)
+	c.Process(cmd)
+	return cmd
+}
+
+// Redis `SPOP key count` command.
+func (c *commandable) SPopN(key string, count int64) *StringSliceCmd {
+	cmd := NewStringSliceCmd("SPOP", key, count)
 	c.Process(cmd)
 	return cmd
 }
@@ -1273,7 +1307,7 @@ func (c *commandable) ZRevRangeByScore(key string, opt ZRangeByScore) *StringSli
 	return c.zRevRangeBy("ZREVRANGEBYSCORE", key, opt)
 }
 
-func (c commandable) ZRevRangeByLex(key string, opt ZRangeByScore) *StringSliceCmd {
+func (c *commandable) ZRevRangeByLex(key string, opt ZRangeByScore) *StringSliceCmd {
 	return c.zRevRangeBy("ZREVRANGEBYLEX", key, opt)
 }
 
@@ -1454,9 +1488,12 @@ func (c *commandable) FlushDb() *StatusCmd {
 	return cmd
 }
 
-func (c *commandable) Info() *StringCmd {
-	cmd := NewStringCmd("INFO")
-	cmd._clusterKeyPos = 0
+func (c *commandable) Info(section ...string) *StringCmd {
+	args := []interface{}{"INFO"}
+	if len(section) > 0 {
+		args = append(args, section[0])
+	}
+	cmd := NewStringCmd(args...)
 	c.Process(cmd)
 	return cmd
 }

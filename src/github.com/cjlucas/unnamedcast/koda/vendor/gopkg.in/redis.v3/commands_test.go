@@ -19,14 +19,11 @@ var _ = Describe("Commands", func() {
 	var client *redis.Client
 
 	BeforeEach(func() {
-		client = redis.NewClient(&redis.Options{
-			Addr:        redisAddr,
-			PoolTimeout: 30 * time.Second,
-		})
+		client = redis.NewClient(redisOptions())
+		Expect(client.FlushDb().Err()).NotTo(HaveOccurred())
 	})
 
 	AfterEach(func() {
-		Expect(client.FlushDb().Err()).NotTo(HaveOccurred())
 		Expect(client.Close()).NotTo(HaveOccurred())
 	})
 
@@ -57,16 +54,20 @@ var _ = Describe("Commands", func() {
 		})
 
 		It("should BgRewriteAOF", func() {
-			r := client.BgRewriteAOF()
-			Expect(r.Err()).NotTo(HaveOccurred())
-			Expect(r.Val()).To(ContainSubstring("Background append only file rewriting"))
+			Skip("flaky test")
+
+			val, err := client.BgRewriteAOF().Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(val).To(ContainSubstring("Background append only file rewriting"))
 		})
 
 		It("should BgSave", func() {
+			Skip("flaky test")
+
 			// workaround for "ERR Can't BGSAVE while AOF log rewriting is in progress"
 			Eventually(func() string {
 				return client.BgSave().Val()
-			}, "10s").Should(Equal("Background saving started"))
+			}, "30s").Should(Equal("Background saving started"))
 		})
 
 		It("should ClientKill", func() {
@@ -128,6 +129,13 @@ var _ = Describe("Commands", func() {
 			info := client.Info()
 			Expect(info.Err()).NotTo(HaveOccurred())
 			Expect(info.Val()).NotTo(Equal(""))
+		})
+
+		It("should Info cpu", func() {
+			info := client.Info("cpu")
+			Expect(info.Err()).NotTo(HaveOccurred())
+			Expect(info.Val()).NotTo(Equal(""))
+			Expect(info.Val()).To(ContainSubstring(`used_cpu_sys`))
 		})
 
 		It("should LastSave", func() {
@@ -288,7 +296,7 @@ var _ = Describe("Commands", func() {
 		})
 
 		It("should Move", func() {
-			move := client.Move("key", 1)
+			move := client.Move("key", 2)
 			Expect(move.Err()).NotTo(HaveOccurred())
 			Expect(move.Val()).To(Equal(false))
 
@@ -296,7 +304,7 @@ var _ = Describe("Commands", func() {
 			Expect(set.Err()).NotTo(HaveOccurred())
 			Expect(set.Val()).To(Equal("OK"))
 
-			move = client.Move("key", 1)
+			move = client.Move("key", 2)
 			Expect(move.Err()).NotTo(HaveOccurred())
 			Expect(move.Val()).To(Equal(true))
 
@@ -304,7 +312,7 @@ var _ = Describe("Commands", func() {
 			Expect(get.Err()).To(Equal(redis.Nil))
 			Expect(get.Val()).To(Equal(""))
 
-			sel := client.Select(1)
+			sel := client.Select(2)
 			Expect(sel.Err()).NotTo(HaveOccurred())
 			Expect(sel.Val()).To(Equal("OK"))
 
@@ -312,7 +320,7 @@ var _ = Describe("Commands", func() {
 			Expect(get.Err()).NotTo(HaveOccurred())
 			Expect(get.Val()).To(Equal("hello"))
 			Expect(client.FlushDb().Err()).NotTo(HaveOccurred())
-			Expect(client.Select(0).Err()).NotTo(HaveOccurred())
+			Expect(client.Select(1).Err()).NotTo(HaveOccurred())
 		})
 
 		It("should Object", func() {
@@ -493,19 +501,58 @@ var _ = Describe("Commands", func() {
 		})
 
 		It("should Sort", func() {
-			lPush := client.LPush("list", "1")
-			Expect(lPush.Err()).NotTo(HaveOccurred())
-			Expect(lPush.Val()).To(Equal(int64(1)))
-			lPush = client.LPush("list", "3")
-			Expect(lPush.Err()).NotTo(HaveOccurred())
-			Expect(lPush.Val()).To(Equal(int64(2)))
-			lPush = client.LPush("list", "2")
-			Expect(lPush.Err()).NotTo(HaveOccurred())
-			Expect(lPush.Val()).To(Equal(int64(3)))
+			size, err := client.LPush("list", "1").Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(size).To(Equal(int64(1)))
 
-			sort := client.Sort("list", redis.Sort{Offset: 0, Count: 2, Order: "ASC"})
-			Expect(sort.Err()).NotTo(HaveOccurred())
-			Expect(sort.Val()).To(Equal([]string{"1", "2"}))
+			size, err = client.LPush("list", "3").Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(size).To(Equal(int64(2)))
+
+			size, err = client.LPush("list", "2").Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(size).To(Equal(int64(3)))
+
+			els, err := client.Sort("list", redis.Sort{
+				Offset: 0,
+				Count:  2,
+				Order:  "ASC",
+			}).Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(els).To(Equal([]string{"1", "2"}))
+		})
+
+		It("should Sort and Get", func() {
+			size, err := client.LPush("list", "1").Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(size).To(Equal(int64(1)))
+
+			size, err = client.LPush("list", "3").Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(size).To(Equal(int64(2)))
+
+			size, err = client.LPush("list", "2").Result()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(size).To(Equal(int64(3)))
+
+			err = client.Set("object_2", "value2", 0).Err()
+			Expect(err).NotTo(HaveOccurred())
+
+			{
+				els, err := client.Sort("list", redis.Sort{
+					Get: []string{"object_*"},
+				}).Result()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(els).To(Equal([]string{"", "value2", ""}))
+			}
+
+			{
+				els, err := client.SortInterfaces("list", redis.Sort{
+					Get: []string{"object_*"},
+				}).Result()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(els).To(Equal([]interface{}{nil, "value2", nil}))
+			}
 		})
 
 		It("should TTL", func() {
@@ -1148,6 +1195,23 @@ var _ = Describe("Commands", func() {
 			Expect(hGet.Val()).To(Equal("hello2"))
 		})
 
+		It("should HMSetMap", func() {
+			hMSetMap := client.HMSetMap("hash", map[string]string{
+				"key3": "hello3",
+				"key4": "hello4",
+			})
+			Expect(hMSetMap.Err()).NotTo(HaveOccurred())
+			Expect(hMSetMap.Val()).To(Equal("OK"))
+
+			hGet := client.HGet("hash", "key3")
+			Expect(hGet.Err()).NotTo(HaveOccurred())
+			Expect(hGet.Val()).To(Equal("hello3"))
+
+			hGet = client.HGet("hash", "key4")
+			Expect(hGet.Err()).NotTo(HaveOccurred())
+			Expect(hGet.Val()).To(Equal("hello4"))
+		})
+
 		It("should HSet", func() {
 			hSet := client.HSet("hash", "key", "hello")
 			Expect(hSet.Err()).NotTo(HaveOccurred())
@@ -1254,9 +1318,16 @@ var _ = Describe("Commands", func() {
 		})
 
 		It("should BLPop timeout", func() {
-			bLPop := client.BLPop(time.Second, "list1")
-			Expect(bLPop.Val()).To(BeNil())
-			Expect(bLPop.Err()).To(Equal(redis.Nil))
+			val, err := client.BLPop(time.Second, "list1").Result()
+			Expect(err).To(Equal(redis.Nil))
+			Expect(val).To(BeNil())
+
+			Expect(client.Ping().Err()).NotTo(HaveOccurred())
+
+			stats := client.PoolStats()
+			Expect(stats.Requests).To(Equal(uint32(3)))
+			Expect(stats.Hits).To(Equal(uint32(2)))
+			Expect(stats.Timeouts).To(Equal(uint32(0)))
 		})
 
 		It("should BRPop", func() {
@@ -1748,6 +1819,34 @@ var _ = Describe("Commands", func() {
 			sMembers := client.SMembers("set")
 			Expect(sMembers.Err()).NotTo(HaveOccurred())
 			Expect(sMembers.Val()).To(HaveLen(2))
+
+		})
+
+		It("should SPopN", func() {
+			sAdd := client.SAdd("set", "one")
+			Expect(sAdd.Err()).NotTo(HaveOccurred())
+			sAdd = client.SAdd("set", "two")
+			Expect(sAdd.Err()).NotTo(HaveOccurred())
+			sAdd = client.SAdd("set", "three")
+			Expect(sAdd.Err()).NotTo(HaveOccurred())
+			sAdd = client.SAdd("set", "four")
+			Expect(sAdd.Err()).NotTo(HaveOccurred())
+
+			sPopN := client.SPopN("set", 1)
+			Expect(sPopN.Err()).NotTo(HaveOccurred())
+			Expect(sPopN.Val()).NotTo(Equal([]string{""}))
+
+			sMembers := client.SMembers("set")
+			Expect(sMembers.Err()).NotTo(HaveOccurred())
+			Expect(sMembers.Val()).To(HaveLen(3))
+
+			sPopN = client.SPopN("set", 4)
+			Expect(sPopN.Err()).NotTo(HaveOccurred())
+			Expect(sPopN.Val()).To(HaveLen(3))
+
+			sMembers = client.SMembers("set")
+			Expect(sMembers.Err()).NotTo(HaveOccurred())
+			Expect(sMembers.Val()).To(HaveLen(0))
 		})
 
 		It("should SRandMember and SRandMemberN", func() {
@@ -2678,11 +2777,11 @@ var _ = Describe("Commands", func() {
 			// "166.27415156960032"
 			geoDist := client.GeoDist("Sicily", "Palermo", "Catania", "km")
 			Expect(geoDist.Err()).NotTo(HaveOccurred())
-			Expect(geoDist.Val()).To(Equal(166.27415156960032))
+			Expect(geoDist.Val()).To(BeNumerically("~", 166.27, 0.01))
 
 			geoDist = client.GeoDist("Sicily", "Palermo", "Catania", "m")
 			Expect(geoDist.Err()).NotTo(HaveOccurred())
-			Expect(geoDist.Val()).To(Equal(166274.15156960033))
+			Expect(geoDist.Val()).To(BeNumerically("~", 166274.15, 0.01))
 		})
 
 		It("should get geo hash in string representation", func() {

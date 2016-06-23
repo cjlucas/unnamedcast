@@ -1,17 +1,19 @@
 package redis
 
-import "net"
+import (
+	"time"
 
-func (c *baseClient) Pool() pool {
+	"gopkg.in/redis.v3/internal/pool"
+)
+
+func (c *baseClient) Pool() pool.Pooler {
 	return c.connPool
 }
 
-var NewConnDialer = newConnDialer
-
-func (cn *conn) SetNetConn(netcn net.Conn) {
-	cn.netcn = netcn
+func (c *PubSub) Pool() pool.Pooler {
+	return c.base.connPool
 }
 
-func HashSlot(key string) int {
-	return hashSlot(key)
+func (c *PubSub) ReceiveMessageTimeout(timeout time.Duration) (*Message, error) {
+	return c.receiveMessage(timeout)
 }
