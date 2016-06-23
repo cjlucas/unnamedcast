@@ -19,22 +19,18 @@ func newConn() Conn {
 	}
 }
 
-func (c mockConn) incrVal(val string) (int, error) {
-	n, err := strconv.Atoi(val)
-	if err != nil {
-		return 0, err
-	}
-
-	return n + 1, nil
-}
-
 func (c mockConn) Incr(key string) (int, error) {
-	n, err := c.incrVal(c.keys[key])
+	if _, ok := c.keys[key]; !ok {
+		c.keys[key] = "0"
+	}
+
+	n, err := strconv.Atoi(c.keys[key])
 	if err != nil {
 		return 0, err
 	}
-	c.keys[key] = string(n)
-	return n, nil
+
+	c.keys[key] = string(n + 1)
+	return n + 1, nil
 }
 
 func (c mockConn) HGetAll(key string) ([]string, error) {
