@@ -854,7 +854,7 @@ func main() {
 		JobSubmitter: defaultKodaClient{},
 	})
 
-	c.AddFunc("0 * * * * *", func() {
+	c.AddFunc("0 */10 * * * *", func() {
 		fmt.Println("Updating user feeds")
 		_, err := app.submitJob(db.Job{
 			Queue:    "update-user-feeds",
