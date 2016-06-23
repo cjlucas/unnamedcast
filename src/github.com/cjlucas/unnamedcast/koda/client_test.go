@@ -132,7 +132,6 @@ func (c mockConn) ZRangeByScore(key string, opt ZRangeByScoreOpts) ([]string, er
 			if s > items[i].Score {
 				pos = i
 				break
-
 			}
 		}
 
@@ -141,18 +140,16 @@ func (c mockConn) ZRangeByScore(key string, opt ZRangeByScoreOpts) ([]string, er
 	}
 
 	lo := opt.Offset
-	if len(items) < opt.Offset {
-		lo = len(items)
+	if len(items) < lo {
+		return nil, nil
 	}
 	hi := lo + opt.Count
 	if hi > len(items) {
 		hi = len(items)
 	}
-
 	items = items[lo:hi]
 
 	var members []string
-
 	for i := range items {
 		members = append(members, items[i].Member)
 	}
