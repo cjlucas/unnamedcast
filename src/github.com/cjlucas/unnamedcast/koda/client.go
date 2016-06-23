@@ -5,7 +5,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"gopkg.in/redis.v3"
 )
@@ -66,6 +65,7 @@ func NewClient(opts *Options) *Client {
 	return &c
 }
 
+// TODO: Rename to Queue
 func (c *Client) GetQueue(name string) *Queue {
 	return &Queue{
 		name:   name,
@@ -84,16 +84,4 @@ func (c *Client) putConn(conn Conn) {
 func (c *Client) buildKey(s ...string) string {
 	s = append([]string{c.opts.Prefix}, s...)
 	return strings.Join(s, ":")
-}
-
-func GetQueue(name string) *Queue {
-	return DefaultClient.GetQueue(name)
-}
-
-func Submit(queue string, priority int, payload interface{}) (*Job, error) {
-	return DefaultClient.GetQueue(queue).Submit(priority, payload)
-}
-
-func SubmitDelayed(queue string, d time.Duration, payload interface{}) (*Job, error) {
-	return DefaultClient.GetQueue(queue).SubmitDelayed(d, payload)
 }
