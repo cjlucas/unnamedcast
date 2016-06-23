@@ -113,6 +113,7 @@ func (c mockConn) ZRem(key string, members ...string) (int, error) {
 	return nRemoved, nil
 }
 func (c mockConn) ZRangeByScore(key string, opt ZRangeByScoreOpts) ([]string, error) {
+	// TODO: actually sort the damn thing
 	if _, ok := c.sets[key]; !ok {
 		c.sets[key] = make(map[string]float64)
 	}
