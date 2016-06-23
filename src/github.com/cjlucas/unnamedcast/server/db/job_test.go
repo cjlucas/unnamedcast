@@ -4,8 +4,8 @@ import "testing"
 
 func TestJob_FindByKodaID(t *testing.T) {
 	db := newDB()
-	job := NewJob("kodaid1")
-	db.Jobs.Insert(job)
+	job := NewJob(1)
+	job, _ = db.Jobs.Create(job)
 
 	var out Job
 	if err := db.Jobs.FindByKodaID(job.KodaID).One(&out); err != nil {
@@ -19,8 +19,8 @@ func TestJob_FindByKodaID(t *testing.T) {
 
 func TestJob_AppendLog(t *testing.T) {
 	db := newDB()
-	job := NewJob("kodaid1")
-	db.Jobs.Insert(job)
+	job := NewJob(1)
+	job, _ = db.Jobs.Create(job)
 	db.Jobs.AppendLog(job.ID, "line goes here")
 
 	var out Job

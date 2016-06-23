@@ -59,14 +59,12 @@ type PersistedJob struct {
 }
 
 func (j PersistedJob) AppendLogf(format string, args ...interface{}) {
-	fmt.Println("here1")
 	line := fmt.Sprintf(format, args...)
 	if j.Job == nil {
 		fmt.Println(line)
 		return
 	}
 
-	fmt.Println("here2")
 	jobCollection.AppendLog(j.Job.ID, line)
 }
 
@@ -99,7 +97,7 @@ func persistedJobByID(kodaID int) PersistedJob {
 
 	var job db.Job
 	if err := jobCollection.FindByKodaID(kodaID).One(&job); err != nil {
-		fmt.Println("Error fetching persisted job, log will not persist")
+		fmt.Println("Error fetching persisted job, log will not persist", err)
 	} else {
 		persistedJob.Job = &job
 	}
