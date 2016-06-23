@@ -25,13 +25,6 @@ type Job struct {
 	Log              []JobLogEntry `json:"log" bson:"log"`
 }
 
-func NewJob(kodaID int) Job {
-	return Job{
-		ID:     bson.NewObjectId(),
-		KodaID: kodaID,
-	}
-}
-
 type JobCollection struct {
 	collection
 }
