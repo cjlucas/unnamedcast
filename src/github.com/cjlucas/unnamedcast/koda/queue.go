@@ -58,14 +58,12 @@ func (q *Queue) persistJob(j *Job, c Conn, fields ...string) error {
 		}
 	}
 
-	// TODO: Should probably do some cleanup if an error was hit
-	for _, field := range fields {
-		if _, err := c.HSet(jobKey, field, hash[field]); err != nil {
-			return err
-		}
+	out := make(map[string]string)
+	for _, f := range fields {
+		out[f] = hash[f]
 	}
 
-	return nil
+	return c.HSetAll(jobKey, out)
 }
 
 func (q *Queue) addJobToQueue(j *Job, conn Conn) error {

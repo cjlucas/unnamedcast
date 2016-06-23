@@ -20,26 +20,13 @@ func (r *GoRedisAdapter) Incr(key string) (int, error) {
 	return int(cmd.Val()), cmd.Err()
 }
 
-func (r *GoRedisAdapter) HIncr(key, field string) (int, error) {
-	cmd := r.R.HIncrBy(key, field, 1)
-	return int(cmd.Val()), cmd.Err()
-}
-
-func (r *GoRedisAdapter) HGet(key, field string) (string, error) {
-	return r.R.HGet(key, field).Result()
-}
-
 func (r *GoRedisAdapter) HGetAll(key string) ([]string, error) {
 	return r.R.HGetAll(key).Result()
 }
 
-func (r *GoRedisAdapter) HSet(key, field, value string) (bool, error) {
-	return r.R.HSet(key, field, value).Result()
-}
-
-func (r *GoRedisAdapter) RPush(key string, value ...string) (int, error) {
-	cmd := r.R.RPush(key, value...)
-	return int(cmd.Val()), cmd.Err()
+func (r *GoRedisAdapter) HSetAll(key string, fields map[string]string) error {
+	_, err := r.R.HMSetMap(key, fields).Result()
+	return err
 }
 
 func (r *GoRedisAdapter) LPush(key string, value ...string) (int, error) {
