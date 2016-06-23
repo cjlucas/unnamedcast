@@ -109,12 +109,16 @@ func (c mockConn) ZRem(key string, members ...string) (int, error) {
 	return nRemoved, nil
 }
 func (c mockConn) ZRangeByScore(key string, opt ZRangeByScoreOpts) ([]string, error) {
-	// TODO: actually sort the damn thing
 	if _, ok := c.sets[key]; !ok {
 		c.sets[key] = make(map[string]float64)
 	}
 
-	var members []string
+	type Item struct {
+		Member string
+		Score  float64
+	}
+
+	var items []Item
 	for m, s := range c.sets[key] {
 		if (opt.MinInclusive && s < opt.Min) ||
 			(!opt.MinInclusive && s <= opt.Min) ||
@@ -123,19 +127,37 @@ func (c mockConn) ZRangeByScore(key string, opt ZRangeByScoreOpts) ([]string, er
 			continue
 		}
 
-		members = append(members, m)
+		pos := 0
+		for i := range items {
+			if s > items[i].Score {
+				pos = i
+				break
+
+			}
+		}
+
+		item := Item{Member: m, Score: s}
+		items = append(items[:pos], append([]Item{item}, items[pos:]...)...)
 	}
 
 	lo := opt.Offset
-	if len(members) < opt.Offset {
-		lo = len(members)
+	if len(items) < opt.Offset {
+		lo = len(items)
 	}
 	hi := lo + opt.Count
-	if hi > len(members) {
-		hi = len(members)
+	if hi > len(items) {
+		hi = len(items)
 	}
 
-	return members[lo:hi], nil
+	items = items[lo:hi]
+
+	var members []string
+
+	for i := range items {
+		members = append(members, items[i].Member)
+	}
+
+	return members, nil
 }
 
 func (c mockConn) Close() error { return nil }
