@@ -14,11 +14,21 @@ import (
 	"gopkg.in/mgo.v2/bson"
 
 	"github.com/cjlucas/unnamedcast/api"
+	"github.com/cjlucas/unnamedcast/koda"
 	"github.com/cjlucas/unnamedcast/server/db"
 	"github.com/gin-gonic/gin"
 )
 
 var emptyObjectID bson.ObjectId
+
+type mockJobSubmitter struct{}
+
+func (m mockJobSubmitter) Submit(queue string, priority int, payload interface{}) (*koda.Job, error) {
+	return &koda.Job{
+		ID:       1,
+		Priority: priority,
+		Payload:  payload}, nil
+}
 
 func init() {
 	gin.SetMode(gin.TestMode)
@@ -27,18 +37,19 @@ func init() {
 
 func newTestApp() *App {
 	// Initialize app with a clean database
-	app, err := NewApp(Config{
-		DBConfig: db.Config{
-			URL:                os.Getenv("DB_URL"),
-			Clean:              true,
-			ForceIndexCreation: true,
-		},
+	dbConn, err := db.New(db.Config{
+		URL:                os.Getenv("DB_URL"),
+		Clean:              true,
+		ForceIndexCreation: true,
 	})
 	if err != nil {
 		panic(err)
 	}
 
-	return app
+	return NewApp(Config{
+		DB:           dbConn,
+		JobSubmitter: mockJobSubmitter{},
+	})
 }
 
 func createFeed(t *testing.T, app *App, feed *db.Feed) *db.Feed {
@@ -61,6 +72,14 @@ func createUser(t *testing.T, app *App, username, password string) *db.User {
 		t.Fatal("Failed to create user")
 	}
 	return user
+}
+
+func createJob(t *testing.T, app *App, job db.Job) db.Job {
+	job, err := app.DB.Jobs.Create(job)
+	if err != nil {
+		t.Fatal("Failed to create user")
+	}
+	return job
 }
 
 func newRequest(method string, endpoint string, body interface{}) *http.Request {
@@ -904,5 +923,131 @@ func TestPutFeedItem(t *testing.T) {
 
 	if out.URL != item.URL {
 		t.Errorf("URL mismatch: %s != %s", out.URL, item.URL)
+	}
+}
+
+func TestGetJob(t *testing.T) {
+	app := newTestApp()
+	job := createJob(t, app, db.Job{
+		KodaID: 1,
+	})
+
+	var out db.Job
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      newRequest("GET", fmt.Sprintf("/api/jobs/%s", job.ID.Hex()), nil),
+		ExpectedCode: http.StatusOK,
+		ResponseBody: &out,
+	})
+
+	if out.ID != job.ID {
+		t.Errorf("id mismatch %s != %s", out.ID, job.ID)
+	}
+}
+
+func TestCreateJob(t *testing.T) {
+	app := newTestApp()
+
+	in := db.Job{
+		Queue:    "queue",
+		Priority: 100,
+		Payload:  map[string]string{"data": "stuff"},
+	}
+
+	var out db.Job
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      newRequest("POST", "/api/jobs", &in),
+		ExpectedCode: http.StatusOK,
+		ResponseBody: &out,
+	})
+
+	if out.ID == emptyObjectID {
+		t.Error("id is invalid")
+	}
+
+	if out.KodaID == 0 {
+		t.Error("KodaID was not set")
+	}
+}
+
+func TestGetJobs(t *testing.T) {
+	app := newTestApp()
+	job := createJob(t, app, db.Job{
+		KodaID: 1,
+	})
+
+	var out []db.Job
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      newRequest("GET", "/api/jobs", nil),
+		ExpectedCode: http.StatusOK,
+		ResponseBody: &out,
+	})
+
+	if len(out) != 1 {
+		t.Fatalf("output len mismatch: %d != 1", len(out))
+		return
+	}
+
+	if out[0].ID != job.ID {
+		t.Error("unexpected job id")
+	}
+}
+
+func TestGetJobs_Filter(t *testing.T) {
+	app := newTestApp()
+	createJob(t, app, db.Job{
+		KodaID: 1,
+		Queue:  "some-queue",
+		State:  "done",
+	})
+
+	var out []db.Job
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      newRequest("GET", "/api/jobs?queue=some-queue", nil),
+		ExpectedCode: http.StatusOK,
+		ResponseBody: &out,
+	})
+
+	if len(out) != 1 {
+		t.Error("job not found")
+	}
+
+	out = make([]db.Job, 0)
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      newRequest("GET", "/api/jobs?queue=fake-queue", nil),
+		ExpectedCode: http.StatusOK,
+		ResponseBody: &out,
+	})
+
+	if len(out) != 0 {
+		t.Errorf("job count mismatch: %d != 0", len(out))
+	}
+
+	out = make([]db.Job, 0)
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      newRequest("GET", "/api/jobs?state=done", nil),
+		ExpectedCode: http.StatusOK,
+		ResponseBody: &out,
+	})
+
+	if len(out) != 1 {
+		t.Error("job not found")
+	}
+
+	out = make([]db.Job, 0)
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      newRequest("GET", "/api/jobs?queue=working", nil),
+		ExpectedCode: http.StatusOK,
+		ResponseBody: &out,
+	})
+
+	if len(out) != 0 {
+		t.Errorf("job count mismatch: %d != 0", len(out))
 	}
 }

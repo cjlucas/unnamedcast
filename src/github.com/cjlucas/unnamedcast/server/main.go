@@ -22,8 +22,6 @@ import (
 	"gopkg.in/mgo.v2/bson"
 )
 
-type ContextKey string
-
 const (
 	feedCtxKey   = "feed"
 	userCtxKey   = "user"
@@ -32,28 +30,38 @@ const (
 	userIDCtxKey = "userID"
 	feedIDCtxKey = "feedID"
 	itemIDCtxKey = "itemID"
+	jobIDCtxKey  = "jobID"
 )
 
+type JobSubmitter interface {
+	Submit(queue string, priority int, payload interface{}) (*koda.Job, error)
+}
+
+type defaultKodaClient struct{}
+
+func (c defaultKodaClient) Submit(queue string, priority int, payload interface{}) (*koda.Job, error) {
+	return koda.Submit(queue, priority, payload)
+}
+
 type App struct {
-	DB *db.DB
-	g  *gin.Engine
+	DB           *db.DB
+	g            *gin.Engine
+	jobSubmitter JobSubmitter
 }
 
 type Config struct {
-	DBConfig db.Config
+	DB           *db.DB
+	JobSubmitter JobSubmitter
 }
 
-func NewApp(cfg Config) (*App, error) {
-	app := App{}
-
-	db, err := db.New(cfg.DBConfig)
-	if err != nil {
-		return nil, err
+func NewApp(cfg Config) *App {
+	app := App{
+		DB:           cfg.DB,
+		jobSubmitter: cfg.JobSubmitter,
 	}
-	app.DB = db
 
 	app.setupRoutes()
-	return &app, nil
+	return &app
 }
 
 func newObjectIDFromHex(idHex string) (bson.ObjectId, error) {
@@ -152,6 +160,22 @@ func parseQueryParams(spec interface{}) gin.HandlerFunc {
 	}
 }
 
+func (app *App) submitJob(job db.Job) (db.Job, error) {
+	j, err := app.jobSubmitter.Submit(job.Queue, job.Priority, job.Payload)
+	if err != nil {
+		return db.Job{}, err
+	}
+
+	job = db.Job{
+		KodaID:   j.ID,
+		Queue:    job.Queue,
+		Priority: job.Priority,
+		Payload:  job.Payload,
+	}
+
+	return app.DB.Jobs.Create(job)
+}
+
 func (app *App) logErrors(c *gin.Context) {
 	body, err := ioutil.ReadAll(c.Request.Body)
 	c.Request.Body.Close()
@@ -227,6 +251,10 @@ func (app *App) requireFeedID(paramName string) gin.HandlerFunc {
 
 func (app *App) requireItemID(paramName string) gin.HandlerFunc {
 	return app.requireModelID(app.DB.Items.FindByID, paramName, itemIDCtxKey)
+}
+
+func (app *App) requireJobID(paramName string) gin.HandlerFunc {
+	return app.requireModelID(app.DB.Jobs.FindByID, paramName, jobIDCtxKey)
 }
 
 func (app *App) setupRoutes() {
@@ -706,6 +734,76 @@ func (app *App) setupRoutes() {
 
 		c.JSON(http.StatusOK, &item)
 	})
+
+	type GetJobsParams struct {
+		limitParams
+		sortParams
+
+		Queue string
+		State string
+	}
+
+	api.GET("/jobs",
+		parseQueryParams(GetJobsParams{}),
+		parseLimitParams,
+		parseSortParams(app.DB.Jobs.ModelInfo, "completion_time"),
+		func(c *gin.Context) {
+			params := c.MustGet(paramsCtxKey).(*GetJobsParams)
+			query := ensureQueryExists(c)
+
+			filter := bson.M{}
+			if params.Queue != "" {
+				filter["queue"] = params.Queue
+			}
+			if params.State != "" {
+				filter["state"] = params.State
+			}
+			query.Filter = filter
+
+			var jobs []db.Job
+			if err := app.DB.Jobs.Find(query).All(&jobs); err != nil {
+				c.AbortWithError(http.StatusInternalServerError, err)
+				return
+			}
+
+			c.JSON(http.StatusOK, jobs)
+		})
+
+	api.GET("/jobs/:id",
+		app.requireJobID("id"),
+		func(c *gin.Context) {
+			id := c.MustGet(jobIDCtxKey).(bson.ObjectId)
+
+			var job db.Job
+			if err := app.DB.Jobs.FindByID(id).One(&job); err != nil {
+				c.AbortWithError(http.StatusInternalServerError, err)
+				return
+			}
+
+			c.JSON(http.StatusOK, &job)
+		},
+	)
+
+	api.POST("/jobs", func(c *gin.Context) {
+		var job db.Job
+		if err := c.BindJSON(&job); err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
+		}
+
+		if job.Queue == "" {
+			c.AbortWithStatus(http.StatusBadRequest)
+			return
+		}
+
+		job, err := app.submitJob(job)
+		if err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
+		}
+
+		c.JSON(http.StatusOK, &job)
+	})
 }
 
 func (app *App) Run(addr string) error {
@@ -723,15 +821,6 @@ func main() {
 	koda.Configure(&koda.Options{
 		URL: rdbURL,
 	})
-
-	c.AddFunc("0 */10 * * * *", func() {
-		fmt.Println("Updating user feeds")
-		if _, err := koda.Submit("update-user-feeds", 0, nil); err != nil {
-			fmt.Println("Error updating user feeds:", err)
-		}
-	})
-
-	c.Start()
 
 	dbURL := os.Getenv("DB_URL")
 	if dbURL == "" {
@@ -753,14 +842,31 @@ func main() {
 		port, _ = strconv.Atoi(s[1])
 	}
 
-	app, err := NewApp(Config{
-		DBConfig: db.Config{
-			URL: dbURL,
-		},
+	dbConn, err := db.New(db.Config{
+		URL: dbURL,
 	})
 	if err != nil {
 		panic(fmt.Errorf("Failed to connect to DB: %s (%s)", err, dbURL))
 	}
+
+	app := NewApp(Config{
+		DB:           dbConn,
+		JobSubmitter: defaultKodaClient{},
+	})
+
+	c.AddFunc("0 */10 * * * *", func() {
+		fmt.Println("Updating user feeds")
+		_, err := app.submitJob(db.Job{
+			Queue:    "update-user-feeds",
+			Priority: 0,
+		})
+		if err != nil {
+			fmt.Println("Error updating user feeds:", err)
+			return
+		}
+	})
+
+	c.Start()
 
 	app.Run(fmt.Sprintf("0.0.0.0:%d", port))
 }
