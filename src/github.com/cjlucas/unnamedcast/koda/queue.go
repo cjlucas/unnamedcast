@@ -44,10 +44,6 @@ func (q *Queue) jobKey(j *Job) string {
 	return q.client.buildKey("jobs", strconv.Itoa(j.ID))
 }
 
-func (q *Queue) logKey(j *Job) string {
-	return q.client.buildKey("logs", strconv.Itoa(j.ID), strconv.Itoa(j.NumAttempts))
-}
-
 func (q *Queue) incrJobID(c Conn) (int, error) {
 	return c.Incr(q.client.buildKey("cur_job_id"))
 }
@@ -70,14 +66,6 @@ func (q *Queue) persistJob(j *Job, c Conn, fields ...string) error {
 	}
 
 	return nil
-}
-
-func (q *Queue) UpdateProgress(j *Job, progress int) error {
-	conn := q.client.getConn()
-	defer q.client.putConn(conn)
-
-	j.Progress = progress
-	return q.persistJob(j, conn, "progress")
 }
 
 func (q *Queue) addJobToQueue(j *Job, conn Conn) error {
