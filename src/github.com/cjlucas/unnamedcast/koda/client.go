@@ -10,7 +10,7 @@ import (
 	"gopkg.in/redis.v3"
 )
 
-var defaultClient = NewClient(nil)
+var DefaultClient = NewClient(nil)
 
 type Client struct {
 	opts     *Options
@@ -24,7 +24,7 @@ type Options struct {
 }
 
 func Configure(opts *Options) {
-	defaultClient = NewClient(opts)
+	DefaultClient = NewClient(opts)
 }
 
 func NewClient(opts *Options) *Client {
@@ -87,13 +87,13 @@ func (c *Client) buildKey(s ...string) string {
 }
 
 func GetQueue(name string) *Queue {
-	return defaultClient.GetQueue(name)
+	return DefaultClient.GetQueue(name)
 }
 
 func Submit(queue string, priority int, payload interface{}) (*Job, error) {
-	return defaultClient.GetQueue(queue).Submit(priority, payload)
+	return DefaultClient.GetQueue(queue).Submit(priority, payload)
 }
 
 func SubmitDelayed(queue string, d time.Duration, payload interface{}) (*Job, error) {
-	return defaultClient.GetQueue(queue).SubmitDelayed(d, payload)
+	return DefaultClient.GetQueue(queue).SubmitDelayed(d, payload)
 }
