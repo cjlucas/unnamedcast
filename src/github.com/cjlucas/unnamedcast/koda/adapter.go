@@ -52,7 +52,7 @@ func (r *GoRedisAdapter) ZRem(key string, members ...string) (int, error) {
 	return int(cmd.Val()), cmd.Err()
 }
 
-func (r *GoRedisAdapter) ZRangeByScore(key string, opt *ZRangeByScoreOpts) ([]string, error) {
+func (r *GoRedisAdapter) ZRangeByScore(key string, opt ZRangeByScoreOpts) ([]string, error) {
 	var rangeStr [2]string
 	ranges := []float64{opt.Min, opt.Max}
 	inclusive := []bool{opt.MinInclusive, opt.MaxInclusive}
@@ -64,7 +64,7 @@ func (r *GoRedisAdapter) ZRangeByScore(key string, opt *ZRangeByScoreOpts) ([]st
 		}
 	}
 
-	cmd := r.R.ZRangeByScore(key, redis.ZRangeByScore{
+	cmd := r.R.ZRangeByScore(key, &redis.ZRangeByScore{
 		Min:    rangeStr[0],
 		Max:    rangeStr[1],
 		Offset: opt.Offset,

@@ -161,7 +161,7 @@ func (q *Queue) Wait() (*Job, error) {
 			break
 		}
 
-		results, err = conn.ZRangeByScore(delayedQueueKey, &ZRangeByScoreOpts{
+		results, err = conn.ZRangeByScore(delayedQueueKey, ZRangeByScoreOpts{
 			Min:          0,
 			Max:          timeAsFloat(time.Now().UTC()),
 			MinInclusive: true,
