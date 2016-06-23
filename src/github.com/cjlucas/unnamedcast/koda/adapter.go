@@ -17,8 +17,9 @@ type ZRangeByScoreOpts struct {
 	Count        int64
 }
 
+var NilError = redis.Nil
+
 type Conn interface {
-	IsNilError(err error) bool
 	Incr(key string) (int, error)
 	HIncr(key, field string) (int, error)
 	HGet(key, field string) (string, error)
@@ -30,17 +31,12 @@ type Conn interface {
 	ZAddNX(key string, score float64, member string) (int, error)
 	ZRem(key string, members ...string) (int, error)
 	ZRangeByScore(key string, opt *ZRangeByScoreOpts) ([]string, error)
-	Scan(cursor int, match string, count int) (int, []string, error)
 	Close() error
 }
 
 // GoRedisAdapter is an adapter for the redis.v3 library
 type GoRedisAdapter struct {
 	R *redis.Client
-}
-
-func (r *GoRedisAdapter) IsNilError(err error) bool {
-	return err == redis.Nil
 }
 
 func (r *GoRedisAdapter) Incr(key string) (int, error) {

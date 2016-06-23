@@ -148,7 +148,7 @@ func (q *Queue) Wait() (*Job, error) {
 	var jobKey string
 	for {
 		results, err := conn.BRPop(1*time.Second, queues...)
-		if err != nil && !conn.IsNilError(err) {
+		if err != nil && err != NilError {
 			if err, ok := err.(net.Error); ok && err.Temporary() {
 				// TODO(clucas): In backoff algorithm may be appropriate here
 				time.Sleep(5 * time.Second)
