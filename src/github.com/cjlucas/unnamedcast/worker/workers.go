@@ -185,7 +185,7 @@ func (w *ScrapeiTunesFeeds) Work(q *koda.Queue, j *koda.Job) error {
 		})
 
 		if err != nil {
-			j.Logf("Failed to add update feed job")
+			fmt.Println("Failed to add update feed job")
 			continue
 		}
 	}

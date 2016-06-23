@@ -1,39 +1,19 @@
 package redis_test
 
 import (
-	"errors"
-	"sync"
-	"testing"
-	"time"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
 	"gopkg.in/redis.v3"
+	"gopkg.in/redis.v3/internal/pool"
 )
 
 var _ = Describe("pool", func() {
 	var client *redis.Client
 
-	var perform = func(n int, cb func()) {
-		wg := &sync.WaitGroup{}
-		for i := 0; i < n; i++ {
-			wg.Add(1)
-			go func() {
-				defer GinkgoRecover()
-				defer wg.Done()
-
-				cb()
-			}()
-		}
-		wg.Wait()
-	}
-
 	BeforeEach(func() {
-		client = redis.NewClient(&redis.Options{
-			Addr:     redisAddr,
-			PoolSize: 10,
-		})
+		client = redis.NewClient(redisOptions())
+		Expect(client.FlushDb().Err()).NotTo(HaveOccurred())
 	})
 
 	AfterEach(func() {
@@ -41,7 +21,7 @@ var _ = Describe("pool", func() {
 	})
 
 	It("should respect max size", func() {
-		perform(1000, func() {
+		perform(1000, func(id int) {
 			val, err := client.Ping().Result()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(val).To(Equal("PONG"))
@@ -54,7 +34,7 @@ var _ = Describe("pool", func() {
 	})
 
 	It("should respect max on multi", func() {
-		perform(1000, func() {
+		perform(1000, func(id int) {
 			var ping *redis.StatusCmd
 
 			multi := client.Multi()
@@ -76,7 +56,7 @@ var _ = Describe("pool", func() {
 	})
 
 	It("should respect max on pipelines", func() {
-		perform(1000, func() {
+		perform(1000, func(id int) {
 			pipe := client.Pipeline()
 			ping := pipe.Ping()
 			cmds, err := pipe.Exec()
@@ -94,27 +74,27 @@ var _ = Describe("pool", func() {
 	})
 
 	It("should respect max on pubsub", func() {
-		perform(10, func() {
+		connPool := client.Pool()
+		connPool.(*pool.ConnPool).DialLimiter = nil
+
+		perform(1000, func(id int) {
 			pubsub := client.PubSub()
 			Expect(pubsub.Subscribe()).NotTo(HaveOccurred())
 			Expect(pubsub.Close()).NotTo(HaveOccurred())
 		})
 
-		pool := client.Pool()
-		Expect(pool.Len()).To(BeNumerically("<=", 10))
-		Expect(pool.FreeLen()).To(BeNumerically("<=", 10))
-		Expect(pool.Len()).To(Equal(pool.FreeLen()))
+		Expect(connPool.Len()).To(Equal(connPool.FreeLen()))
+		Expect(connPool.Len()).To(BeNumerically("<=", 10))
 	})
 
 	It("should remove broken connections", func() {
-		cn, _, err := client.Pool().Get()
+		cn, err := client.Pool().Get()
 		Expect(err).NotTo(HaveOccurred())
-		Expect(cn.Close()).NotTo(HaveOccurred())
+		cn.NetConn = &badConn{}
 		Expect(client.Pool().Put(cn)).NotTo(HaveOccurred())
 
 		err = client.Ping().Err()
-		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("use of closed network connection"))
+		Expect(err).To(MatchError("bad connection"))
 
 		val, err := client.Ping().Result()
 		Expect(err).NotTo(HaveOccurred())
@@ -123,6 +103,12 @@ var _ = Describe("pool", func() {
 		pool := client.Pool()
 		Expect(pool.Len()).To(Equal(1))
 		Expect(pool.FreeLen()).To(Equal(1))
+
+		stats := pool.Stats()
+		Expect(stats.Requests).To(Equal(uint32(4)))
+		Expect(stats.Hits).To(Equal(uint32(2)))
+		Expect(stats.Waits).To(Equal(uint32(0)))
+		Expect(stats.Timeouts).To(Equal(uint32(0)))
 	})
 
 	It("should reuse connections", func() {
@@ -135,87 +121,11 @@ var _ = Describe("pool", func() {
 		pool := client.Pool()
 		Expect(pool.Len()).To(Equal(1))
 		Expect(pool.FreeLen()).To(Equal(1))
-	})
 
-	It("should unblock client when connection is removed", func() {
-		pool := client.Pool()
-
-		// Reserve one connection.
-		cn, _, err := pool.Get()
-		Expect(err).NotTo(HaveOccurred())
-
-		// Reserve the rest of connections.
-		for i := 0; i < 9; i++ {
-			_, _, err := pool.Get()
-			Expect(err).NotTo(HaveOccurred())
-		}
-
-		var ping *redis.StatusCmd
-		started := make(chan bool, 1)
-		done := make(chan bool, 1)
-		go func() {
-			started <- true
-			ping = client.Ping()
-			done <- true
-		}()
-		<-started
-
-		// Check that Ping is blocked.
-		select {
-		case <-done:
-			panic("Ping is not blocked")
-		default:
-			// ok
-		}
-
-		err = pool.Remove(cn, errors.New("test"))
-		Expect(err).NotTo(HaveOccurred())
-
-		// Check that Ping is unblocked.
-		select {
-		case <-done:
-			// ok
-		case <-time.After(time.Second):
-			panic("Ping is not unblocked")
-		}
-		Expect(ping.Err()).NotTo(HaveOccurred())
-	})
-
-	It("should rate limit dial", func() {
-		pool := client.Pool()
-
-		var rateErr error
-		for i := 0; i < 1000; i++ {
-			cn, _, err := pool.Get()
-			if err != nil {
-				rateErr = err
-				break
-			}
-
-			_ = pool.Remove(cn, errors.New("test"))
-		}
-
-		Expect(rateErr).To(MatchError(`redis: you open connections too fast (last_error="test")`))
+		stats := pool.Stats()
+		Expect(stats.Requests).To(Equal(uint32(101)))
+		Expect(stats.Hits).To(Equal(uint32(100)))
+		Expect(stats.Waits).To(Equal(uint32(0)))
+		Expect(stats.Timeouts).To(Equal(uint32(0)))
 	})
 })
-
-func BenchmarkPool(b *testing.B) {
-	client := benchRedisClient()
-	defer client.Close()
-
-	pool := client.Pool()
-
-	b.ResetTimer()
-
-	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			conn, _, err := pool.Get()
-			if err != nil {
-				b.Fatalf("no error expected on pool.Get but received: %s", err.Error())
-			}
-			if err = pool.Put(conn); err != nil {
-				b.Fatalf("no error expected on pool.Put but received: %s", err.Error())
-			}
-		}
-	})
-}

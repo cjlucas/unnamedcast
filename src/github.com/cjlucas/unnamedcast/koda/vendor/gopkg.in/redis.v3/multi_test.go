@@ -14,13 +14,11 @@ var _ = Describe("Multi", func() {
 	var client *redis.Client
 
 	BeforeEach(func() {
-		client = redis.NewClient(&redis.Options{
-			Addr: redisAddr,
-		})
+		client = redis.NewClient(redisOptions())
+		Expect(client.FlushDb().Err()).NotTo(HaveOccurred())
 	})
 
 	AfterEach(func() {
-		Expect(client.FlushDb().Err()).NotTo(HaveOccurred())
 		Expect(client.Close()).NotTo(HaveOccurred())
 	})
 
@@ -54,6 +52,7 @@ var _ = Describe("Multi", func() {
 		for i := 0; i < 100; i++ {
 			wg.Add(1)
 			go func() {
+				defer GinkgoRecover()
 				defer wg.Done()
 
 				err := incr("key")
@@ -142,10 +141,10 @@ var _ = Describe("Multi", func() {
 
 	It("should recover from bad connection", func() {
 		// Put bad connection in the pool.
-		cn, _, err := client.Pool().Get()
+		cn, err := client.Pool().Get()
 		Expect(err).NotTo(HaveOccurred())
 
-		cn.SetNetConn(&badConn{})
+		cn.NetConn = &badConn{}
 		err = client.Pool().Put(cn)
 		Expect(err).NotTo(HaveOccurred())
 
@@ -165,5 +164,32 @@ var _ = Describe("Multi", func() {
 			return nil
 		})
 		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("should recover from bad connection when there are no commands", func() {
+		// Put bad connection in the pool.
+		cn, err := client.Pool().Get()
+		Expect(err).NotTo(HaveOccurred())
+
+		cn.NetConn = &badConn{}
+		err = client.Pool().Put(cn)
+		Expect(err).NotTo(HaveOccurred())
+
+		{
+			tx, err := client.Watch("key")
+			Expect(err).To(MatchError("bad connection"))
+			Expect(tx).To(BeNil())
+		}
+
+		{
+			tx, err := client.Watch("key")
+			Expect(err).NotTo(HaveOccurred())
+
+			err = tx.Ping().Err()
+			Expect(err).NotTo(HaveOccurred())
+
+			err = tx.Close()
+			Expect(err).NotTo(HaveOccurred())
+		}
 	})
 })

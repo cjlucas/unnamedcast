@@ -3,8 +3,6 @@ package redis_test
 import (
 	"bytes"
 	"net"
-	"testing"
-	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -16,9 +14,8 @@ var _ = Describe("Client", func() {
 	var client *redis.Client
 
 	BeforeEach(func() {
-		client = redis.NewClient(&redis.Options{
-			Addr: redisAddr,
-		})
+		client = redis.NewClient(redisOptions())
+		Expect(client.FlushDb().Err()).To(BeNil())
 	})
 
 	AfterEach(func() {
@@ -26,7 +23,7 @@ var _ = Describe("Client", func() {
 	})
 
 	It("should Stringer", func() {
-		Expect(client.String()).To(Equal("Redis<:6380 db:0>"))
+		Expect(client.String()).To(Equal("Redis<:6380 db:15>"))
 	})
 
 	It("should ping", func() {
@@ -35,8 +32,13 @@ var _ = Describe("Client", func() {
 		Expect(val).To(Equal("PONG"))
 	})
 
+	It("should return pool stats", func() {
+		Expect(client.PoolStats()).To(BeAssignableToTypeOf(&redis.PoolStats{}))
+	})
+
 	It("should support custom dialers", func() {
 		custom := redis.NewClient(&redis.Options{
+			Addr: ":1234",
 			Dialer: func() (net.Conn, error) {
 				return net.Dial("tcp", redisAddr)
 			},
@@ -51,21 +53,19 @@ var _ = Describe("Client", func() {
 	It("should close", func() {
 		Expect(client.Close()).NotTo(HaveOccurred())
 		err := client.Ping().Err()
-		Expect(err).To(HaveOccurred())
 		Expect(err).To(MatchError("redis: client is closed"))
 	})
 
-	It("should close pubsub without closing the connection", func() {
+	It("should close pubsub without closing the client", func() {
 		pubsub := client.PubSub()
 		Expect(pubsub.Close()).NotTo(HaveOccurred())
 
 		_, err := pubsub.Receive()
-		Expect(err).To(HaveOccurred())
 		Expect(err).To(MatchError("redis: client is closed"))
 		Expect(client.Ping().Err()).NotTo(HaveOccurred())
 	})
 
-	It("should close multi without closing the connection", func() {
+	It("should close multi without closing the client", func() {
 		multi := client.Multi()
 		Expect(multi.Close()).NotTo(HaveOccurred())
 
@@ -73,19 +73,19 @@ var _ = Describe("Client", func() {
 			multi.Ping()
 			return nil
 		})
-		Expect(err).To(HaveOccurred())
 		Expect(err).To(MatchError("redis: client is closed"))
+
 		Expect(client.Ping().Err()).NotTo(HaveOccurred())
 	})
 
-	It("should close pipeline without closing the connection", func() {
+	It("should close pipeline without closing the client", func() {
 		pipeline := client.Pipeline()
 		Expect(pipeline.Close()).NotTo(HaveOccurred())
 
 		pipeline.Ping()
 		_, err := pipeline.Exec()
-		Expect(err).To(HaveOccurred())
 		Expect(err).To(MatchError("redis: client is closed"))
+
 		Expect(client.Ping().Err()).NotTo(HaveOccurred())
 	})
 
@@ -107,45 +107,30 @@ var _ = Describe("Client", func() {
 		Expect(pipeline.Close()).NotTo(HaveOccurred())
 	})
 
-	It("should support idle-timeouts", func() {
-		idle := redis.NewClient(&redis.Options{
-			Addr:        redisAddr,
-			IdleTimeout: 100 * time.Microsecond,
-		})
-		defer idle.Close()
-
-		Expect(idle.Ping().Err()).NotTo(HaveOccurred())
-		time.Sleep(time.Millisecond)
-		Expect(idle.Ping().Err()).NotTo(HaveOccurred())
-	})
-
-	It("should support DB selection", func() {
-		db1 := redis.NewClient(&redis.Options{
+	It("should select DB", func() {
+		db2 := redis.NewClient(&redis.Options{
 			Addr: redisAddr,
-			DB:   1,
+			DB:   2,
 		})
-		defer db1.Close()
+		Expect(db2.FlushDb().Err()).NotTo(HaveOccurred())
+		Expect(db2.Get("db").Err()).To(Equal(redis.Nil))
+		Expect(db2.Set("db", 2, 0).Err()).NotTo(HaveOccurred())
 
-		Expect(db1.Get("key").Err()).To(Equal(redis.Nil))
-		Expect(db1.Set("key", "value", 0).Err()).NotTo(HaveOccurred())
+		n, err := db2.Get("db").Int64()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(n).To(Equal(int64(2)))
 
-		Expect(client.Get("key").Err()).To(Equal(redis.Nil))
-		Expect(db1.Get("key").Val()).To(Equal("value"))
-		Expect(db1.FlushDb().Err()).NotTo(HaveOccurred())
+		Expect(client.Get("db").Err()).To(Equal(redis.Nil))
+
+		Expect(db2.FlushDb().Err()).NotTo(HaveOccurred())
+		Expect(db2.Close()).NotTo(HaveOccurred())
 	})
 
-	It("should support DB selection with read timeout (issue #135)", func() {
-		for i := 0; i < 100; i++ {
-			db1 := redis.NewClient(&redis.Options{
-				Addr:        redisAddr,
-				DB:          1,
-				ReadTimeout: time.Nanosecond,
-			})
-
-			err := db1.Ping().Err()
-			Expect(err).To(HaveOccurred())
-			Expect(err.(net.Error).Timeout()).To(BeTrue())
-		}
+	It("should process custom commands", func() {
+		cmd := redis.NewCmd("PING")
+		client.Process(cmd)
+		Expect(cmd.Err()).NotTo(HaveOccurred())
+		Expect(cmd.Val()).To(Equal("PONG"))
 	})
 
 	It("should retry command on network error", func() {
@@ -157,211 +142,60 @@ var _ = Describe("Client", func() {
 		})
 
 		// Put bad connection in the pool.
-		cn, _, err := client.Pool().Get()
+		cn, err := client.Pool().Get()
 		Expect(err).NotTo(HaveOccurred())
 
-		cn.SetNetConn(&badConn{})
+		cn.NetConn = &badConn{}
 		err = client.Pool().Put(cn)
 		Expect(err).NotTo(HaveOccurred())
 
 		err = client.Ping().Err()
 		Expect(err).NotTo(HaveOccurred())
 	})
+
+	It("should update conn.UsedAt on read/write", func() {
+		cn, err := client.Pool().Get()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(cn.UsedAt).NotTo(BeZero())
+		createdAt := cn.UsedAt
+
+		err = client.Pool().Put(cn)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(cn.UsedAt.Equal(createdAt)).To(BeTrue())
+
+		err = client.Ping().Err()
+		Expect(err).NotTo(HaveOccurred())
+
+		cn, err = client.Pool().Get()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(cn).NotTo(BeNil())
+		Expect(cn.UsedAt.After(createdAt)).To(BeTrue())
+	})
+
+	It("should escape special chars", func() {
+		set := client.Set("key", "hello1\r\nhello2\r\n", 0)
+		Expect(set.Err()).NotTo(HaveOccurred())
+		Expect(set.Val()).To(Equal("OK"))
+
+		get := client.Get("key")
+		Expect(get.Err()).NotTo(HaveOccurred())
+		Expect(get.Val()).To(Equal("hello1\r\nhello2\r\n"))
+	})
+
+	It("should handle big vals", func() {
+		bigVal := string(bytes.Repeat([]byte{'*'}, 1<<17)) // 128kb
+
+		err := client.Set("key", bigVal, 0).Err()
+		Expect(err).NotTo(HaveOccurred())
+
+		// Reconnect to get new connection.
+		Expect(client.Close()).To(BeNil())
+		client = redis.NewClient(redisOptions())
+
+		got, err := client.Get("key").Result()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(len(got)).To(Equal(len(bigVal)))
+		Expect(got).To(Equal(bigVal))
+	})
+
 })
-
-//------------------------------------------------------------------------------
-
-func benchRedisClient() *redis.Client {
-	client := redis.NewClient(&redis.Options{
-		Addr: ":6379",
-	})
-	if err := client.FlushDb().Err(); err != nil {
-		panic(err)
-	}
-	return client
-}
-
-func BenchmarkRedisPing(b *testing.B) {
-	client := benchRedisClient()
-	defer client.Close()
-
-	b.ResetTimer()
-
-	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			if err := client.Ping().Err(); err != nil {
-				b.Fatal(err)
-			}
-		}
-	})
-}
-
-func BenchmarkRedisSet(b *testing.B) {
-	client := benchRedisClient()
-	defer client.Close()
-
-	value := string(bytes.Repeat([]byte{'1'}, 10000))
-
-	b.ResetTimer()
-
-	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			if err := client.Set("key", value, 0).Err(); err != nil {
-				b.Fatal(err)
-			}
-		}
-	})
-}
-
-func BenchmarkRedisGetNil(b *testing.B) {
-	client := benchRedisClient()
-	defer client.Close()
-
-	b.ResetTimer()
-
-	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			if err := client.Get("key").Err(); err != redis.Nil {
-				b.Fatal(err)
-			}
-		}
-	})
-}
-
-func benchmarkRedisSetGet(b *testing.B, size int) {
-	client := benchRedisClient()
-	defer client.Close()
-
-	value := string(bytes.Repeat([]byte{'1'}, size))
-
-	b.ResetTimer()
-
-	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			if err := client.Set("key", value, 0).Err(); err != nil {
-				b.Fatal(err)
-			}
-
-			got, err := client.Get("key").Result()
-			if err != nil {
-				b.Fatal(err)
-			}
-			if got != value {
-				b.Fatalf("got != value")
-			}
-		}
-	})
-}
-
-func BenchmarkRedisSetGet64Bytes(b *testing.B) {
-	benchmarkRedisSetGet(b, 64)
-}
-
-func BenchmarkRedisSetGet1KB(b *testing.B) {
-	benchmarkRedisSetGet(b, 1024)
-}
-
-func BenchmarkRedisSetGet10KB(b *testing.B) {
-	benchmarkRedisSetGet(b, 10*1024)
-}
-
-func BenchmarkRedisSetGet1MB(b *testing.B) {
-	benchmarkRedisSetGet(b, 1024*1024)
-}
-
-func BenchmarkRedisSetGetBytes(b *testing.B) {
-	client := benchRedisClient()
-	defer client.Close()
-
-	value := bytes.Repeat([]byte{'1'}, 10000)
-
-	b.ResetTimer()
-
-	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			if err := client.Set("key", value, 0).Err(); err != nil {
-				b.Fatal(err)
-			}
-
-			got, err := client.Get("key").Bytes()
-			if err != nil {
-				b.Fatal(err)
-			}
-			if !bytes.Equal(got, value) {
-				b.Fatalf("got != value")
-			}
-		}
-	})
-}
-
-func BenchmarkRedisMGet(b *testing.B) {
-	client := benchRedisClient()
-	defer client.Close()
-
-	if err := client.MSet("key1", "hello1", "key2", "hello2").Err(); err != nil {
-		b.Fatal(err)
-	}
-
-	b.ResetTimer()
-
-	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			if err := client.MGet("key1", "key2").Err(); err != nil {
-				b.Fatal(err)
-			}
-		}
-	})
-}
-
-func BenchmarkSetExpire(b *testing.B) {
-	client := benchRedisClient()
-	defer client.Close()
-
-	b.ResetTimer()
-
-	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			if err := client.Set("key", "hello", 0).Err(); err != nil {
-				b.Fatal(err)
-			}
-			if err := client.Expire("key", time.Second).Err(); err != nil {
-				b.Fatal(err)
-			}
-		}
-	})
-}
-
-func BenchmarkPipeline(b *testing.B) {
-	client := benchRedisClient()
-	defer client.Close()
-
-	b.ResetTimer()
-
-	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			_, err := client.Pipelined(func(pipe *redis.Pipeline) error {
-				pipe.Set("key", "hello", 0)
-				pipe.Expire("key", time.Second)
-				return nil
-			})
-			if err != nil {
-				b.Fatal(err)
-			}
-		}
-	})
-}
-
-func BenchmarkZAdd(b *testing.B) {
-	client := benchRedisClient()
-	defer client.Close()
-
-	b.ResetTimer()
-
-	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			if err := client.ZAdd("key", redis.Z{float64(1), "hello"}).Err(); err != nil {
-				b.Fatal(err)
-			}
-		}
-	})
-}

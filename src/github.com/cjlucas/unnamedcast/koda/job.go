@@ -43,8 +43,6 @@ type Job struct {
 	Priority       int
 	Payload        interface{}
 	rawPayload     string
-	Progress       int
-	Logs           []string
 	NumAttempts    int
 	Queue          *Queue
 	Client         *Client
@@ -81,16 +79,6 @@ func (j *Job) Finish() error {
 	j.CompletionTime = time.Now().UTC()
 
 	return j.Queue.persistJob(j, conn, "completion_time")
-
-	hash := j.asHash()
-
-	for _, key := range []string{"done", "completion_time"} {
-		if _, err := conn.HSet(j.Queue.jobKey(j), key, hash[key]); err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
 
 func (j *Job) Retry(d time.Duration) error {
@@ -99,16 +87,6 @@ func (j *Job) Retry(d time.Duration) error {
 
 func (j *Job) Kill() error {
 	return j.Queue.Kill(j)
-}
-
-func (j *Job) Logf(s string, args ...interface{}) error {
-	log := fmt.Sprintf(s, args...)
-
-	conn := j.Client.getConn()
-	defer j.Client.putConn(conn)
-
-	_, err := conn.RPush(j.Queue.logKey(j), log)
-	return err
 }
 
 type jobUnmarshaller struct {
