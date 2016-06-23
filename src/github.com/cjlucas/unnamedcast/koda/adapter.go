@@ -67,8 +67,8 @@ func (r *GoRedisAdapter) ZRangeByScore(key string, opt ZRangeByScoreOpts) ([]str
 	cmd := r.R.ZRangeByScore(key, &redis.ZRangeByScore{
 		Min:    rangeStr[0],
 		Max:    rangeStr[1],
-		Offset: opt.Offset,
-		Count:  opt.Count,
+		Offset: int64(opt.Offset),
+		Count:  int64(opt.Count),
 	})
 
 	return cmd.Val(), cmd.Err()
