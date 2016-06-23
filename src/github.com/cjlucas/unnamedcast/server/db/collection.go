@@ -73,7 +73,7 @@ func (c collection) createIndex(index Index, force bool) error {
 // This is intentional as we don't want to recreate indexes on the fly.
 func (c collection) CreateIndexes(force bool) error {
 	for _, idx := range c.ModelInfo.Indexes {
-		if err := c.createIndex(idx, false); err != nil {
+		if err := c.createIndex(idx, force); err != nil {
 			return err
 		}
 	}
