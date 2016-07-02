@@ -13,21 +13,30 @@ import (
 
 	"gopkg.in/mgo.v2/bson"
 
+	"github.com/cjlucas/koda-go"
 	"github.com/cjlucas/unnamedcast/api"
-	"github.com/cjlucas/unnamedcast/koda"
 	"github.com/cjlucas/unnamedcast/server/db"
 	"github.com/gin-gonic/gin"
 )
 
 var emptyObjectID bson.ObjectId
 
-type mockJobSubmitter struct{}
+type mockJobCreatorSubmitter struct {
+	curJobID int
+	jobs     map[int]koda.Job
+}
 
-func (m mockJobSubmitter) Submit(queue string, priority int, payload interface{}) (*koda.Job, error) {
-	return &koda.Job{
-		ID:       1,
-		Priority: priority,
-		Payload:  payload}, nil
+func (m *mockJobCreatorSubmitter) CreateJob(payload interface{}) (koda.Job, error) {
+	if m.jobs == nil {
+		m.jobs = make(map[int]koda.Job)
+	}
+	m.curJobID++
+	m.jobs[m.curJobID] = koda.Job{ID: m.curJobID}
+	return m.jobs[m.curJobID], nil
+}
+
+func (m *mockJobCreatorSubmitter) SubmitJob(queue koda.Queue, priority int, job koda.Job) (koda.Job, error) {
+	return m.jobs[job.ID], nil
 }
 
 func init() {
@@ -46,9 +55,12 @@ func newTestApp() *App {
 		panic(err)
 	}
 
+	m := &mockJobCreatorSubmitter{}
+
 	return NewApp(Config{
 		DB:           dbConn,
-		JobSubmitter: mockJobSubmitter{},
+		JobCreator:   m,
+		JobSubmitter: m,
 	})
 }
 
