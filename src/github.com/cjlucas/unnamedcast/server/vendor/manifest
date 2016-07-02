@@ -2,11 +2,37 @@
 	"version": 0,
 	"dependencies": [
 		{
+			"importpath": "github.com/cjlucas/koda-go",
+			"repository": "https://github.com/cjlucas/koda-go",
+			"vcs": "git",
+			"revision": "564e187f754ed1fa54e6425edbfdf98be4efe7ee",
+			"branch": "master",
+			"notests": true
+		},
+		{
 			"importpath": "github.com/dustin/go-broadcast",
 			"repository": "https://github.com/dustin/go-broadcast",
 			"vcs": "",
 			"revision": "3bdf6d4a7164a50bc19d5f230e2981d87d2584f1",
 			"branch": "master"
+		},
+		{
+			"importpath": "github.com/garyburd/redigo/internal",
+			"repository": "https://github.com/garyburd/redigo",
+			"vcs": "git",
+			"revision": "b8dc90050f24c1a73a52f107f3f575be67b21b7c",
+			"branch": "master",
+			"path": "internal",
+			"notests": true
+		},
+		{
+			"importpath": "github.com/garyburd/redigo/redis",
+			"repository": "https://github.com/garyburd/redigo",
+			"vcs": "git",
+			"revision": "b8dc90050f24c1a73a52f107f3f575be67b21b7c",
+			"branch": "master",
+			"path": "/redis",
+			"notests": true
 		},
 		{
 			"importpath": "github.com/gin-gonic/gin",
@@ -22,15 +48,6 @@
 			"revision": "f0a097ddac24fb00e07d2ac17f8671423f3ea47c",
 			"branch": "master",
 			"path": "/proto",
-			"notests": true
-		},
-		{
-			"importpath": "github.com/golang/protobuf/proto/testdata",
-			"repository": "https://github.com/golang/protobuf",
-			"vcs": "git",
-			"revision": "f0a097ddac24fb00e07d2ac17f8671423f3ea47c",
-			"branch": "master",
-			"path": "/proto/testdata",
 			"notests": true
 		},
 		{
@@ -53,6 +70,22 @@
 			"vcs": "",
 			"revision": "9cbef7c35391cca05f15f8181dc0b18bc9736dbb",
 			"branch": "master"
+		},
+		{
+			"importpath": "github.com/onsi/ginkgo",
+			"repository": "https://github.com/onsi/ginkgo",
+			"vcs": "git",
+			"revision": "059cec02d342bab423425a99b191186a03255e9e",
+			"branch": "master",
+			"notests": true
+		},
+		{
+			"importpath": "github.com/onsi/gomega",
+			"repository": "https://github.com/onsi/gomega",
+			"vcs": "git",
+			"revision": "45da7174b70cc2cde7a980ee04a0aa74412c414a",
+			"branch": "master",
+			"notests": true
 		},
 		{
 			"importpath": "github.com/robfig/cron",
@@ -87,6 +120,14 @@
 			"path": "/context"
 		},
 		{
+			"importpath": "gopkg.in/bsm/ratelimit.v1",
+			"repository": "https://gopkg.in/bsm/ratelimit.v1",
+			"vcs": "git",
+			"revision": "db14e161995a5177acef654cb0dd785e8ee8bc22",
+			"branch": "v1",
+			"notests": true
+		},
+		{
 			"importpath": "gopkg.in/go-playground/validator.v8",
 			"repository": "https://gopkg.in/go-playground/validator.v8",
 			"vcs": "git",
@@ -100,6 +141,14 @@
 			"vcs": "",
 			"revision": "b6e2fa371e64216a45e61072a96d4e3859f169da",
 			"branch": "v2"
+		},
+		{
+			"importpath": "gopkg.in/redis.v3",
+			"repository": "https://gopkg.in/redis.v3",
+			"vcs": "git",
+			"revision": "b5e368500d0a508ef8f16e9c2d4025a8a46bcc29",
+			"branch": "master",
+			"notests": true
 		},
 		{
 			"importpath": "gopkg.in/tomb.v2",
