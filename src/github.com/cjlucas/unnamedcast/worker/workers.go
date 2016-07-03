@@ -7,18 +7,14 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/cjlucas/koda-go"
 	"github.com/cjlucas/unnamedcast/api"
-	"github.com/cjlucas/unnamedcast/koda"
 	"github.com/cjlucas/unnamedcast/worker/itunes"
 	"github.com/cjlucas/unnamedcast/worker/rss"
 )
 
 var iTunesIDRegexp = regexp.MustCompile(`/id(\d+)`)
 var iTunesFeedURLRegexp = regexp.MustCompile(`https?://itunes.apple.com`)
-
-type Worker interface {
-	Work(q *koda.Queue, j *koda.Job) error
-}
 
 type ScrapeiTunesFeeds struct {
 	API api.API
@@ -311,19 +307,22 @@ func (w *UpdateFeedWorker) Work(q *koda.Queue, j *koda.Job) error {
 }
 
 type UpdateUserFeedsWorker struct {
-	API api.API
+	API  api.API
+	Koda *koda.Client
 }
 
-func (w *UpdateUserFeedsWorker) Work(q *koda.Queue, j *koda.Job) error {
+func (w *UpdateUserFeedsWorker) Work(job *Job) error {
 	users, err := w.API.GetUsers()
 	if err != nil {
 		return err
 	}
 
+	job.Logf("Fetched %d users", len(users))
+
 	for i := range users {
 		feedIDs := users[i].FeedIDs
 		for _, id := range feedIDs {
-			koda.Submit(queueUpdateFeed, 0, &UpdateFeedPayload{FeedID: id})
+			w.Koda.Submit(koda.Queue{Name: queueUpdateFeed}, 0, &UpdateFeedPayload{FeedID: id})
 		}
 	}
 

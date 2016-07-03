@@ -100,6 +100,15 @@
 			"notests": true
 		},
 		{
+			"importpath": "gopkg.in/mgo.v2/bson",
+			"repository": "https://gopkg.in/mgo.v2",
+			"vcs": "git",
+			"revision": "29cc868a5ca65f401ff318143f9408d02f4799cc",
+			"branch": "v2",
+			"path": "/bson",
+			"notests": true
+		},
+		{
 			"importpath": "gopkg.in/redis.v3",
 			"repository": "https://gopkg.in/redis.v3",
 			"vcs": "git",

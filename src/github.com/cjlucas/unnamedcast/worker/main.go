@@ -7,11 +7,12 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"sync"
-	"time"
 
+	"gopkg.in/mgo.v2/bson"
+
+	"github.com/cjlucas/koda-go"
 	"github.com/cjlucas/unnamedcast/api"
-	"github.com/cjlucas/unnamedcast/koda"
+	"github.com/cjlucas/unnamedcast/server/db"
 )
 
 const (
@@ -20,7 +21,19 @@ const (
 	queueUpdateUserFeeds   = "update-user-feeds"
 )
 
-const MaxAttempts = 5
+type Job struct {
+	KodaJob    *koda.Job
+	collection *db.JobCollection
+	dbID       bson.ObjectId
+}
+
+func (j *Job) Logf(format string, args ...interface{}) {
+	if j.dbID.Valid() {
+		j.collection.AppendLog(j.dbID, fmt.Sprintf(format, args...))
+	} else {
+		fmt.Printf(format, args...)
+	}
+}
 
 type queueOpt struct {
 	Name       string
@@ -53,51 +66,14 @@ func (l *queueOptList) Set(s string) error {
 	return nil
 }
 
-func runQueueWorker(wg *sync.WaitGroup, q *koda.Queue, w Worker) {
-	defer wg.Done()
-
-	for {
-		j, err := q.Wait()
-		if err != nil {
-			fmt.Println("Error occured while waiting for job:", err)
-			continue
-		}
-
-		fmt.Printf("Job %d: Dequeued\n", j.ID)
-
-		if err := w.Work(q, j); err != nil {
-			fmt.Printf("Job %d: Failed with error: %s\n", j.ID, err)
-			if j.NumAttempts == MaxAttempts {
-				fmt.Printf("Job %d: Max attempts reached, killing job\n", j.ID)
-				j.Kill()
-			} else {
-				fmt.Printf("Job %d: Failed on attempt %d, will retry\n", j.ID, j.NumAttempts)
-				j.Retry(5 * time.Minute)
-			}
-			continue
-		}
-		fmt.Printf("Job %d: Done\n", j.ID)
-		j.Finish()
-	}
-}
-
 func main() {
 	var queueList queueOptList
 	flag.Var(&queueList, "q", "queueName[:numWorkers]")
 	flag.Parse()
 
-	koda.Configure(&koda.Options{
+	kodaClient := koda.NewClient(&koda.Options{
 		URL: os.Getenv("REDIS_URL"),
 	})
-
-	koda.Submit(queueScrapeiTunesFeeds, 0, nil)
-
-	// koda.Submit(queueUpdateFeed, 0, &UpdateFeedPayload{
-	// 	FeedID: "56d5c158c87472028649f39a",
-	// })
-	//
-	// koda.Submit(queueUpdateUserFeeds, 0, nil)
-	var wg sync.WaitGroup
 
 	apiURL := os.Getenv("API_URL")
 	if apiURL == "" {
@@ -110,26 +86,43 @@ func main() {
 	}
 	api := api.API{Host: url.Host}
 
-	handlers := map[string]Worker{
-		queueScrapeiTunesFeeds: &ScrapeiTunesFeeds{API: api},
-		queueUpdateFeed:        &UpdateFeedWorker{API: api},
-		queueUpdateUserFeeds:   &UpdateUserFeedsWorker{API: api},
+	dbURL := os.Getenv("DB_URL")
+	if dbURL == "" {
+		panic("DB_URL not specified")
+	}
+	dbConn, err := db.New(db.Config{URL: dbURL})
+	if err != nil {
+		panic(fmt.Errorf("Could not connect to db: %s", err))
 	}
 
-	fmt.Println(apiURL)
-	fmt.Printf("%+v\n", handlers[queueScrapeiTunesFeeds])
+	q := koda.Queue{
+		Name: queueUpdateUserFeeds,
+	}
 
-	for _, opt := range queueList {
-		for i := 0; i < opt.NumWorkers; i++ {
-			wg.Add(1)
-			fmt.Println(opt.Name, i)
-			worker := handlers[opt.Name]
-			if worker == nil {
-				panic(fmt.Sprintf("No worker found for queue: %s", opt.Name))
-			}
-			go runQueueWorker(&wg, koda.GetQueue(opt.Name), worker)
+	updateUserFeedsWorker := &UpdateUserFeedsWorker{
+		API:  api,
+		Koda: kodaClient,
+	}
+	kodaClient.Register(q, func(job *koda.Job) error {
+		j := &Job{
+			KodaJob:    job,
+			collection: &dbConn.Jobs,
 		}
-	}
 
-	wg.Wait()
+		var dbJob db.Job
+		if err := dbConn.Jobs.FindByKodaID(job.ID).One(&dbJob); err != nil {
+			fmt.Println("Could not fetch job")
+		} else {
+			j.dbID = dbJob.ID
+		}
+		j.Logf("Starting job")
+		dbConn.Jobs.UpdateState(dbJob.ID, "working")
+
+		if err := updateUserFeedsWorker.Work(j); err != nil {
+			j.Logf("Failed with error: %s", err)
+		}
+
+		dbConn.Jobs.UpdateState(dbJob.ID, "finished")
+		return err
+	})
 }
