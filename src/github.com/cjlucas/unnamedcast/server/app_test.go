@@ -11,8 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"gopkg.in/mgo.v2/bson"
-
 	"github.com/cjlucas/unnamedcast/api"
 	"github.com/cjlucas/unnamedcast/db"
 	"github.com/cjlucas/unnamedcast/koda"
@@ -272,7 +270,7 @@ func TestGetUser(t *testing.T) {
 	// Non-existant ID
 	testEndpoint(t, endpointTestInfo{
 		App:          app,
-		Request:      newRequest("GET", fmt.Sprintf("/api/users/%s", bson.NewObjectId().Hex()), nil),
+		Request:      newRequest("GET", fmt.Sprintf("/api/users/%s", db.NewID().Hex()), nil),
 		ExpectedCode: http.StatusNotFound,
 	})
 }
