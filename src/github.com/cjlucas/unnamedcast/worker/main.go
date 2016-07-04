@@ -87,6 +87,7 @@ func wrapHandler(dbConn *db.DB, f func(*Job) error) koda.HandlerFunc {
 		dbConn.Jobs.UpdateState(dbJob.ID, "working")
 
 		err := f(job)
+		fmt.Println("job finished", err)
 		if err != nil {
 			job.Logf("Failed with error: %s", err)
 		} else {
@@ -133,17 +134,9 @@ func main() {
 	}
 
 	workers := make(map[string]Worker)
-	workers[queueUpdateUserFeeds] = &UpdateUserFeedsWorker{
-		API:  api,
-		Koda: kodaClient,
-	}
-	workers[queueUpdateFeed] = &UpdateFeedWorker{
-		API: api,
-	}
-	workers[queueScrapeiTunesFeeds] = &ScrapeiTunesFeeds{
-		API:  api,
-		Koda: kodaClient,
-	}
+	workers[queueUpdateUserFeeds] = &UpdateUserFeedsWorker{API: api}
+	workers[queueUpdateFeed] = &UpdateFeedWorker{API: api}
+	workers[queueScrapeiTunesFeeds] = &ScrapeiTunesFeeds{API: api}
 
 	for _, opt := range queueList {
 		worker, ok := workers[opt.Name]

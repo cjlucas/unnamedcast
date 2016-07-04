@@ -160,10 +160,15 @@ func (app *App) submitJob(job db.Job) (db.Job, error) {
 	}
 
 	job.KodaID = j.ID
+	job.State = "initial"
 	job, err = app.DB.Jobs.Create(job)
 
 	j, err = app.jobSubmitter.SubmitJob(koda.Queue{Name: job.Queue}, job.Priority, j)
 	if err != nil {
+		return db.Job{}, err
+	}
+
+	if err := app.DB.Jobs.UpdateState(job.ID, "queued"); err != nil {
 		return db.Job{}, err
 	}
 

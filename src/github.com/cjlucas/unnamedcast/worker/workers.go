@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/cjlucas/koda-go"
 	"github.com/cjlucas/unnamedcast/api"
 	"github.com/cjlucas/unnamedcast/worker/itunes"
 	"github.com/cjlucas/unnamedcast/worker/rss"
@@ -17,8 +16,7 @@ var iTunesIDRegexp = regexp.MustCompile(`/id(\d+)`)
 var iTunesFeedURLRegexp = regexp.MustCompile(`https?://itunes.apple.com`)
 
 type ScrapeiTunesFeeds struct {
-	API  api.API
-	Koda *koda.Client
+	API api.API
 }
 
 func (w *ScrapeiTunesFeeds) scrapeGenre(url string) ([]string, error) {
@@ -177,11 +175,11 @@ func (w *ScrapeiTunesFeeds) Work(j *Job) error {
 			continue
 		}
 
-		_, err = w.Koda.Submit(koda.Queue{Name: queueUpdateFeed}, 0, &UpdateFeedPayload{
-			FeedID: feed.ID,
-		})
-
-		if err != nil {
+		job := api.Job{
+			Queue:   queueUpdateFeed,
+			Payload: &UpdateFeedPayload{FeedID: feed.ID},
+		}
+		if err = w.API.CreateJob(&job); err != nil {
 			fmt.Println("Failed to add update feed job")
 			continue
 		}
@@ -309,9 +307,6 @@ func (w *UpdateFeedWorker) Work(j *Job) error {
 
 type UpdateUserFeedsWorker struct {
 	API api.API
-	// TODO: dont interact with koda.Client directly, update the API package
-	// to utilize POST /jobs instead
-	Koda *koda.Client
 }
 
 func (w *UpdateUserFeedsWorker) Work(job *Job) error {
@@ -325,7 +320,14 @@ func (w *UpdateUserFeedsWorker) Work(job *Job) error {
 	for i := range users {
 		feedIDs := users[i].FeedIDs
 		for _, id := range feedIDs {
-			w.Koda.Submit(koda.Queue{Name: queueUpdateFeed}, 0, &UpdateFeedPayload{FeedID: id})
+			job := api.Job{
+				Queue:   queueUpdateFeed,
+				Payload: &UpdateFeedPayload{FeedID: id},
+			}
+			if err = w.API.CreateJob(&job); err != nil {
+				fmt.Println("Failed to add update feed job")
+				continue
+			}
 		}
 	}
 
