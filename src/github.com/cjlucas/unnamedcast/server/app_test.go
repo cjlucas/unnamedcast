@@ -14,12 +14,12 @@ import (
 	"gopkg.in/mgo.v2/bson"
 
 	"github.com/cjlucas/unnamedcast/api"
+	"github.com/cjlucas/unnamedcast/db"
 	"github.com/cjlucas/unnamedcast/koda"
-	"github.com/cjlucas/unnamedcast/server/db"
 	"github.com/gin-gonic/gin"
 )
 
-var emptyObjectID bson.ObjectId
+var emptyID db.ID
 
 type mockJobSubmitter struct{}
 
@@ -235,7 +235,7 @@ func TestCreateUserValidParams(t *testing.T) {
 		t.Errorf("Username mismatch: %s != %s", user.Username, expectedUsername)
 	}
 
-	if user.ID == emptyObjectID {
+	if user.ID == emptyID {
 		t.Error("user.ID is invalid")
 	}
 
@@ -280,13 +280,13 @@ func TestGetUser(t *testing.T) {
 func TestGetUserFeeds(t *testing.T) {
 	app := newTestApp()
 	user := createUser(t, app, "chris", "hithere")
-	user.FeedIDs = append(user.FeedIDs, bson.NewObjectId())
+	user.FeedIDs = append(user.FeedIDs, db.NewID())
 
 	if err := app.DB.Users.Update(user); err != nil {
 		t.Fatal("Could not update user:", err)
 	}
 
-	var out []bson.ObjectId
+	var out []db.ID
 	testEndpoint(t, endpointTestInfo{
 		App:          app,
 		Request:      newRequest("GET", fmt.Sprintf("/api/users/%s/feeds", user.ID.Hex()), nil),
@@ -307,7 +307,7 @@ func TestGetUserItemStates(t *testing.T) {
 	app := newTestApp()
 	user := createUser(t, app, "chris", "hithere")
 	user.ItemStates = append(user.ItemStates, db.ItemState{
-		ItemID:   bson.NewObjectId(),
+		ItemID:   db.NewID(),
 		Position: 5,
 	})
 
@@ -336,7 +336,7 @@ func TestGetUserItemStates_WithModifiedSinceParam(t *testing.T) {
 	app := newTestApp()
 	user := createUser(t, app, "chris", "hithere")
 	user.ItemStates = append(user.ItemStates, db.ItemState{
-		ItemID:           bson.NewObjectId(),
+		ItemID:           db.NewID(),
 		Position:         5,
 		ModificationTime: time.Now(),
 	})
@@ -381,7 +381,7 @@ func TestPutUserFeeds(t *testing.T) {
 	app := newTestApp()
 	user := createUser(t, app, "chris", "hithere")
 
-	ids := []bson.ObjectId{bson.NewObjectId()}
+	ids := []db.ID{db.NewID()}
 	req := newRequest("PUT", fmt.Sprintf("/api/users/%s/feeds", user.ID.Hex()), ids)
 	var out db.User
 	testEndpoint(t, endpointTestInfo{
@@ -499,7 +499,7 @@ func TestCreateFeed(t *testing.T) {
 		ResponseBody: &out,
 	})
 
-	if out.ID == emptyObjectID {
+	if out.ID == emptyID {
 		t.Error("ID is invalid")
 	}
 
@@ -532,7 +532,7 @@ func TestCreateFeedWithItems(t *testing.T) {
 	app := newTestApp()
 	feed := &db.Feed{
 		URL:   "http://google.com",
-		Items: []bson.ObjectId{bson.NewObjectId()},
+		Items: []db.ID{db.NewID()},
 	}
 
 	testEndpoint(t, endpointTestInfo{
@@ -710,9 +710,9 @@ func TestPutFeedWithExistingItems(t *testing.T) {
 	})
 	feed := createFeed(t, app, &db.Feed{
 		URL:   "http://google.com",
-		Items: []bson.ObjectId{item.ID},
+		Items: []db.ID{item.ID},
 	})
-	feed.Items = []bson.ObjectId{}
+	feed.Items = []db.ID{}
 
 	url := fmt.Sprintf("/api/feeds/%s", feed.ID.Hex())
 	testEndpoint(t, endpointTestInfo{
@@ -756,7 +756,7 @@ func TestGetUserFeedItems(t *testing.T) {
 	})
 	feed := createFeed(t, app, &db.Feed{
 		URL:   "http://google.com",
-		Items: []bson.ObjectId{item.ID},
+		Items: []db.ID{item.ID},
 	})
 
 	req := newRequest("GET", fmt.Sprintf("/api/feeds/%s/items", feed.ID.Hex()), nil)
@@ -783,7 +783,7 @@ func TestGetUserFeedItemsWithModTime(t *testing.T) {
 	})
 	feed := createFeed(t, app, &db.Feed{
 		URL:   "http://google.com",
-		Items: []bson.ObjectId{item.ID},
+		Items: []db.ID{item.ID},
 	})
 
 	modTime := item.ModificationTime.Add(1 * time.Second)
@@ -883,7 +883,7 @@ func TestGetFeedItem(t *testing.T) {
 	item := createItem(t, app, &db.Item{GUID: "http://google.com/item"})
 	feed := createFeed(t, app, &db.Feed{
 		URL:   "http://google.com",
-		Items: []bson.ObjectId{item.ID},
+		Items: []db.ID{item.ID},
 	})
 
 	url := fmt.Sprintf("/api/feeds/%s/items/%s", feed.ID.Hex(), item.ID.Hex())
@@ -906,7 +906,7 @@ func TestPutFeedItem(t *testing.T) {
 	item := createItem(t, app, &db.Item{GUID: "http://google.com/item"})
 	feed := createFeed(t, app, &db.Feed{
 		URL:   "http://google.com",
-		Items: []bson.ObjectId{item.ID},
+		Items: []db.ID{item.ID},
 	})
 
 	item.URL = "http://google.com/item.mp3"
@@ -962,7 +962,7 @@ func TestCreateJob(t *testing.T) {
 		ResponseBody: &out,
 	})
 
-	if out.ID == emptyObjectID {
+	if out.ID == emptyID {
 		t.Error("id is invalid")
 	}
 
