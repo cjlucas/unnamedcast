@@ -15,11 +15,9 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/cjlucas/koda-go"
-	"github.com/cjlucas/unnamedcast/server/db"
+	"github.com/cjlucas/unnamedcast/db"
 	"github.com/gin-gonic/gin"
 	"github.com/robfig/cron"
-
-	"gopkg.in/mgo.v2/bson"
 )
 
 const (
@@ -65,14 +63,6 @@ func NewApp(cfg Config) *App {
 
 	app.setupRoutes()
 	return &app
-}
-
-func newObjectIDFromHex(idHex string) (bson.ObjectId, error) {
-	if !bson.IsObjectIdHex(idHex) {
-		var id bson.ObjectId
-		return id, errors.New("invalid object id")
-	}
-	return bson.ObjectIdHex(idHex), nil
 }
 
 func unmarshalFeed(c *gin.Context) {
@@ -207,9 +197,9 @@ func (app *App) logErrors(c *gin.Context) {
 	})
 }
 
-func (app *App) requireModelID(f func(id bson.ObjectId) db.Cursor, paramName, boundName string) gin.HandlerFunc {
+func (app *App) requireModelID(f func(id db.ID) db.Cursor, paramName, boundName string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		id, err := newObjectIDFromHex(c.Param(paramName))
+		id, err := db.IDFromString(c.Param(paramName))
 		if err != nil {
 			c.AbortWithError(http.StatusBadRequest, err)
 			return
@@ -234,7 +224,7 @@ func (app *App) loadUserWithID(paramName string) gin.HandlerFunc {
 			return
 		}
 
-		id := c.MustGet(boundName).(bson.ObjectId)
+		id := c.MustGet(boundName).(db.ID)
 
 		var user db.User
 		if err := app.DB.Users.FindByID(id).One(&user); err != nil {
@@ -275,8 +265,8 @@ func (app *App) setupRoutes() {
 		func(c *gin.Context) {
 			params := c.MustGet(paramsCtxKey).(*SearchFeedsParams)
 			query := &db.Query{
-				Filter: bson.M{
-					"$text": bson.M{"$search": params.Query},
+				Filter: db.M{
+					"$text": db.M{"$search": params.Query},
 				},
 				SortField: "$textScore:score",
 				SortDesc:  true,
@@ -313,7 +303,7 @@ func (app *App) setupRoutes() {
 			params := c.MustGet(paramsCtxKey).(*LoginParams)
 
 			cur := app.DB.Users.Find(&db.Query{
-				Filter: bson.M{"username": params.Username},
+				Filter: db.M{"username": params.Username},
 				Limit:  1,
 			})
 
@@ -398,7 +388,7 @@ func (app *App) setupRoutes() {
 	api.PUT("/users/:id/feeds", app.loadUserWithID("id"), func(c *gin.Context) {
 		user := c.MustGet(userCtxKey).(*db.User)
 
-		var ids []bson.ObjectId
+		var ids []db.ID
 		if err := c.BindJSON(&ids); err != nil {
 			c.AbortWithError(http.StatusBadRequest, err)
 			return
@@ -422,11 +412,11 @@ func (app *App) setupRoutes() {
 		app.requireUserID("id"),
 		func(c *gin.Context) {
 			params := c.MustGet(paramsCtxKey).(*GetUserItemStatesParams)
-			userID := c.MustGet(userIDCtxKey).(bson.ObjectId)
+			userID := c.MustGet(userIDCtxKey).(db.ID)
 
-			query := db.Query{Filter: make(bson.M)}
+			query := db.Query{Filter: make(db.M)}
 			if !params.ModifiedSince.IsZero() {
-				query.Filter["modification_time"] = bson.M{"$gt": params.ModifiedSince}
+				query.Filter["modification_time"] = db.M{"$gt": params.ModifiedSince}
 			}
 
 			states, err := app.DB.Users.FindItemStates(userID, query)
@@ -439,8 +429,8 @@ func (app *App) setupRoutes() {
 		})
 
 	api.PUT("/users/:id/states/:itemID", app.requireUserID("id"), app.requireItemID("itemID"), func(c *gin.Context) {
-		userID := c.MustGet(userIDCtxKey).(bson.ObjectId)
-		itemID := c.MustGet(itemIDCtxKey).(bson.ObjectId)
+		userID := c.MustGet(userIDCtxKey).(db.ID)
+		itemID := c.MustGet(itemIDCtxKey).(db.ID)
 
 		var state db.ItemState
 		if err := c.BindJSON(&state); err != nil {
@@ -465,8 +455,8 @@ func (app *App) setupRoutes() {
 		app.requireUserID("id"),
 		app.requireItemID("itemID"),
 		func(c *gin.Context) {
-			userID := c.MustGet(userIDCtxKey).(bson.ObjectId)
-			itemID := c.MustGet(itemIDCtxKey).(bson.ObjectId)
+			userID := c.MustGet(userIDCtxKey).(db.ID)
+			itemID := c.MustGet(itemIDCtxKey).(db.ID)
 
 			if err := app.DB.Users.DeleteItemState(userID, itemID); err != nil {
 				c.AbortWithError(http.StatusInternalServerError, err)
@@ -499,9 +489,9 @@ func (app *App) setupRoutes() {
 			query := ensureQueryExists(c)
 
 			if params.URL != "" {
-				query.Filter = bson.M{"url": params.URL}
+				query.Filter = db.M{"url": params.URL}
 			} else if params.ITunesID != 0 {
-				query.Filter = bson.M{"itunes_id": params.ITunesID}
+				query.Filter = db.M{"itunes_id": params.ITunesID}
 			}
 
 			if query.Filter == nil {
@@ -553,7 +543,7 @@ func (app *App) setupRoutes() {
 
 	// GET /api/feeds/:id
 	api.GET("/feeds/:id", app.requireFeedID("id"), func(c *gin.Context) {
-		id := c.MustGet(feedIDCtxKey).(bson.ObjectId)
+		id := c.MustGet(feedIDCtxKey).(db.ID)
 		feed, err := app.DB.Feeds.FeedByID(id)
 		if err != nil {
 			c.AbortWithError(http.StatusInternalServerError, err)
@@ -565,7 +555,7 @@ func (app *App) setupRoutes() {
 	// PUT /api/feeds/:id
 	api.PUT("/feeds/:id", app.requireFeedID("id"), unmarshalFeed, func(c *gin.Context) {
 		feed := c.MustGet(feedCtxKey).(*db.Feed)
-		feed.ID = c.MustGet(feedIDCtxKey).(bson.ObjectId)
+		feed.ID = c.MustGet(feedIDCtxKey).(db.ID)
 
 		existingFeed, err := app.DB.Feeds.FeedByID(feed.ID)
 		if err != nil {
@@ -601,7 +591,7 @@ func (app *App) setupRoutes() {
 		func(c *gin.Context) {
 			query := ensureQueryExists(c)
 			params := c.MustGet(paramsCtxKey).(*GetFeedItemsParams)
-			feedID := c.MustGet(feedIDCtxKey).(bson.ObjectId)
+			feedID := c.MustGet(feedIDCtxKey).(db.ID)
 
 			feed, err := app.DB.Feeds.FeedByID(feedID)
 			if err != nil {
@@ -609,11 +599,11 @@ func (app *App) setupRoutes() {
 				return
 			}
 
-			query.Filter = bson.M{
-				"_id": bson.M{"$in": feed.Items},
+			query.Filter = db.M{
+				"_id": db.M{"$in": feed.Items},
 			}
 			if !params.ModifiedSince.IsZero() {
-				query.Filter["modification_time"] = bson.M{"$gt": params.ModifiedSince}
+				query.Filter["modification_time"] = db.M{"$gt": params.ModifiedSince}
 			}
 
 			var items []db.Item
@@ -627,12 +617,12 @@ func (app *App) setupRoutes() {
 
 	// GET /api/feeds/:id/users
 	api.GET("/feeds/:id/users", app.requireFeedID("id"), func(c *gin.Context) {
-		id := c.MustGet(feedIDCtxKey).(bson.ObjectId)
+		id := c.MustGet(feedIDCtxKey).(db.ID)
 
 		cur := app.DB.Users.Find(&db.Query{
-			Filter: bson.M{
-				"feed_ids": bson.M{
-					"$in": []bson.ObjectId{id},
+			Filter: db.M{
+				"feed_ids": db.M{
+					"$in": []db.ID{id},
 				},
 			},
 		})
@@ -665,7 +655,7 @@ func (app *App) setupRoutes() {
 			return
 		}
 
-		id := c.MustGet(feedIDCtxKey).(bson.ObjectId)
+		id := c.MustGet(feedIDCtxKey).(db.ID)
 		feed, err := app.DB.Feeds.FeedByID(id)
 		if err != nil {
 			c.AbortWithError(http.StatusInternalServerError, err)
@@ -685,8 +675,8 @@ func (app *App) setupRoutes() {
 	// NOTE: Placeholder for feed id MUST be :id due to a limitation in gin's router
 	// that is not expected to be resolved. See: https://github.com/gin-gonic/gin/issues/388
 	api.GET("/feeds/:id/items/:itemID", app.requireFeedID("id"), app.requireItemID("itemID"), func(c *gin.Context) {
-		feedID := c.MustGet(feedIDCtxKey).(bson.ObjectId)
-		itemID := c.MustGet(itemIDCtxKey).(bson.ObjectId)
+		feedID := c.MustGet(feedIDCtxKey).(db.ID)
+		itemID := c.MustGet(itemIDCtxKey).(db.ID)
 
 		feed, err := app.DB.Feeds.FeedByID(feedID)
 		if err != nil {
@@ -710,8 +700,8 @@ func (app *App) setupRoutes() {
 
 	// PUT /api/feeds/:id/items/:itemID
 	api.PUT("/feeds/:id/items/:itemID", app.requireFeedID("id"), app.requireItemID("itemID"), func(c *gin.Context) {
-		feedID := c.MustGet(feedIDCtxKey).(bson.ObjectId)
-		itemID := c.MustGet(itemIDCtxKey).(bson.ObjectId)
+		feedID := c.MustGet(feedIDCtxKey).(db.ID)
+		itemID := c.MustGet(itemIDCtxKey).(db.ID)
 
 		var item db.Item
 		if err := c.BindJSON(&item); err != nil {
@@ -755,7 +745,7 @@ func (app *App) setupRoutes() {
 			params := c.MustGet(paramsCtxKey).(*GetJobsParams)
 			query := ensureQueryExists(c)
 
-			filter := bson.M{}
+			filter := db.M{}
 			if params.Queue != "" {
 				filter["queue"] = params.Queue
 			}
@@ -776,7 +766,7 @@ func (app *App) setupRoutes() {
 	api.GET("/jobs/:id",
 		app.requireJobID("id"),
 		func(c *gin.Context) {
-			id := c.MustGet(jobIDCtxKey).(bson.ObjectId)
+			id := c.MustGet(jobIDCtxKey).(db.ID)
 
 			var job db.Job
 			if err := app.DB.Jobs.FindByID(id).One(&job); err != nil {
