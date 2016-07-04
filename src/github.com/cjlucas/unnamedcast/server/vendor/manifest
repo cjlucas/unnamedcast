@@ -25,15 +25,6 @@
 			"notests": true
 		},
 		{
-			"importpath": "github.com/golang/protobuf/proto/testdata",
-			"repository": "https://github.com/golang/protobuf",
-			"vcs": "git",
-			"revision": "f0a097ddac24fb00e07d2ac17f8671423f3ea47c",
-			"branch": "master",
-			"path": "/proto/testdata",
-			"notests": true
-		},
-		{
 			"importpath": "github.com/manucorporat/sse",
 			"repository": "https://github.com/manucorporat/sse",
 			"vcs": "",
@@ -93,20 +84,6 @@
 			"revision": "014792cf3e266caff1e916876be12282b33059e0",
 			"branch": "master",
 			"notests": true
-		},
-		{
-			"importpath": "gopkg.in/mgo.v2",
-			"repository": "https://gopkg.in/mgo.v2",
-			"vcs": "",
-			"revision": "b6e2fa371e64216a45e61072a96d4e3859f169da",
-			"branch": "v2"
-		},
-		{
-			"importpath": "gopkg.in/tomb.v2",
-			"repository": "https://gopkg.in/tomb.v2",
-			"vcs": "",
-			"revision": "14b3d72120e8d10ea6e6b7f87f7175734b1faab8",
-			"branch": "v2"
 		},
 		{
 			"importpath": "gopkg.in/yaml.v2",
