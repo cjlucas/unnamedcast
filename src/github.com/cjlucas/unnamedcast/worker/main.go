@@ -69,7 +69,7 @@ func (l *queueOptList) Set(s string) error {
 	return nil
 }
 
-func wrapHandler(dbConn *db.DB, f func(*Job) error) koda.HandlerFunc {
+func wrapHandler(dbConn *db.DB, queue koda.Queue, f func(*Job) error) koda.HandlerFunc {
 	return func(j *koda.Job) error {
 		job := &Job{
 			KodaJob:    j,
@@ -83,19 +83,26 @@ func wrapHandler(dbConn *db.DB, f func(*Job) error) koda.HandlerFunc {
 			job.dbID = dbJob.ID
 			fmt.Println("fetched job with id", job.dbID)
 		}
-		job.Logf("Starting job")
+		job.Logf("Starting job (attempt: %d)", j.NumAttempts)
 		dbConn.Jobs.UpdateState(dbJob.ID, "working")
 
 		err := f(job)
-		fmt.Println("job finished", err)
 		if err != nil {
 			job.Logf("Failed with error: %s", err)
-		} else {
-			job.Logf("Job completed successfully")
+			// If job has failed on its last attempt, mark it dead
+			// Koda should provide a convenience function like LastAttempt() bool
+			if j.NumAttempts < queue.MaxAttempts {
+				job.Logf("Will retry job in %s", queue.RetryInterval)
+				dbConn.Jobs.UpdateState(dbJob.ID, "queued")
+			} else {
+				dbConn.Jobs.UpdateState(dbJob.ID, "dead")
+			}
+			return err
 		}
 
+		job.Logf("Job completed successfully")
 		dbConn.Jobs.UpdateState(dbJob.ID, "finished")
-		return err
+		return nil
 	}
 }
 
@@ -133,10 +140,11 @@ func main() {
 		panic(fmt.Errorf("Could not connect to db: %s", err))
 	}
 
-	workers := make(map[string]Worker)
-	workers[queueUpdateUserFeeds] = &UpdateUserFeedsWorker{API: api}
-	workers[queueUpdateFeed] = &UpdateFeedWorker{API: api}
-	workers[queueScrapeiTunesFeeds] = &ScrapeiTunesFeeds{API: api}
+	workers := map[string]Worker{
+		queueUpdateUserFeeds:   &UpdateUserFeedsWorker{API: api},
+		queueUpdateFeed:        &UpdateFeedWorker{API: api},
+		queueScrapeiTunesFeeds: &ScrapeiTunesFeeds{API: api},
+	}
 
 	for _, opt := range queueList {
 		worker, ok := workers[opt.Name]
@@ -148,11 +156,12 @@ func main() {
 		q := koda.Queue{
 			Name:          opt.Name,
 			NumWorkers:    opt.NumWorkers,
-			RetryInterval: 5 * time.Minute,
+			RetryInterval: 5 * time.Second,
 			MaxAttempts:   5,
 		}
 
-		kodaClient.Register(q, wrapHandler(dbConn, worker.Work))
+		kodaClient.Register(q, wrapHandler(dbConn, q, worker.Work))
+		fmt.Printf("Registered %d workers to work %s queue\n", q.NumWorkers, q.Name)
 	}
 
 	kodaClient.WorkForever()
