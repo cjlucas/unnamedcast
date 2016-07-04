@@ -23,6 +23,15 @@ type ID struct {
 	bson.ObjectId
 }
 
+func (id ID) GetBSON() (interface{}, error) {
+	return id.ObjectId, nil
+}
+
+func (id *ID) SetBSON(raw bson.Raw) error {
+	id.ObjectId = bson.ObjectId(raw.Data)
+	return nil
+}
+
 func IDFromString(id string) (ID, error) {
 	if !bson.IsObjectIdHex(id) {
 		return ID{}, errors.New("invalid id")

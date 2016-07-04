@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"gopkg.in/mgo.v2"
-	"gopkg.in/mgo.v2/bson"
 )
 
 type collection struct {
@@ -91,16 +90,16 @@ func (c collection) insert(model interface{}) error {
 // by the "as" option.
 //
 // Example: {"field": {"$ge": 5} would be transformed into {"$ge": ["field", 5]}
-func (c collection) filterCond(query Query, varName string) bson.M {
+func (c collection) filterCond(query Query, varName string) M {
 	// This code only handles the trivial case, as that is all that's needed currently
-	cond := make(bson.M)
+	cond := make(M)
 
 	for field, expr := range query.Filter {
 		if _, ok := c.ModelInfo.LookupDBName(field); !ok {
 			panic(fmt.Errorf("\"%s\" is not a valid field", field))
 		}
 
-		if expr, ok := expr.(bson.M); ok {
+		if expr, ok := expr.(M); ok {
 			for op, val := range expr {
 				cond[op] = []interface{}{
 					fmt.Sprintf("$$%s.%s", varName, field),

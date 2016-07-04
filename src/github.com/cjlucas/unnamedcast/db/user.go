@@ -86,6 +86,7 @@ func (c UserCollection) UpsertItemState(userID ID, state *ItemState) error {
 
 	var user User
 	if err := c.pipeline(pipeline).One(&user); err != nil {
+		// TODO: don't assume ErrNotFound
 		return ErrNotFound
 	}
 
