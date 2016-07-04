@@ -4,8 +4,8 @@ import (
 	"flag"
 	"fmt"
 
+	"github.com/cjlucas/koda-go"
 	"github.com/cjlucas/unnamedcast/api"
-	"github.com/cjlucas/unnamedcast/koda"
 )
 
 var apiHost = flag.String("api-host", "localhost:80", "Host for API")

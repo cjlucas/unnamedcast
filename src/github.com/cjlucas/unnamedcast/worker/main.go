@@ -8,11 +8,9 @@ import (
 	"strconv"
 	"strings"
 
-	"gopkg.in/mgo.v2/bson"
-
 	"github.com/cjlucas/koda-go"
 	"github.com/cjlucas/unnamedcast/api"
-	"github.com/cjlucas/unnamedcast/server/db"
+	"github.com/cjlucas/unnamedcast/db"
 )
 
 const (
@@ -24,7 +22,7 @@ const (
 type Job struct {
 	KodaJob    *koda.Job
 	collection *db.JobCollection
-	dbID       bson.ObjectId
+	dbID       db.ID
 }
 
 func (j *Job) Logf(format string, args ...interface{}) {

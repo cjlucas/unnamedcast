@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cjlucas/koda-go"
 	"github.com/cjlucas/unnamedcast/api"
 	"github.com/cjlucas/unnamedcast/db"
-	"github.com/cjlucas/unnamedcast/koda"
 	"github.com/gin-gonic/gin"
 )
 
