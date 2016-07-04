@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cjlucas/koda-go"
 	"github.com/cjlucas/unnamedcast/api"
@@ -19,6 +20,10 @@ const (
 	queueUpdateUserFeeds   = "update-user-feeds"
 )
 
+type Worker interface {
+	Work(job *Job) error
+}
+
 type Job struct {
 	KodaJob    *koda.Job
 	collection *db.JobCollection
@@ -29,7 +34,7 @@ func (j *Job) Logf(format string, args ...interface{}) {
 	if j.dbID.Valid() {
 		j.collection.AppendLog(j.dbID, fmt.Sprintf(format, args...))
 	} else {
-		fmt.Printf(format, args...)
+		fmt.Printf(format+"\n", args...)
 	}
 }
 
@@ -64,10 +69,44 @@ func (l *queueOptList) Set(s string) error {
 	return nil
 }
 
+func wrapHandler(dbConn *db.DB, f func(*Job) error) koda.HandlerFunc {
+	return func(j *koda.Job) error {
+		job := &Job{
+			KodaJob:    j,
+			collection: &dbConn.Jobs,
+		}
+
+		var dbJob db.Job
+		if err := dbConn.Jobs.FindByKodaID(j.ID).One(&dbJob); err != nil {
+			fmt.Println("Could not fetch job")
+		} else {
+			job.dbID = dbJob.ID
+			fmt.Println("fetched job with id", job.dbID)
+		}
+		job.Logf("Starting job")
+		dbConn.Jobs.UpdateState(dbJob.ID, "working")
+
+		err := f(job)
+		if err != nil {
+			job.Logf("Failed with error: %s", err)
+		} else {
+			job.Logf("Job completed successfully")
+		}
+
+		dbConn.Jobs.UpdateState(dbJob.ID, "finished")
+		return err
+	}
+}
+
 func main() {
 	var queueList queueOptList
 	flag.Var(&queueList, "q", "queueName[:numWorkers]")
 	flag.Parse()
+
+	if len(queueList) == 0 {
+		flag.Usage()
+		os.Exit(0)
+	}
 
 	kodaClient := koda.NewClient(&koda.Options{
 		URL: os.Getenv("REDIS_URL"),
@@ -93,34 +132,35 @@ func main() {
 		panic(fmt.Errorf("Could not connect to db: %s", err))
 	}
 
-	q := koda.Queue{
-		Name: queueUpdateUserFeeds,
-	}
-
-	updateUserFeedsWorker := &UpdateUserFeedsWorker{
+	workers := make(map[string]Worker)
+	workers[queueUpdateUserFeeds] = &UpdateUserFeedsWorker{
 		API:  api,
 		Koda: kodaClient,
 	}
-	kodaClient.Register(q, func(job *koda.Job) error {
-		j := &Job{
-			KodaJob:    job,
-			collection: &dbConn.Jobs,
+	workers[queueUpdateFeed] = &UpdateFeedWorker{
+		API: api,
+	}
+	workers[queueScrapeiTunesFeeds] = &ScrapeiTunesFeeds{
+		API:  api,
+		Koda: kodaClient,
+	}
+
+	for _, opt := range queueList {
+		worker, ok := workers[opt.Name]
+		if !ok {
+			fmt.Fprintf(os.Stderr, "%s is not a valid queue\n", opt.Name)
+			os.Exit(1)
 		}
 
-		var dbJob db.Job
-		if err := dbConn.Jobs.FindByKodaID(job.ID).One(&dbJob); err != nil {
-			fmt.Println("Could not fetch job")
-		} else {
-			j.dbID = dbJob.ID
-		}
-		j.Logf("Starting job")
-		dbConn.Jobs.UpdateState(dbJob.ID, "working")
-
-		if err := updateUserFeedsWorker.Work(j); err != nil {
-			j.Logf("Failed with error: %s", err)
+		q := koda.Queue{
+			Name:          opt.Name,
+			NumWorkers:    opt.NumWorkers,
+			RetryInterval: 5 * time.Minute,
+			MaxAttempts:   5,
 		}
 
-		dbConn.Jobs.UpdateState(dbJob.ID, "finished")
-		return err
-	})
+		kodaClient.Register(q, wrapHandler(dbConn, worker.Work))
+	}
+
+	kodaClient.WorkForever()
 }

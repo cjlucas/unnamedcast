@@ -17,7 +17,8 @@ var iTunesIDRegexp = regexp.MustCompile(`/id(\d+)`)
 var iTunesFeedURLRegexp = regexp.MustCompile(`https?://itunes.apple.com`)
 
 type ScrapeiTunesFeeds struct {
-	API api.API
+	API  api.API
+	Koda *koda.Client
 }
 
 func (w *ScrapeiTunesFeeds) scrapeGenre(url string) ([]string, error) {
@@ -51,7 +52,7 @@ func (w *ScrapeiTunesFeeds) scrapeFeedList(url string) ([]string, error) {
 	return page.FeedURLs(), nil
 }
 
-func (w *ScrapeiTunesFeeds) Work(q *koda.Queue, j *koda.Job) error {
+func (w *ScrapeiTunesFeeds) Work(j *Job) error {
 	const numURLResolvers = 10
 
 	fmt.Println("Fetching the genres...")
@@ -176,7 +177,7 @@ func (w *ScrapeiTunesFeeds) Work(q *koda.Queue, j *koda.Job) error {
 			continue
 		}
 
-		_, err = koda.Submit(queueUpdateFeed, 0, &UpdateFeedPayload{
+		_, err = w.Koda.Submit(koda.Queue{Name: queueUpdateFeed}, 0, &UpdateFeedPayload{
 			FeedID: feed.ID,
 		})
 
@@ -209,9 +210,9 @@ func (w *UpdateFeedWorker) guidItemsMap(items []api.Item) map[string]api.Item {
 	return guidMap
 }
 
-func (w *UpdateFeedWorker) Work(q *koda.Queue, j *koda.Job) error {
+func (w *UpdateFeedWorker) Work(j *Job) error {
 	var payload UpdateFeedPayload
-	if err := j.UnmarshalPayload(&payload); err != nil {
+	if err := j.KodaJob.UnmarshalPayload(&payload); err != nil {
 		return err
 	}
 
@@ -307,7 +308,9 @@ func (w *UpdateFeedWorker) Work(q *koda.Queue, j *koda.Job) error {
 }
 
 type UpdateUserFeedsWorker struct {
-	API  api.API
+	API api.API
+	// TODO: dont interact with koda.Client directly, update the API package
+	// to utilize POST /jobs instead
 	Koda *koda.Client
 }
 
