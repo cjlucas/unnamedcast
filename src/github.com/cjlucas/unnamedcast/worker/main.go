@@ -78,12 +78,11 @@ func wrapHandler(dbConn *db.DB, queue koda.Queue, f func(*Job) error) koda.Handl
 
 		var dbJob db.Job
 		if err := dbConn.Jobs.FindByKodaID(j.ID).One(&dbJob); err != nil {
-			fmt.Println("Could not fetch job")
+			fmt.Printf("Could not fetch job (ID: %d)\n", j.ID)
 		} else {
 			job.dbID = dbJob.ID
-			fmt.Println("fetched job with id", job.dbID)
 		}
-		job.Logf("Starting job (attempt: %d)", j.NumAttempts)
+		job.Logf("Starting job (%d/%d)", j.NumAttempts, queue.MaxAttempts)
 		dbConn.Jobs.UpdateState(dbJob.ID, "working")
 
 		err := f(job)
