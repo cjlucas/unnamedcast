@@ -1,8 +1,9 @@
-root = true
-
 [*]
+indent_style = space
 end_of_line = lf
 
+[*.go]
+indent_size = 4
+
 [*.yml]
-indent_style = space
 indent_size = 2

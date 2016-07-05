@@ -73,6 +73,23 @@ type Item struct {
 	ModificationTime time.Time     `json:"modification_time"`
 }
 
+type Job struct {
+	ID       string      `json:"id"`
+	KodaID   int         `json:"koda_id"`
+	Priority int         `json:"priority"`
+	Queue    string      `json:"queue"`
+	State    string      `json:"state"`
+	Payload  interface{} `json:"payload"`
+	// CreationTime is the time at which the job was created in koda
+	CreationTime     time.Time `json:"creation_time"`
+	ModificationTime time.Time `json:"modification_time"`
+	CompletionTime   time.Time `json:"completion_time"`
+	Log              []struct {
+		Time time.Time `json:"time"`
+		Line string    `json:"line"`
+	} `json:"log"`
+}
+
 type API struct {
 	Host string
 }
@@ -262,4 +279,13 @@ func (api *API) GetUsers() ([]User, error) {
 		ResponseBody: &users,
 	})
 	return users, err
+}
+
+func (api *API) CreateJob(job *Job) error {
+	return api.makeRequest(&apiRoundTrip{
+		Method:       "POST",
+		Endpoint:     "/api/jobs",
+		RequestBody:  job,
+		ResponseBody: job,
+	})
 }

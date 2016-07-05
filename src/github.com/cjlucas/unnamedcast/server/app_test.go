@@ -11,57 +11,85 @@ import (
 	"testing"
 	"time"
 
-	"gopkg.in/mgo.v2/bson"
-
+	"github.com/cjlucas/koda-go"
 	"github.com/cjlucas/unnamedcast/api"
-	"github.com/cjlucas/unnamedcast/server/db"
+	"github.com/cjlucas/unnamedcast/db"
 	"github.com/gin-gonic/gin"
 )
 
-var emptyObjectID bson.ObjectId
+var emptyID db.ID
+
+type mockJobCreatorSubmitter struct {
+	curJobID int
+	jobs     map[int]koda.Job
+}
+
+func (m *mockJobCreatorSubmitter) CreateJob(payload interface{}) (koda.Job, error) {
+	if m.jobs == nil {
+		m.jobs = make(map[int]koda.Job)
+	}
+	m.curJobID++
+	m.jobs[m.curJobID] = koda.Job{ID: m.curJobID}
+	return m.jobs[m.curJobID], nil
+}
+
+func (m *mockJobCreatorSubmitter) SubmitJob(queue koda.Queue, priority int, job koda.Job) (koda.Job, error) {
+	return m.jobs[job.ID], nil
+}
 
 func init() {
 	gin.SetMode(gin.TestMode)
-	// gin.DefaultWriter, _ = os.Open(os.DevNull)
+	gin.DefaultWriter, _ = os.Open(os.DevNull)
 }
 
 func newTestApp() *App {
-	dbURL := os.Getenv("DB_URL")
-
-	// Ensure a clean DB
-	db, err := db.New(dbURL)
-	if err := db.Drop(); err != nil {
-		panic(err)
-	}
-
-	app, err := NewApp(dbURL)
+	// Initialize app with a clean database
+	dbConn, err := db.New(db.Config{
+		URL:                os.Getenv("DB_URL"),
+		Clean:              true,
+		ForceIndexCreation: true,
+	})
 	if err != nil {
 		panic(err)
 	}
 
-	return app
+	m := &mockJobCreatorSubmitter{}
+
+	return NewApp(Config{
+		DB:           dbConn,
+		JobCreator:   m,
+		JobSubmitter: m,
+	})
 }
 
 func createFeed(t *testing.T, app *App, feed *db.Feed) *db.Feed {
-	if err := app.DB.CreateFeed(feed); err != nil {
+	if err := app.DB.Feeds.Create(feed); err != nil {
 		t.Fatal("Failed to create feed")
 	}
 	return feed
 }
 
 func createItem(t *testing.T, app *App, item *db.Item) *db.Item {
-	if err := app.DB.CreateItem(item); err != nil {
+	if err := app.DB.Items.Create(item); err != nil {
 		t.Fatal("Failed to create item")
 	}
 	return item
 }
 
 func createUser(t *testing.T, app *App, username, password string) *db.User {
-	user, err := app.DB.CreateUser(username, password)
+	user, err := app.DB.Users.Create(username, password)
 	if err != nil {
 		t.Fatal("Failed to create user")
 	}
 	return user
+}
+
+func createJob(t *testing.T, app *App, job db.Job) db.Job {
+	job, err := app.DB.Jobs.Create(job)
+	if err != nil {
+		t.Fatal("Failed to create user")
+	}
+	return job
 }
 
 func newRequest(method string, endpoint string, body interface{}) *http.Request {
@@ -113,6 +141,22 @@ func testEndpoint(t *testing.T, info endpointTestInfo) {
 			t.Fatal("Unable to unmarshal response:", w.Body.String())
 		}
 	}
+}
+
+func TestSearchFeeds(t *testing.T) {
+	t.Skip("skip until text search index is fixed")
+
+	testEndpoint(t, endpointTestInfo{
+		Request:      newRequest("GET", "/search_feeds?q=test", nil),
+		ExpectedCode: http.StatusOK,
+	})
+}
+
+func TestSearchFeeds_WithoutQuery(t *testing.T) {
+	testEndpoint(t, endpointTestInfo{
+		Request:      newRequest("GET", "/search_feeds", nil),
+		ExpectedCode: http.StatusBadRequest,
+	})
 }
 
 func TestLoginInvalidParameters(t *testing.T) {
@@ -201,7 +245,7 @@ func TestCreateUserValidParams(t *testing.T) {
 		t.Errorf("Username mismatch: %s != %s", user.Username, expectedUsername)
 	}
 
-	if user.ID == emptyObjectID {
+	if user.ID == emptyID {
 		t.Error("user.ID is invalid")
 	}
 
@@ -238,7 +282,7 @@ func TestGetUser(t *testing.T) {
 	// Non-existant ID
 	testEndpoint(t, endpointTestInfo{
 		App:          app,
-		Request:      newRequest("GET", fmt.Sprintf("/api/users/%s", bson.NewObjectId().Hex()), nil),
+		Request:      newRequest("GET", fmt.Sprintf("/api/users/%s", db.NewID().Hex()), nil),
 		ExpectedCode: http.StatusNotFound,
 	})
 }
@@ -246,13 +290,13 @@ func TestGetUser(t *testing.T) {
 func TestGetUserFeeds(t *testing.T) {
 	app := newTestApp()
 	user := createUser(t, app, "chris", "hithere")
-	user.FeedIDs = append(user.FeedIDs, bson.NewObjectId())
+	user.FeedIDs = append(user.FeedIDs, db.NewID())
 
-	if err := app.DB.UpdateUser(user); err != nil {
+	if err := app.DB.Users.Update(user); err != nil {
 		t.Fatal("Could not update user:", err)
 	}
 
-	var out []bson.ObjectId
+	var out []db.ID
 	testEndpoint(t, endpointTestInfo{
 		App:          app,
 		Request:      newRequest("GET", fmt.Sprintf("/api/users/%s/feeds", user.ID.Hex()), nil),
@@ -273,11 +317,11 @@ func TestGetUserItemStates(t *testing.T) {
 	app := newTestApp()
 	user := createUser(t, app, "chris", "hithere")
 	user.ItemStates = append(user.ItemStates, db.ItemState{
-		ItemID:   bson.NewObjectId(),
+		ItemID:   db.NewID(),
 		Position: 5,
 	})
 
-	if err := app.DB.UpdateUser(user); err != nil {
+	if err := app.DB.Users.Update(user); err != nil {
 		t.Fatal("Could not update user:", err)
 	}
 
@@ -302,11 +346,12 @@ func TestGetUserItemStates_WithModifiedSinceParam(t *testing.T) {
 	app := newTestApp()
 	user := createUser(t, app, "chris", "hithere")
 	user.ItemStates = append(user.ItemStates, db.ItemState{
-		ItemID:   bson.NewObjectId(),
-		Position: 5,
+		ItemID:           db.NewID(),
+		Position:         5,
+		ModificationTime: time.Now(),
 	})
 
-	if err := app.DB.UpdateUser(user); err != nil {
+	if err := app.DB.Users.Update(user); err != nil {
 		t.Fatal("Could not update user:", err)
 	}
 
@@ -346,7 +391,7 @@ func TestPutUserFeeds(t *testing.T) {
 	app := newTestApp()
 	user := createUser(t, app, "chris", "hithere")
 
-	ids := []bson.ObjectId{bson.NewObjectId()}
+	ids := []db.ID{db.NewID()}
 	req := newRequest("PUT", fmt.Sprintf("/api/users/%s/feeds", user.ID.Hex()), ids)
 	var out db.User
 	testEndpoint(t, endpointTestInfo{
@@ -434,7 +479,7 @@ func TestDeleteUserItemState(t *testing.T) {
 		Position: 0,
 	})
 
-	if err := app.DB.UpdateUser(user); err != nil {
+	if err := app.DB.Users.Update(user); err != nil {
 		t.Fatal("Could not update user:", err)
 	}
 
@@ -445,7 +490,7 @@ func TestDeleteUserItemState(t *testing.T) {
 		ExpectedCode: http.StatusOK,
 	})
 
-	if err := app.DB.FindUserByID(user.ID).One(&user); err != nil {
+	if err := app.DB.Users.FindByID(user.ID).One(&user); err != nil {
 		t.Fatal("Could not find user:", err)
 	}
 
@@ -464,7 +509,7 @@ func TestCreateFeed(t *testing.T) {
 		ResponseBody: &out,
 	})
 
-	if out.ID == emptyObjectID {
+	if out.ID == emptyID {
 		t.Error("ID is invalid")
 	}
 
@@ -497,7 +542,7 @@ func TestCreateFeedWithItems(t *testing.T) {
 	app := newTestApp()
 	feed := &db.Feed{
 		URL:   "http://google.com",
-		Items: []bson.ObjectId{bson.NewObjectId()},
+		Items: []db.ID{db.NewID()},
 	}
 
 	testEndpoint(t, endpointTestInfo{
@@ -526,10 +571,56 @@ func TestGetFeed(t *testing.T) {
 }
 
 func TestGetFeedWithoutParams(t *testing.T) {
+	app := newTestApp()
+	createFeed(t, app, &db.Feed{URL: "http://google.com"})
+	createFeed(t, app, &db.Feed{URL: "http://google2.com"})
+
+	var out []db.Feed
 	testEndpoint(t, endpointTestInfo{
+		App:          app,
 		Request:      newRequest("GET", "/api/feeds", nil),
-		ExpectedCode: http.StatusBadRequest,
+		ExpectedCode: http.StatusOK,
+		ResponseBody: &out,
 	})
+
+	if len(out) != 2 {
+		t.Errorf("Feed count mismatch: %d != %d", len(out), 2)
+	}
+}
+
+func TestGetFeedSortedByModificationTime(t *testing.T) {
+	app := newTestApp()
+	feed1 := createFeed(t, app, &db.Feed{
+		URL:              "http://google.com",
+		ModificationTime: time.Now(),
+	})
+	feed2 := createFeed(t, app, &db.Feed{
+		URL:              "http://google2.com",
+		ModificationTime: time.Now(),
+	})
+
+	var out []db.Feed
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      newRequest("GET", "/api/feeds?sort_by=modification_time&sort_order=asc", nil),
+		ExpectedCode: http.StatusOK,
+		ResponseBody: &out,
+	})
+
+	if len(out) != 2 || out[0].URL != feed1.URL || out[1].URL != feed2.URL {
+		t.Error("feed order is incorrect sort_order=asc")
+	}
+
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      newRequest("GET", "/api/feeds?sort_by=modification_time&sort_order=desc", nil),
+		ExpectedCode: http.StatusOK,
+		ResponseBody: &out,
+	})
+
+	if len(out) != 2 || out[0].URL != feed2.URL || out[1].URL != feed1.URL {
+		t.Error("feed order is incorrect sort_order=desc")
+	}
 }
 
 func TestGetFeedByURL(t *testing.T) {
@@ -629,9 +720,9 @@ func TestPutFeedWithExistingItems(t *testing.T) {
 	})
 	feed := createFeed(t, app, &db.Feed{
 		URL:   "http://google.com",
-		Items: []bson.ObjectId{item.ID},
+		Items: []db.ID{item.ID},
 	})
-	feed.Items = []bson.ObjectId{}
+	feed.Items = []db.ID{}
 
 	url := fmt.Sprintf("/api/feeds/%s", feed.ID.Hex())
 	testEndpoint(t, endpointTestInfo{
@@ -640,7 +731,7 @@ func TestPutFeedWithExistingItems(t *testing.T) {
 		ExpectedCode: http.StatusOK,
 	})
 
-	feed, err := app.DB.FeedByID(feed.ID)
+	feed, err := app.DB.Feeds.FeedByID(feed.ID)
 	if err != nil {
 		t.Fatal("Could not find feed")
 	}
@@ -675,7 +766,7 @@ func TestGetUserFeedItems(t *testing.T) {
 	})
 	feed := createFeed(t, app, &db.Feed{
 		URL:   "http://google.com",
-		Items: []bson.ObjectId{item.ID},
+		Items: []db.ID{item.ID},
 	})
 
 	req := newRequest("GET", fmt.Sprintf("/api/feeds/%s/items", feed.ID.Hex()), nil)
@@ -702,7 +793,7 @@ func TestGetUserFeedItemsWithModTime(t *testing.T) {
 	})
 	feed := createFeed(t, app, &db.Feed{
 		URL:   "http://google.com",
-		Items: []bson.ObjectId{item.ID},
+		Items: []db.ID{item.ID},
 	})
 
 	modTime := item.ModificationTime.Add(1 * time.Second)
@@ -745,7 +836,7 @@ func TestGetFeedsUsers(t *testing.T) {
 	user := createUser(t, app, "chris", "whatever")
 
 	user.FeedIDs = append(user.FeedIDs, feed.ID)
-	if err := app.DB.UpdateUser(user); err != nil {
+	if err := app.DB.Users.Update(user); err != nil {
 		t.Fatal("Failed to update user:", err)
 	}
 
@@ -785,7 +876,7 @@ func TestCreateFeedItem(t *testing.T) {
 		t.Errorf("GUID mismatch: %s != %s", out.GUID, item.GUID)
 	}
 
-	feed, err := app.DB.FeedByID(feedID)
+	feed, err := app.DB.Feeds.FeedByID(feedID)
 	if err != nil {
 		t.Fatal("Could not fetch feed")
 	}
@@ -802,7 +893,7 @@ func TestGetFeedItem(t *testing.T) {
 	item := createItem(t, app, &db.Item{GUID: "http://google.com/item"})
 	feed := createFeed(t, app, &db.Feed{
 		URL:   "http://google.com",
-		Items: []bson.ObjectId{item.ID},
+		Items: []db.ID{item.ID},
 	})
 
 	url := fmt.Sprintf("/api/feeds/%s/items/%s", feed.ID.Hex(), item.ID.Hex())
@@ -825,7 +916,7 @@ func TestPutFeedItem(t *testing.T) {
 	item := createItem(t, app, &db.Item{GUID: "http://google.com/item"})
 	feed := createFeed(t, app, &db.Feed{
 		URL:   "http://google.com",
-		Items: []bson.ObjectId{item.ID},
+		Items: []db.ID{item.ID},
 	})
 
 	item.URL = "http://google.com/item.mp3"
@@ -842,5 +933,131 @@ func TestPutFeedItem(t *testing.T) {
 
 	if out.URL != item.URL {
 		t.Errorf("URL mismatch: %s != %s", out.URL, item.URL)
+	}
+}
+
+func TestGetJob(t *testing.T) {
+	app := newTestApp()
+	job := createJob(t, app, db.Job{
+		KodaID: 1,
+	})
+
+	var out db.Job
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      newRequest("GET", fmt.Sprintf("/api/jobs/%s", job.ID.Hex()), nil),
+		ExpectedCode: http.StatusOK,
+		ResponseBody: &out,
+	})
+
+	if out.ID != job.ID {
+		t.Errorf("id mismatch %s != %s", out.ID, job.ID)
+	}
+}
+
+func TestCreateJob(t *testing.T) {
+	app := newTestApp()
+
+	in := db.Job{
+		Queue:    "queue",
+		Priority: 100,
+		Payload:  map[string]string{"data": "stuff"},
+	}
+
+	var out db.Job
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      newRequest("POST", "/api/jobs", &in),
+		ExpectedCode: http.StatusOK,
+		ResponseBody: &out,
+	})
+
+	if out.ID == emptyID {
+		t.Error("id is invalid")
+	}
+
+	if out.KodaID == 0 {
+		t.Error("KodaID was not set")
+	}
+}
+
+func TestGetJobs(t *testing.T) {
+	app := newTestApp()
+	job := createJob(t, app, db.Job{
+		KodaID: 1,
+	})
+
+	var out []db.Job
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      newRequest("GET", "/api/jobs", nil),
+		ExpectedCode: http.StatusOK,
+		ResponseBody: &out,
+	})
+
+	if len(out) != 1 {
+		t.Fatalf("output len mismatch: %d != 1", len(out))
+		return
+	}
+
+	if out[0].ID != job.ID {
+		t.Error("unexpected job id")
+	}
+}
+
+func TestGetJobs_Filter(t *testing.T) {
+	app := newTestApp()
+	createJob(t, app, db.Job{
+		KodaID: 1,
+		Queue:  "some-queue",
+		State:  "done",
+	})
+
+	var out []db.Job
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      newRequest("GET", "/api/jobs?queue=some-queue", nil),
+		ExpectedCode: http.StatusOK,
+		ResponseBody: &out,
+	})
+
+	if len(out) != 1 {
+		t.Error("job not found")
+	}
+
+	out = make([]db.Job, 0)
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      newRequest("GET", "/api/jobs?queue=fake-queue", nil),
+		ExpectedCode: http.StatusOK,
+		ResponseBody: &out,
+	})
+
+	if len(out) != 0 {
+		t.Errorf("job count mismatch: %d != 0", len(out))
+	}
+
+	out = make([]db.Job, 0)
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      newRequest("GET", "/api/jobs?state=done", nil),
+		ExpectedCode: http.StatusOK,
+		ResponseBody: &out,
+	})
+
+	if len(out) != 1 {
+		t.Error("job not found")
+	}
+
+	out = make([]db.Job, 0)
+	testEndpoint(t, endpointTestInfo{
+		App:          app,
+		Request:      newRequest("GET", "/api/jobs?queue=working", nil),
+		ExpectedCode: http.StatusOK,
+		ResponseBody: &out,
+	})
+
+	if len(out) != 0 {
+		t.Errorf("job count mismatch: %d != 0", len(out))
 	}
 }

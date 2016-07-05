@@ -5,17 +5,14 @@ import (
 	"fmt"
 
 	"github.com/cjlucas/unnamedcast/api"
-	"github.com/cjlucas/unnamedcast/koda"
 )
 
 var apiHost = flag.String("api-host", "localhost:80", "Host for API")
-var rdbURL = flag.String("redis-url", "redis://localhost:6379", "URL for redis endpoint")
 
 func main() {
 	flag.Parse()
 
 	apiTransport := api.API{Host: *apiHost}
-	koda.Configure(&koda.Options{URL: *rdbURL})
 
 	fmt.Println("Creating user")
 	user, err := apiTransport.CreateUser("chris", "blah")
@@ -45,8 +42,10 @@ func main() {
 		}
 		user.FeedIDs = append(user.FeedIDs, feed.ID)
 
-		koda.Submit("update-feed", 100, map[string]string{
-			"feed_id": feed.ID,
+		apiTransport.CreateJob(&api.Job{
+			Queue:    "update-feed",
+			Priority: 100,
+			Payload:  map[string]string{"feed_id": feed.ID},
 		})
 	}
 

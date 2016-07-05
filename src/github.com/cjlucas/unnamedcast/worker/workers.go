@@ -8,17 +8,12 @@ import (
 	"time"
 
 	"github.com/cjlucas/unnamedcast/api"
-	"github.com/cjlucas/unnamedcast/koda"
 	"github.com/cjlucas/unnamedcast/worker/itunes"
 	"github.com/cjlucas/unnamedcast/worker/rss"
 )
 
 var iTunesIDRegexp = regexp.MustCompile(`/id(\d+)`)
 var iTunesFeedURLRegexp = regexp.MustCompile(`https?://itunes.apple.com`)
-
-type Worker interface {
-	Work(q *koda.Queue, j *koda.Job) error
-}
 
 type ScrapeiTunesFeeds struct {
 	API api.API
@@ -55,10 +50,10 @@ func (w *ScrapeiTunesFeeds) scrapeFeedList(url string) ([]string, error) {
 	return page.FeedURLs(), nil
 }
 
-func (w *ScrapeiTunesFeeds) Work(q *koda.Queue, j *koda.Job) error {
+func (w *ScrapeiTunesFeeds) Work(j *Job) error {
 	const numURLResolvers = 10
 
-	fmt.Println("Fetching the genres...")
+	j.Logf("Fetching genres pages...")
 	page, err := itunes.NewGenreListPage()
 	if err != nil {
 		return err
@@ -66,7 +61,6 @@ func (w *ScrapeiTunesFeeds) Work(q *koda.Queue, j *koda.Job) error {
 
 	var feedListURLs []string
 	for _, url := range page.GenreURLs() {
-		fmt.Println("Scraping genre URL:", url)
 		urls, err := w.scrapeGenre(url)
 		if err != nil {
 			return fmt.Errorf("Could not scrape genre URL: %s", err)
@@ -77,13 +71,13 @@ func (w *ScrapeiTunesFeeds) Work(q *koda.Queue, j *koda.Job) error {
 		}
 	}
 
-	fmt.Printf("Scraping %d feed list urls...\n", len(feedListURLs))
+	j.Logf("Scraping %d feed list urls...", len(feedListURLs))
 
 	// Scan through all feed list pages and add feed url to map
 	// (Map is used to prune duplicate urls)
 	itunesIDFeedURLMap := make(map[int]string)
 	for _, url := range feedListURLs {
-		fmt.Println("Scraping feed list:", url)
+		j.Logf("Scraping feed list: %s", url)
 		urls, err := w.scrapeFeedList(url)
 		if err != nil {
 			return fmt.Errorf("Could not scrape feed list: %s", err)
@@ -92,13 +86,13 @@ func (w *ScrapeiTunesFeeds) Work(q *koda.Queue, j *koda.Job) error {
 		for _, url := range urls {
 			matches := iTunesIDRegexp.FindStringSubmatch(url)
 			if len(matches) < 2 {
-				fmt.Println("No ID match found for url", url)
+				j.Logf("No ID match found for url: %s", url)
 				continue
 			}
 
 			id, err := strconv.ParseInt(matches[1], 10, 0)
 			if err != nil {
-				fmt.Println("Could not parse id:", matches[1])
+				j.Logf("Could not parse iTunes ID: %s", matches[1])
 				continue
 			}
 
@@ -106,7 +100,7 @@ func (w *ScrapeiTunesFeeds) Work(q *koda.Queue, j *koda.Job) error {
 		}
 	}
 
-	fmt.Printf("Found %d feeds\n", len(itunesIDFeedURLMap))
+	j.Logf("Found %d feeds", len(itunesIDFeedURLMap))
 
 	// Remove feeds that are already in the database
 	for id := range itunesIDFeedURLMap {
@@ -165,10 +159,8 @@ func (w *ScrapeiTunesFeeds) Work(q *koda.Queue, j *koda.Job) error {
 			panic("Out channel closed. This should never happen")
 		}
 
-		fmt.Printf("Resolved url %d of %d\n", i+1, len(itunesIDFeedURLMap))
-
 		if resp.Err != nil {
-			fmt.Println("Failed to resolve feed url, will continue. Error: ", resp.Err)
+			j.Logf("Failed to resolve feed url, will continue. (error: %s)", resp.Err)
 			continue
 		}
 
@@ -176,16 +168,16 @@ func (w *ScrapeiTunesFeeds) Work(q *koda.Queue, j *koda.Job) error {
 
 		feed, err = w.API.CreateFeed(feed)
 		if err != nil {
-			fmt.Println("Could not create feed:", err)
+			j.Logf("Could not create feed, will continue (error: %s)", err)
 			continue
 		}
 
-		_, err = koda.Submit(queueUpdateFeed, 0, &UpdateFeedPayload{
-			FeedID: feed.ID,
-		})
-
-		if err != nil {
-			j.Logf("Failed to add update feed job")
+		job := api.Job{
+			Queue:   queueUpdateFeed,
+			Payload: &UpdateFeedPayload{FeedID: feed.ID},
+		}
+		if err = w.API.CreateJob(&job); err != nil {
+			j.Logf("Failed to add update feed job (ID: %s) (error: %s)", feed.ID, err)
 			continue
 		}
 	}
@@ -213,9 +205,9 @@ func (w *UpdateFeedWorker) guidItemsMap(items []api.Item) map[string]api.Item {
 	return guidMap
 }
 
-func (w *UpdateFeedWorker) Work(q *koda.Queue, j *koda.Job) error {
+func (w *UpdateFeedWorker) Work(j *Job) error {
 	var payload UpdateFeedPayload
-	if err := j.UnmarshalPayload(&payload); err != nil {
+	if err := j.KodaJob.UnmarshalPayload(&payload); err != nil {
 		return err
 	}
 
@@ -294,14 +286,14 @@ func (w *UpdateFeedWorker) Work(q *koda.Queue, j *koda.Job) error {
 
 	for i := range users {
 		user := &users[i]
-		for j := range newItems {
+		for k := range newItems {
 			err := w.API.UpdateUserItemState(user.ID, api.ItemState{
-				ItemID:           newItems[j].ID,
+				ItemID:           newItems[k].ID,
 				State:            api.StateUnplayed,
 				ModificationTime: time.Now().UTC(),
 			})
 			if err != nil {
-				fmt.Println("Could not update user's item state")
+				j.Logf("Could not update user's item state, will continue. (error: %s)", err)
 				continue
 			}
 		}
@@ -314,16 +306,25 @@ type UpdateUserFeedsWorker struct {
 	API api.API
 }
 
-func (w *UpdateUserFeedsWorker) Work(q *koda.Queue, j *koda.Job) error {
+func (w *UpdateUserFeedsWorker) Work(job *Job) error {
 	users, err := w.API.GetUsers()
 	if err != nil {
 		return err
 	}
 
+	job.Logf("Fetched %d users", len(users))
+
 	for i := range users {
 		feedIDs := users[i].FeedIDs
 		for _, id := range feedIDs {
-			koda.Submit(queueUpdateFeed, 0, &UpdateFeedPayload{FeedID: id})
+			j := api.Job{
+				Queue:   queueUpdateFeed,
+				Payload: &UpdateFeedPayload{FeedID: id},
+			}
+			if err = w.API.CreateJob(&j); err != nil {
+				job.Logf("Failed to add update feed job (error: %s)", err)
+				continue
+			}
 		}
 	}
 

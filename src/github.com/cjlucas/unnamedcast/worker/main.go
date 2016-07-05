@@ -7,11 +7,11 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
+	"github.com/cjlucas/koda-go"
 	"github.com/cjlucas/unnamedcast/api"
-	"github.com/cjlucas/unnamedcast/koda"
+	"github.com/cjlucas/unnamedcast/db"
 )
 
 const (
@@ -20,7 +20,23 @@ const (
 	queueUpdateUserFeeds   = "update-user-feeds"
 )
 
-const MaxAttempts = 5
+type Worker interface {
+	Work(job *Job) error
+}
+
+type Job struct {
+	KodaJob    *koda.Job
+	collection *db.JobCollection
+	dbID       db.ID
+}
+
+func (j *Job) Logf(format string, args ...interface{}) {
+	if j.dbID.Valid() {
+		j.collection.AppendLog(j.dbID, fmt.Sprintf(format, args...))
+	} else {
+		fmt.Printf(format+"\n", args...)
+	}
+}
 
 type queueOpt struct {
 	Name       string
@@ -53,31 +69,39 @@ func (l *queueOptList) Set(s string) error {
 	return nil
 }
 
-func runQueueWorker(wg *sync.WaitGroup, q *koda.Queue, w Worker) {
-	defer wg.Done()
+func wrapHandler(dbConn *db.DB, queue koda.Queue, f func(*Job) error) koda.HandlerFunc {
+	return func(j *koda.Job) error {
+		job := &Job{
+			KodaJob:    j,
+			collection: &dbConn.Jobs,
+		}
 
-	for {
-		j, err := q.Wait()
+		var dbJob db.Job
+		if err := dbConn.Jobs.FindByKodaID(j.ID).One(&dbJob); err != nil {
+			fmt.Printf("Could not fetch job (ID: %d)\n", j.ID)
+		} else {
+			job.dbID = dbJob.ID
+		}
+		job.Logf("Starting job (%d/%d)", j.NumAttempts, queue.MaxAttempts)
+		dbConn.Jobs.UpdateState(dbJob.ID, "working")
+
+		err := f(job)
 		if err != nil {
-			fmt.Println("Error occured while waiting for job:", err)
-			continue
-		}
-
-		fmt.Printf("Job %d: Dequeued\n", j.ID)
-
-		if err := w.Work(q, j); err != nil {
-			fmt.Printf("Job %d: Failed with error: %s\n", j.ID, err)
-			if j.NumAttempts == MaxAttempts {
-				fmt.Printf("Job %d: Max attempts reached, killing job\n", j.ID)
-				j.Kill()
+			job.Logf("Failed with error: %s", err)
+			// If job has failed on its last attempt, mark it dead
+			// Koda should provide a convenience function like LastAttempt() bool
+			if j.NumAttempts < queue.MaxAttempts {
+				job.Logf("Will retry job in %s", queue.RetryInterval)
+				dbConn.Jobs.UpdateState(dbJob.ID, "queued")
 			} else {
-				fmt.Printf("Job %d: Failed on attempt %d, will retry\n", j.ID, j.NumAttempts)
-				j.Retry(5 * time.Minute)
+				dbConn.Jobs.UpdateState(dbJob.ID, "dead")
 			}
-			continue
+			return err
 		}
-		fmt.Printf("Job %d: Done\n", j.ID)
-		j.Finish()
+
+		job.Logf("Job completed successfully")
+		dbConn.Jobs.UpdateState(dbJob.ID, "finished")
+		return nil
 	}
 }
 
@@ -86,18 +110,14 @@ func main() {
 	flag.Var(&queueList, "q", "queueName[:numWorkers]")
 	flag.Parse()
 
-	koda.Configure(&koda.Options{
+	if len(queueList) == 0 {
+		flag.Usage()
+		os.Exit(0)
+	}
+
+	kodaClient := koda.NewClient(&koda.Options{
 		URL: os.Getenv("REDIS_URL"),
 	})
-
-	koda.Submit(queueScrapeiTunesFeeds, 0, nil)
-
-	// koda.Submit(queueUpdateFeed, 0, &UpdateFeedPayload{
-	// 	FeedID: "56d5c158c87472028649f39a",
-	// })
-	//
-	// koda.Submit(queueUpdateUserFeeds, 0, nil)
-	var wg sync.WaitGroup
 
 	apiURL := os.Getenv("API_URL")
 	if apiURL == "" {
@@ -110,26 +130,38 @@ func main() {
 	}
 	api := api.API{Host: url.Host}
 
-	handlers := map[string]Worker{
-		queueScrapeiTunesFeeds: &ScrapeiTunesFeeds{API: api},
-		queueUpdateFeed:        &UpdateFeedWorker{API: api},
-		queueUpdateUserFeeds:   &UpdateUserFeedsWorker{API: api},
+	dbURL := os.Getenv("DB_URL")
+	if dbURL == "" {
+		panic("DB_URL not specified")
+	}
+	dbConn, err := db.New(db.Config{URL: dbURL})
+	if err != nil {
+		panic(fmt.Errorf("Could not connect to db: %s", err))
 	}
 
-	fmt.Println(apiURL)
-	fmt.Printf("%+v\n", handlers[queueScrapeiTunesFeeds])
+	workers := map[string]Worker{
+		queueUpdateUserFeeds:   &UpdateUserFeedsWorker{API: api},
+		queueUpdateFeed:        &UpdateFeedWorker{API: api},
+		queueScrapeiTunesFeeds: &ScrapeiTunesFeeds{API: api},
+	}
 
 	for _, opt := range queueList {
-		for i := 0; i < opt.NumWorkers; i++ {
-			wg.Add(1)
-			fmt.Println(opt.Name, i)
-			worker := handlers[opt.Name]
-			if worker == nil {
-				panic(fmt.Sprintf("No worker found for queue: %s", opt.Name))
-			}
-			go runQueueWorker(&wg, koda.GetQueue(opt.Name), worker)
+		worker, ok := workers[opt.Name]
+		if !ok {
+			fmt.Fprintf(os.Stderr, "%s is not a valid queue\n", opt.Name)
+			os.Exit(1)
 		}
+
+		q := koda.Queue{
+			Name:          opt.Name,
+			NumWorkers:    opt.NumWorkers,
+			RetryInterval: 5 * time.Second,
+			MaxAttempts:   5,
+		}
+
+		kodaClient.Register(q, wrapHandler(dbConn, q, worker.Work))
+		fmt.Printf("Registered %d workers to work %s queue\n", q.NumWorkers, q.Name)
 	}
 
-	wg.Wait()
+	kodaClient.WorkForever()
 }

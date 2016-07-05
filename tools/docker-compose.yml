@@ -24,10 +24,13 @@ services:
     depends_on:
       - web
       - redis
+      - mongodb
     links:
       - web
       - redis:rdb
+      - mongodb:db
     environment:
+      - DB_URL=mongodb://db:27017/cast
       - API_URL=http://web:80
       - REDIS_URL=redis://rdb:6379
     command: worker
