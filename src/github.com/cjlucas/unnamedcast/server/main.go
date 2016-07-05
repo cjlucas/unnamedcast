@@ -14,8 +14,8 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/cjlucas/koda-go"
 	"github.com/cjlucas/unnamedcast/db"
-	"github.com/cjlucas/unnamedcast/koda"
 	"github.com/gin-gonic/gin"
 	"github.com/robfig/cron"
 )
@@ -31,30 +31,33 @@ const (
 	jobIDCtxKey  = "jobID"
 )
 
+type JobCreator interface {
+	CreateJob(payload interface{}) (koda.Job, error)
+}
+
 type JobSubmitter interface {
-	Submit(queue string, priority int, payload interface{}) (*koda.Job, error)
+	SubmitJob(queue koda.Queue, priority int, job koda.Job) (koda.Job, error)
 }
 
 type defaultKodaClient struct{}
 
-func (c defaultKodaClient) Submit(queue string, priority int, payload interface{}) (*koda.Job, error) {
-	return koda.Submit(queue, priority, payload)
-}
-
 type App struct {
 	DB           *db.DB
 	g            *gin.Engine
+	jobCreator   JobCreator
 	jobSubmitter JobSubmitter
 }
 
 type Config struct {
 	DB           *db.DB
+	JobCreator   JobCreator
 	JobSubmitter JobSubmitter
 }
 
 func NewApp(cfg Config) *App {
 	app := App{
 		DB:           cfg.DB,
+		jobCreator:   cfg.JobCreator,
 		jobSubmitter: cfg.JobSubmitter,
 	}
 
@@ -151,19 +154,25 @@ func parseQueryParams(spec interface{}) gin.HandlerFunc {
 }
 
 func (app *App) submitJob(job db.Job) (db.Job, error) {
-	j, err := app.jobSubmitter.Submit(job.Queue, job.Priority, job.Payload)
+	j, err := app.jobCreator.CreateJob(job.Payload)
 	if err != nil {
 		return db.Job{}, err
 	}
 
-	job = db.Job{
-		KodaID:   j.ID,
-		Queue:    job.Queue,
-		Priority: job.Priority,
-		Payload:  job.Payload,
+	job.KodaID = j.ID
+	job.State = "initial"
+	job, err = app.DB.Jobs.Create(job)
+
+	j, err = app.jobSubmitter.SubmitJob(koda.Queue{Name: job.Queue}, job.Priority, j)
+	if err != nil {
+		return db.Job{}, err
 	}
 
-	return app.DB.Jobs.Create(job)
+	if err := app.DB.Jobs.UpdateState(job.ID, "queued"); err != nil {
+		return db.Job{}, err
+	}
+
+	return job, nil
 }
 
 func (app *App) logErrors(c *gin.Context) {
@@ -808,7 +817,7 @@ func main() {
 		rdbURL = "redis://localhost:6379"
 	}
 
-	koda.Configure(&koda.Options{
+	kodaClient := koda.NewClient(&koda.Options{
 		URL: rdbURL,
 	})
 
@@ -841,7 +850,8 @@ func main() {
 
 	app := NewApp(Config{
 		DB:           dbConn,
-		JobSubmitter: defaultKodaClient{},
+		JobCreator:   kodaClient,
+		JobSubmitter: kodaClient,
 	})
 
 	c.AddFunc("0 */10 * * * *", func() {

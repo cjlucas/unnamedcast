@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/cjlucas/koda-go"
 	"github.com/cjlucas/unnamedcast/api"
-	"github.com/cjlucas/unnamedcast/koda"
 )
 
 func main() {

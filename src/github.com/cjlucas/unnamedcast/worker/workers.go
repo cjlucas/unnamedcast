@@ -8,17 +8,12 @@ import (
 	"time"
 
 	"github.com/cjlucas/unnamedcast/api"
-	"github.com/cjlucas/unnamedcast/koda"
 	"github.com/cjlucas/unnamedcast/worker/itunes"
 	"github.com/cjlucas/unnamedcast/worker/rss"
 )
 
 var iTunesIDRegexp = regexp.MustCompile(`/id(\d+)`)
 var iTunesFeedURLRegexp = regexp.MustCompile(`https?://itunes.apple.com`)
-
-type Worker interface {
-	Work(q *koda.Queue, j *koda.Job) error
-}
 
 type ScrapeiTunesFeeds struct {
 	API api.API
@@ -55,7 +50,7 @@ func (w *ScrapeiTunesFeeds) scrapeFeedList(url string) ([]string, error) {
 	return page.FeedURLs(), nil
 }
 
-func (w *ScrapeiTunesFeeds) Work(q *koda.Queue, j *koda.Job) error {
+func (w *ScrapeiTunesFeeds) Work(j *Job) error {
 	const numURLResolvers = 10
 
 	fmt.Println("Fetching the genres...")
@@ -180,12 +175,12 @@ func (w *ScrapeiTunesFeeds) Work(q *koda.Queue, j *koda.Job) error {
 			continue
 		}
 
-		_, err = koda.Submit(queueUpdateFeed, 0, &UpdateFeedPayload{
-			FeedID: feed.ID,
-		})
-
-		if err != nil {
-			j.Logf("Failed to add update feed job")
+		job := api.Job{
+			Queue:   queueUpdateFeed,
+			Payload: &UpdateFeedPayload{FeedID: feed.ID},
+		}
+		if err = w.API.CreateJob(&job); err != nil {
+			fmt.Println("Failed to add update feed job")
 			continue
 		}
 	}
@@ -213,9 +208,9 @@ func (w *UpdateFeedWorker) guidItemsMap(items []api.Item) map[string]api.Item {
 	return guidMap
 }
 
-func (w *UpdateFeedWorker) Work(q *koda.Queue, j *koda.Job) error {
+func (w *UpdateFeedWorker) Work(j *Job) error {
 	var payload UpdateFeedPayload
-	if err := j.UnmarshalPayload(&payload); err != nil {
+	if err := j.KodaJob.UnmarshalPayload(&payload); err != nil {
 		return err
 	}
 
@@ -314,16 +309,25 @@ type UpdateUserFeedsWorker struct {
 	API api.API
 }
 
-func (w *UpdateUserFeedsWorker) Work(q *koda.Queue, j *koda.Job) error {
+func (w *UpdateUserFeedsWorker) Work(job *Job) error {
 	users, err := w.API.GetUsers()
 	if err != nil {
 		return err
 	}
 
+	job.Logf("Fetched %d users", len(users))
+
 	for i := range users {
 		feedIDs := users[i].FeedIDs
 		for _, id := range feedIDs {
-			koda.Submit(queueUpdateFeed, 0, &UpdateFeedPayload{FeedID: id})
+			job := api.Job{
+				Queue:   queueUpdateFeed,
+				Payload: &UpdateFeedPayload{FeedID: id},
+			}
+			if err = w.API.CreateJob(&job); err != nil {
+				fmt.Println("Failed to add update feed job")
+				continue
+			}
 		}
 	}
 

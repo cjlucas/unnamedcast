@@ -35,7 +35,8 @@ func (c JobCollection) FindByKodaID(id int) Cursor {
 
 func (c JobCollection) Create(job Job) (Job, error) {
 	job.ID = NewID()
-	job.ModificationTime = time.Now().UTC()
+	job.CreationTime = time.Now().UTC()
+	job.ModificationTime = job.CreationTime
 	return job, c.c.Insert(job)
 }
 
