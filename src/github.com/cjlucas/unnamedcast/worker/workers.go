@@ -53,7 +53,7 @@ func (w *ScrapeiTunesFeeds) scrapeFeedList(url string) ([]string, error) {
 func (w *ScrapeiTunesFeeds) Work(j *Job) error {
 	const numURLResolvers = 10
 
-	fmt.Println("Fetching the genres...")
+	j.Logf("Fetching genres pages...")
 	page, err := itunes.NewGenreListPage()
 	if err != nil {
 		return err
@@ -61,7 +61,6 @@ func (w *ScrapeiTunesFeeds) Work(j *Job) error {
 
 	var feedListURLs []string
 	for _, url := range page.GenreURLs() {
-		fmt.Println("Scraping genre URL:", url)
 		urls, err := w.scrapeGenre(url)
 		if err != nil {
 			return fmt.Errorf("Could not scrape genre URL: %s", err)
@@ -72,13 +71,13 @@ func (w *ScrapeiTunesFeeds) Work(j *Job) error {
 		}
 	}
 
-	fmt.Printf("Scraping %d feed list urls...\n", len(feedListURLs))
+	j.Logf("Scraping %d feed list urls...", len(feedListURLs))
 
 	// Scan through all feed list pages and add feed url to map
 	// (Map is used to prune duplicate urls)
 	itunesIDFeedURLMap := make(map[int]string)
 	for _, url := range feedListURLs {
-		fmt.Println("Scraping feed list:", url)
+		j.Logf("Scraping feed list: %s", url)
 		urls, err := w.scrapeFeedList(url)
 		if err != nil {
 			return fmt.Errorf("Could not scrape feed list: %s", err)
@@ -87,13 +86,13 @@ func (w *ScrapeiTunesFeeds) Work(j *Job) error {
 		for _, url := range urls {
 			matches := iTunesIDRegexp.FindStringSubmatch(url)
 			if len(matches) < 2 {
-				fmt.Println("No ID match found for url", url)
+				j.Logf("No ID match found for url: %s", url)
 				continue
 			}
 
 			id, err := strconv.ParseInt(matches[1], 10, 0)
 			if err != nil {
-				fmt.Println("Could not parse id:", matches[1])
+				j.Logf("Could not parse iTunes ID: %s", matches[1])
 				continue
 			}
 
@@ -101,7 +100,7 @@ func (w *ScrapeiTunesFeeds) Work(j *Job) error {
 		}
 	}
 
-	fmt.Printf("Found %d feeds\n", len(itunesIDFeedURLMap))
+	j.Logf("Found %d feeds", len(itunesIDFeedURLMap))
 
 	// Remove feeds that are already in the database
 	for id := range itunesIDFeedURLMap {
@@ -160,10 +159,8 @@ func (w *ScrapeiTunesFeeds) Work(j *Job) error {
 			panic("Out channel closed. This should never happen")
 		}
 
-		fmt.Printf("Resolved url %d of %d\n", i+1, len(itunesIDFeedURLMap))
-
 		if resp.Err != nil {
-			fmt.Println("Failed to resolve feed url, will continue. Error: ", resp.Err)
+			j.Logf("Failed to resolve feed url, will continue. (error: %s)", resp.Err)
 			continue
 		}
 
@@ -171,7 +168,7 @@ func (w *ScrapeiTunesFeeds) Work(j *Job) error {
 
 		feed, err = w.API.CreateFeed(feed)
 		if err != nil {
-			fmt.Println("Could not create feed:", err)
+			j.Logf("Could not create feed, will continue (error: %s)", err)
 			continue
 		}
 
@@ -180,7 +177,7 @@ func (w *ScrapeiTunesFeeds) Work(j *Job) error {
 			Payload: &UpdateFeedPayload{FeedID: feed.ID},
 		}
 		if err = w.API.CreateJob(&job); err != nil {
-			fmt.Println("Failed to add update feed job")
+			j.Logf("Failed to add update feed job (ID: %s) (error: %s)", feed.ID, err)
 			continue
 		}
 	}
@@ -289,14 +286,14 @@ func (w *UpdateFeedWorker) Work(j *Job) error {
 
 	for i := range users {
 		user := &users[i]
-		for j := range newItems {
+		for k := range newItems {
 			err := w.API.UpdateUserItemState(user.ID, api.ItemState{
-				ItemID:           newItems[j].ID,
+				ItemID:           newItems[k].ID,
 				State:            api.StateUnplayed,
 				ModificationTime: time.Now().UTC(),
 			})
 			if err != nil {
-				fmt.Println("Could not update user's item state")
+				j.Logf("Could not update user's item state, will continue. (error: %s)", err)
 				continue
 			}
 		}
@@ -320,12 +317,12 @@ func (w *UpdateUserFeedsWorker) Work(job *Job) error {
 	for i := range users {
 		feedIDs := users[i].FeedIDs
 		for _, id := range feedIDs {
-			job := api.Job{
+			j := api.Job{
 				Queue:   queueUpdateFeed,
 				Payload: &UpdateFeedPayload{FeedID: id},
 			}
-			if err = w.API.CreateJob(&job); err != nil {
-				fmt.Println("Failed to add update feed job")
+			if err = w.API.CreateJob(&j); err != nil {
+				job.Logf("Failed to add update feed job (error: %s)", err)
 				continue
 			}
 		}
