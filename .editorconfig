@@ -7,3 +7,6 @@ indent_size = 4
 
 [*.yml]
 indent_size = 2
+
+[*.{js,jsx}]
+indent_size = 2

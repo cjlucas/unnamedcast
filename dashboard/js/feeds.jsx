@@ -1,7 +1,10 @@
-const Router = ReactRouter.Router;
-const Route = ReactRouter.Route;
-const IndexRoute = ReactRouter.IndexRoute;
-const Link = ReactRouter.Link;
+import {Router, Route, IndexRoute, Link} from 'react-router';
+import React from 'react';
+import ReactDOM from 'react-dom';
+import _ from 'lodash';
+
+import JobList from './jobs.jsx';
+console.log('feeds.jsx', JobList);
 
 class ItemListItem extends React.Component {
   render() {
@@ -123,6 +126,7 @@ class FeedList extends React.Component {
 ReactDOM.render((
   <Router>
     <Route path="/" component={FeedList} />
+    <Route path="/blah" component={JobList} />
     <IndexRoute component={FeedList} />
     <Route path="feeds/:feedId" component={Feed} />
   </Router>

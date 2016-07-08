@@ -1,6 +1,7 @@
 bin
 pkg
 build
+node_modules
 
 src/*
 !src/github.com
