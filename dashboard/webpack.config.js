@@ -1,5 +1,3 @@
-var glob = require('glob');
-
 module.exports = {
   entry: './js/feeds.jsx',
   output: {

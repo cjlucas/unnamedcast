@@ -1,4 +1,3 @@
-console.log('jobs.jsx');
 import React from 'react';
 
 export class JobList extends React.Component {

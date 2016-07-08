@@ -3,8 +3,7 @@ import React from 'react';
 import ReactDOM from 'react-dom';
 import _ from 'lodash';
 
-import JobList from './jobs.jsx';
-console.log('feeds.jsx', JobList);
+import {JobList} from './jobs.jsx';
 
 class ItemListItem extends React.Component {
   render() {
