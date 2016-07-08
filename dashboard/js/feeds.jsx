@@ -126,7 +126,7 @@ class FeedList extends React.Component {
 ReactDOM.render((
   <Router>
     <Route path="/" component={FeedList} />
-    <Route path="/blah" component={JobList} />
+    <Route path="/jobs" component={JobList} />
     <IndexRoute component={FeedList} />
     <Route path="feeds/:feedId" component={Feed} />
   </Router>

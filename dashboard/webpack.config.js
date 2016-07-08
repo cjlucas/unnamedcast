@@ -1,7 +1,7 @@
 var glob = require('glob');
 
 module.exports = {
-  entry: glob.sync('./js/*.jsx'),
+  entry: './js/feeds.jsx',
   output: {
     path: __dirname,
     filename: "bundle.js"

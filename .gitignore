@@ -2,6 +2,7 @@ bin
 pkg
 build
 node_modules
+bundle.js
 
 src/*
 !src/github.com
