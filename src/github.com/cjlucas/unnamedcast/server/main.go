@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -258,6 +259,9 @@ func (app *App) requireJobID(paramName string) gin.HandlerFunc {
 
 func (app *App) setupRoutes() {
 	app.g = gin.Default()
+
+	cwd, _ := filepath.Abs(filepath.Dir(os.Args[0]))
+	app.g.Static("/dashboard", filepath.Join(cwd, "dashboard"))
 
 	// GET /search_feeds
 	type SearchFeedsParams struct {
