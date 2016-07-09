@@ -1,11 +1,16 @@
 import React from 'react';
+import $ from 'jquery';
+
+console.log($);
 
 class JobEntry extends React.Component {
   doit() {
     console.log('got clicked', this.props.id);
+    $('.ui.modal').modal('show');
   }
 
   render() {
+    console.log(this.refs);
     return (
       <tr onClick={this.doit.bind(this)}>
         <td>{this.props.id}</td>
@@ -49,7 +54,7 @@ export class JobList extends React.Component {
     });
 
     return (
-      <table className="ui celled table">
+      <table className="ui celled table" ref={c => console.log(c)}>
         <thead>
           <tr>
             <th>Job ID</th>
