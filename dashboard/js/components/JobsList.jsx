@@ -1,15 +1,9 @@
 import React from "react";
 import classNames from "classnames";
 
-import AppDispatcher from "../dispatcher/AppDispatcher";
-import JobsListActionCreators from "../actions/JobsListActionCreators";
+import * as Actions from "../actions/JobsListActionCreators";
 
 class Button extends React.Component {
-  _onClick(key) {
-    console.log(`did click ${key}`);
-    JobsListActionCreators.selectedFilter(key);
-  }
-
   render() {
     var cls = {
       ui: true,
@@ -21,7 +15,7 @@ class Button extends React.Component {
     cls = classNames(cls);
 
     return (
-      <button className={cls} onClick={this._onClick}>
+      <button className={cls} onClick={this.props.onClick}>
         {this.props.text}
       </button>
     );
@@ -29,24 +23,6 @@ class Button extends React.Component {
 }
 
 class QueueFilterButtons extends React.Component {
-  constructor() {
-    super(...arguments);
-    this.state = {
-      buttonStates: {
-        queued: false,
-        working: false,
-        finished: false,
-        dead: false,
-      }
-    };
-  }
-
-  componentWillUpdate() {
-    for (var key in this.state.buttonStates) {
-      this.state.buttonStates[key] = false;
-    }
-  }
-
   render() {
     var buttons = [
       {key: "queued", text: "Queued", color: "teal"},
@@ -58,7 +34,8 @@ class QueueFilterButtons extends React.Component {
         <Button
           name={info.key}
           key={info.key}
-          selected={this.state.buttonStates[info.key]}
+          selected={this.props.selectedButton == info.key}
+          onClick={() => this.props.onFilterSelected(info.key)}
           text={info.text}
           color={info.color} />
       );
@@ -71,11 +48,6 @@ class QueueFilterButtons extends React.Component {
     );
   }
 }
-
-QueueFilterButtons.dispatchToken = AppDispatcher.dispatch(action => {
-  console.log("Got action");
-  console.log(action);
-});
 
 class JobEntry extends React.Component {
   render() {
@@ -128,8 +100,17 @@ export default class JobsList extends React.Component {
     };
   }
 
+  componentWillMount() {
+    var f = () => this.props.store.dispatch(Actions.requestJobs());
+    f();
+    setInterval(f, 2000);
+  }
+
   render() {
-    var jobs = this.state.jobs.map(job => {
+    const {store} = this.props;
+    const state = store.getState();
+
+    var jobs = state.jobs.map(job => {
       return (
         <JobEntry
           key={job.id}
@@ -143,7 +124,10 @@ export default class JobsList extends React.Component {
 
     return (
       <div>
-        <QueueFilterButtons />
+        <QueueFilterButtons
+          selectedButton={state.selectedStateFilter}
+          onFilterSelected={filter => store.dispatch(Actions.selectedFilter(filter))}
+          />
 
         <table className="ui celled table">
           <thead>
