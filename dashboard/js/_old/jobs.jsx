@@ -90,7 +90,7 @@ class QueueFilterButtons extends React.Component {
 
   render() {
     var buttons = [
-      {key: "queued", text: "Queued", color: "brown"},
+      {key: "queued", text: "Queued", color: "teal"},
       {key: "working", text: "Working", color: "purple"},
       {key: "finished", text: "Finished", color: "green"},
       {key: "dead", text: "Dead", color: "red"},
