@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom";
-import { Router, Route, Link} from "react-router";
+import { Router, Link } from "react-router";
 import {createStore, applyMiddleware} from "redux";
 import thunk from "redux-thunk";
 
@@ -9,8 +9,6 @@ import _ from "lodash";
 
 import reducers from "./reducers";
 import JobsList from "./components/JobsList.jsx";
-
-console.log('here', reducers);
 
 const store = createStore(reducers, applyMiddleware(thunk));
 
@@ -51,6 +49,9 @@ class App extends React.Component {
   }
 }
 
+App.propTypes = {
+  children: React.PropTypes.object,
+};
 
 const routes = {
   path: "/",
@@ -64,12 +65,9 @@ const routes = {
 };
 
 function render() {
-  // ReactDOM.render(
-  //   <JobsList store={store} />, document.getElementById("content"));
   ReactDOM.render(
     <Router routes={routes} />, document.getElementById("content"));
 }
-
 
 render();
 store.subscribe(render);
