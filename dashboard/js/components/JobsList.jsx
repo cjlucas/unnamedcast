@@ -135,8 +135,6 @@ export default class JobsList extends React.Component {
   }
 
   componentWillUpdate() {
-    console.log("componentWillUpdate");
-    console.log(this.state);
     var filter = this.getSelectedFilter();
     if (filter != this.stateFilter) {
       this.fetchJobs();
