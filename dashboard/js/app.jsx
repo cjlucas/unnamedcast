@@ -30,28 +30,37 @@ class App extends React.Component {
           <a className="item">
             About Us
           </a>
-          <a className="item">
-            Jobs
-          </a>
+          <Link to="/jobs" className="item">Jobs</Link>
           <a className="item active">
             Locations
           </a>
         </div>
+        {this.props.children}
 
-        <Router>
-          <Route path="/" component={JobsListWrapper} />
-        </Router>
       </div>
     );
   }
 }
 
+
+const routes = {
+  path: "/",
+  component: App,
+  childRoutes: [
+    {
+      path: "jobs",
+      component: JobsListWrapper,
+    }
+  ]
+};
+
 function render() {
   // ReactDOM.render(
   //   <JobsList store={store} />, document.getElementById("content"));
   ReactDOM.render(
-    <App />, document.getElementById("content"));
+    <Router routes={routes} />, document.getElementById("content"));
 }
+
 
 render();
 store.subscribe(render);
