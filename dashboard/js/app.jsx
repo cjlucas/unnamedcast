@@ -4,6 +4,9 @@ import { Router, Route, Link} from "react-router";
 import {createStore, applyMiddleware} from "redux";
 import thunk from "redux-thunk";
 
+import classNames from "classnames";
+import _ from "lodash";
+
 import reducers from "./reducers";
 import JobsList from "./components/JobsList.jsx";
 
@@ -21,19 +24,25 @@ class JobsListWrapper extends React.Component {
 
 class App extends React.Component {
   render() {
+    // curRoute is the path property of the current route
+    const curRoute = _.get(this.props, "children.props.route.path");
+    const links = [
+      {to: "jobs", text: "Jobs"},
+    ].map(link => {
+      const cls = classNames({
+        item: true,
+        active: curRoute == link.to,
+      });
+      return <Link key={link.to} to={link.to} className={cls}>{link.text}</Link>;
+    });
+
     return (
       <div>
         <div className="ui menu">
           <div className="header item">
-            Our Company
+            unnamedcast
           </div>
-          <a className="item">
-            About Us
-          </a>
-          <Link to="/jobs" className="item">Jobs</Link>
-          <a className="item active">
-            Locations
-          </a>
+          {links}
         </div>
         {this.props.children}
 
