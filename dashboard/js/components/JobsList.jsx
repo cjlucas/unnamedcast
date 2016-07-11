@@ -95,22 +95,39 @@ export default class JobsList extends React.Component {
   constructor(props) {
     super(props);
     this.state = {
-      stateFilters: [],
-      jobs: [],
+      stateFilter: this.getSelectedFilter()
     };
+    this.fetchJobs();
+  }
+
+  getState() {
+    return this.props.store.getState();
+  }
+
+  getSelectedFilter() {
+    return this.getState().selectedStateFilter;
+  }
+
+  fetchJobs() {
+    this.props.store.dispatch(Actions.requestJobs());
   }
 
   componentWillMount() {
-    var f = () => this.props.store.dispatch(Actions.requestJobs());
-    f();
-    setInterval(f, 2000);
+    setInterval(this.fetchJobs.bind(this), 2000);
+  }
+
+  componentWillUpdate() {
+    console.log("componentWillUpdate");
+    console.log(this.state);
+    var filter = this.getSelectedFilter();
+    if (filter != this.state.stateFilter) {
+      this.fetchJobs();
+    }
+    this.state.stateFilter = filter;
   }
 
   render() {
-    const {store} = this.props;
-    const state = store.getState();
-
-    var jobs = state.jobs.map(job => {
+    var jobs = this.getState().jobs.map(job => {
       return (
         <JobEntry
           key={job.id}
@@ -122,10 +139,11 @@ export default class JobsList extends React.Component {
       );
     });
 
+    const {store} = this.props;
     return (
-      <div>
+      <div className="ui container">
         <QueueFilterButtons
-          selectedButton={state.selectedStateFilter}
+          selectedButton={this.getSelectedFilter()}
           onFilterSelected={filter => store.dispatch(Actions.selectedFilter(filter))}
           />
 

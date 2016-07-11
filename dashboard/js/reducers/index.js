@@ -1,25 +1,26 @@
 import {combineReducers} from "redux";
 
-const DEFAULT_STATE = {
-  selectedStateFilter: null,
-  jobs: [],
-};
-
-export default function filterJobState(state = DEFAULT_STATE, action) {
-  switch(action.type) {
-  case "SELECTED_FILTER":
-    return Object.assign({}, state, {
-      selectedStateFilter: action.filter,
-    });
-
-  case "RECEIVED_JOBS":
-    return Object.assign({}, state, {
-      jobs: action.jobs,
-    });
-
-  default:
-    return state;
+function selectedStateFilter(state = null, action) {
+  if (action.type == "SELECTED_FILTER") {
+    // If same state button was preseed, toggle it
+    return state != action.filter
+    ? action.filter
+    : null;
   }
+
+  return state;
 }
 
-// export default combineReducers(filterJobState);
+function jobs(state = [], action) {
+  if (action.type == "RECEIVED_JOBS") {
+    return action.jobs || [];
+  }
+
+  return state;
+}
+
+
+export default combineReducers({
+  selectedStateFilter,
+  jobs
+});
