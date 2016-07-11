@@ -22,6 +22,13 @@ class Button extends React.Component {
   }
 }
 
+Button.propTypes = {
+  text: React.PropTypes.string,
+  color: React.PropTypes.string,
+  selected: React.PropTypes.bool,
+  onClick: React.PropTypes.func,
+};
+
 class QueueFilterButtons extends React.Component {
   render() {
     var buttons = [
@@ -48,6 +55,11 @@ class QueueFilterButtons extends React.Component {
     );
   }
 }
+
+QueueFilterButtons.propTypes = {
+  selectedButton: React.PropTypes.string,
+  onFilterSelected: React.PropTypes.func,
+};
 
 class JobEntry extends React.Component {
   render() {
@@ -91,12 +103,18 @@ class JobEntry extends React.Component {
   }
 }
 
+JobEntry.propTypes = {
+  id: React.PropTypes.string,
+  queue: React.PropTypes.string,
+  payload: React.PropTypes.object,
+  completionTime: React.PropTypes.string,
+  state: React.PropTypes.string,
+};
+
 export default class JobsList extends React.Component {
   constructor(props) {
     super(props);
-    this.state = {
-      stateFilter: this.getSelectedFilter()
-    };
+    this.stateFilter = this.getSelectedFilter();
     this.fetchJobs();
   }
 
@@ -120,10 +138,10 @@ export default class JobsList extends React.Component {
     console.log("componentWillUpdate");
     console.log(this.state);
     var filter = this.getSelectedFilter();
-    if (filter != this.state.stateFilter) {
+    if (filter != this.stateFilter) {
       this.fetchJobs();
     }
-    this.state.stateFilter = filter;
+    this.stateFilter = filter;
   }
 
   render() {
@@ -165,3 +183,7 @@ export default class JobsList extends React.Component {
     );
   }
 }
+
+JobsList.propTypes = {
+  store: React.PropTypes.object,
+};
