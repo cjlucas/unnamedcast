@@ -29,8 +29,10 @@ type JobCollection struct {
 	collection
 }
 
-func (c JobCollection) FindByKodaID(id int) Result {
-	return c.c.Find(bson.M{"koda_id": id})
+func (c JobCollection) FindByKodaID(id int) *Result {
+	return c.Find(&Query{
+		Filter: M{"koda_id": id},
+	})
 }
 
 func (c JobCollection) Create(job Job) (Job, error) {

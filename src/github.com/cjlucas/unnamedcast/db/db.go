@@ -141,53 +141,38 @@ func mgoIndexForIndex(idx Index) mgo.Index {
 	}
 }
 
-type Result interface {
-	All(result interface{}) error
-	One(result interface{}) error
-	Count() (int, error)
-}
-
-type query struct {
+type Result struct {
 	s *mgo.Session
 	q *mgo.Query
 }
 
-func (q *query) All(result interface{}) error {
-	return handleDBError(q.s, func() error {
-		return q.q.All(result)
+func (r *Result) All(result interface{}) error {
+	return handleDBError(r.s, func() error {
+		return r.q.All(result)
 	})
 }
 
-func (q *query) Count() (int, error) {
+func (r *Result) Count() (int, error) {
 	var n int
-	err := handleDBError(q.s, func() error {
+	err := handleDBError(r.s, func() error {
 		var err error
-		n, err = q.q.Count()
+		n, err = r.q.Count()
 		return err
 	})
 
 	return n, err
 }
 
-func (q *query) One(result interface{}) error {
-	return handleDBError(q.s, func() error {
-		return q.q.One(result)
+func (r *Result) One(result interface{}) error {
+	return handleDBError(r.s, func() error {
+		return r.q.One(result)
 	})
 }
 
-func (q *query) Select(selector interface{}) Result {
-	q.q = q.q.Select(selector)
-	return q
-}
-
-func (q *query) Sort(fields ...string) Result {
-	q.q = q.q.Sort(fields...)
-	return q
-}
-
-func (q *query) Limit(n int) Result {
-	q.q = q.q.Limit(n)
-	return q
+func (r *Result) Distinct(key string, result interface{}) error {
+	return handleDBError(r.s, func() error {
+		return r.q.Distinct(key, result)
+	})
 }
 
 type Pipe struct {
