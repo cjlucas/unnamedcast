@@ -141,7 +141,7 @@ func mgoIndexForIndex(idx Index) mgo.Index {
 	}
 }
 
-type Cursor interface {
+type Result interface {
 	All(result interface{}) error
 	One(result interface{}) error
 	Count() (int, error)
@@ -175,17 +175,17 @@ func (q *query) One(result interface{}) error {
 	})
 }
 
-func (q *query) Select(selector interface{}) Cursor {
+func (q *query) Select(selector interface{}) Result {
 	q.q = q.q.Select(selector)
 	return q
 }
 
-func (q *query) Sort(fields ...string) Cursor {
+func (q *query) Sort(fields ...string) Result {
 	q.q = q.q.Sort(fields...)
 	return q
 }
 
-func (q *query) Limit(n int) Cursor {
+func (q *query) Limit(n int) Result {
 	q.q = q.q.Limit(n)
 	return q
 }

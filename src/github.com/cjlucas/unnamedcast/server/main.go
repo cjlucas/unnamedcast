@@ -202,7 +202,7 @@ func (app *App) logErrors(c *gin.Context) {
 	})
 }
 
-func (app *App) requireModelID(f func(id db.ID) db.Cursor, paramName, boundName string) gin.HandlerFunc {
+func (app *App) requireModelID(f func(id db.ID) db.Result, paramName, boundName string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id, err := db.IDFromString(c.Param(paramName))
 		if err != nil {

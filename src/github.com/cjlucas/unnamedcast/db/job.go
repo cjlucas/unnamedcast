@@ -29,7 +29,7 @@ type JobCollection struct {
 	collection
 }
 
-func (c JobCollection) FindByKodaID(id int) Cursor {
+func (c JobCollection) FindByKodaID(id int) Result {
 	return c.c.Find(bson.M{"koda_id": id})
 }
 

@@ -12,7 +12,7 @@ type collection struct {
 	ModelInfo ModelInfo
 }
 
-func (c collection) Find(q *Query) Cursor {
+func (c collection) Find(q *Query) Result {
 	if q == nil {
 		return &query{
 			s: c.c.Database.Session,
@@ -51,7 +51,7 @@ func (c collection) Find(q *Query) Cursor {
 	return cur
 }
 
-func (c collection) FindByID(id ID) Cursor {
+func (c collection) FindByID(id ID) Result {
 	return &query{
 		s: c.c.Database.Session,
 		q: c.c.FindId(id),
