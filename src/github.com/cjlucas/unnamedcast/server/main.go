@@ -888,8 +888,8 @@ func (app *App) setupRoutes() {
 		i := 0
 		for queue, counts := range queueInfo {
 			out[i] = gin.H{
-				"name":   queue,
-				"counts": counts,
+				"name": queue,
+				"jobs": counts,
 			}
 			i++
 		}
