@@ -20,8 +20,8 @@ type Job struct {
 	Payload  interface{} `json:"payload" bson:"payload"`
 	// CreationTime is the time at which the job was created in koda
 	CreationTime     time.Time     `json:"creation_time" bson:"creation_time" index:"creation_time"`
-	ModificationTime time.Time     `json:"modification_time" bson:"modification_time"`
-	CompletionTime   time.Time     `json:"completion_time" bson:"completion_time" index:"completion_time"`
+	ModificationTime time.Time     `json:"modification_time" bson:"modification_time" index:"modification_time"`
+	CompletionTime   time.Time     `json:"completion_time" bson:"completion_time"`
 	Log              []JobLogEntry `json:"log" bson:"log"`
 }
 
