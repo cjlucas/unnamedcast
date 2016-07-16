@@ -38,10 +38,35 @@ func TestNewQueryParamInfo(t *testing.T) {
 				},
 			},
 		},
+		{
+			In: struct {
+				A time.Time `param:"foo"`
+			}{},
+			ExpectedParams: []QueryParam{
+				{
+					Name:     "foo",
+					Required: false,
+				},
+			},
+		},
+		{
+			In: struct {
+				Params struct {
+					A string `param:"foo"`
+				}
+			}{},
+			ExpectedParams: []QueryParam{
+				{
+					Name:     "foo",
+					Required: false,
+				},
+			},
+		},
 	}
 
 	for _, c := range cases {
 		out := NewQueryParamInfo(c.In)
+		out = NewQueryParamInfo(&c.In)
 		if len(out.Params) != len(c.ExpectedParams) {
 			t.Fatalf("Params length mismatch: %d != %d", len(out.Params), len(c.ExpectedParams))
 		}

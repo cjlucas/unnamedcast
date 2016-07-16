@@ -28,11 +28,18 @@ func readFields(v reflect.Value) []rawField {
 	var fields []rawField
 
 	t := v.Type()
+	for t.Kind() == reflect.Ptr || t.Kind() == reflect.Interface {
+		v = v.Elem()
+		t = v.Type()
+	}
+
 	for i := 0; i < v.NumField(); i++ {
 		vf := v.Field(i)
 		tf := t.Field(i)
 
-		if vf.Kind() == reflect.Struct && tf.Anonymous {
+		// HACK: hard coding struct types that we use in Parse
+		// We don't want to recurse down into structs that arent ours
+		if vf.Kind() == reflect.Struct && tf.Type != reflect.TypeOf(time.Time{}) {
 			fields = append(fields, readFields(vf)...)
 			continue
 		}
