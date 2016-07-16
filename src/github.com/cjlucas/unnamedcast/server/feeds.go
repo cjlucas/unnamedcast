@@ -26,8 +26,8 @@ type GetFeedsQueryEndpoint struct {
 
 func (e *GetFeedsQueryEndpoint) Bind() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
-		parseSortParamsNew(e.DB.Feeds.ModelInfo, &e.Query, "modification_time"),
-		parseLimitParamsNew(&e.Query),
+		parseSortParamsNew(e.DB.Feeds.ModelInfo, &e.Query, &e.Params, "modification_time"),
+		parseLimitParamsNew(&e.Query, &e.Params),
 	}
 }
 

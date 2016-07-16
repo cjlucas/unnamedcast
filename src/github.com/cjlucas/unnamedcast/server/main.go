@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -129,6 +130,43 @@ func parseSortParams(mi db.ModelInfo, sortableFields ...string) gin.HandlerFunc 
 	}
 }
 
+// TODO: get rid of sortable fields and store sorting information in model tag
+func parseSortParamsNew(mi db.ModelInfo, query *db.Query, params SortParams, sortableFields ...string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if params == nil {
+			return
+		}
+
+		field := params.SortField()
+		if field == "" {
+			return
+		}
+
+		found := false
+		for _, f := range sortableFields {
+			if field == f {
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("\"%s\" is not a sortable field", field))
+			return
+		}
+
+		info, ok := mi.LookupAPIName(field)
+		if !ok {
+			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("\"%s\" is not a known field", field))
+			return
+		}
+		field = info.BSONName
+
+		query.SortField = field
+		query.SortDesc = params.Desc()
+	}
+}
+
 func parseLimitParams(c *gin.Context) {
 	params, ok := c.MustGet(paramsCtxKey).(LimitParams)
 	if !ok {
@@ -137,6 +175,14 @@ func parseLimitParams(c *gin.Context) {
 
 	query := ensureQueryExists(c)
 	query.Limit = params.Limit()
+}
+
+func parseLimitParamsNew(query *db.Query, params LimitParams) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if params != nil {
+			query.Limit = params.Limit()
+		}
+	}
 }
 
 func parseQueryParams(spec interface{}) gin.HandlerFunc {
@@ -150,6 +196,51 @@ func parseQueryParams(spec interface{}) gin.HandlerFunc {
 		}
 
 		c.Set(paramsCtxKey, params)
+	}
+}
+
+func parseQueryParamsNew(info *QueryParamInfo, params interface{}) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		_, err := info.ParsePtr(params, c.Request.URL.Query())
+		if err != nil {
+			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("failed to parse query params: %s", err))
+			return
+		}
+		c.Set(paramsCtxKey, params)
+	}
+}
+
+func (app *App) RegisterEndpoint(e Endpoint) gin.HandlerFunc {
+	queryParamInfo := NewQueryParamInfo(e)
+	endpointType := reflect.TypeOf(e).Elem()
+
+	return func(c *gin.Context) {
+		// Create type
+		v := reflect.New(endpointType)
+		endpoint := v.Interface().(Endpoint)
+
+		// Inspect type for any special types to inject (*db.DB, *koda.Client)
+		for i := 0; i < v.Elem().NumField(); i++ {
+			f := v.Elem().Field(i)
+			switch f.Interface().(type) {
+			case *db.DB:
+				f.Set(reflect.ValueOf(app.DB))
+			}
+		}
+
+		// Bind query parameters
+		parseQueryParamsNew(&queryParamInfo, endpoint)(c)
+
+		// call binder
+		// call each gin.HandlerFunc returned by the binder
+		for _, middleware := range endpoint.Bind() {
+			middleware(c)
+			if c.IsAborted() {
+				return
+			}
+		}
+
+		endpoint.Handle(c)
 	}
 }
 
@@ -485,44 +576,48 @@ func (app *App) setupRoutes() {
 		ITunesID int `param:"itunes_id"`
 	}
 
-	api.GET("/feeds",
-		parseQueryParams(GetFeedsQueryParams{}),
-		parseSortParams(app.DB.Feeds.ModelInfo, "modification_time"),
-		parseLimitParams,
-		func(c *gin.Context) {
-			params := c.MustGet(paramsCtxKey).(*GetFeedsQueryParams)
-			query := ensureQueryExists(c)
+	// api.GET("/feeds",
+	// 	parseQueryParams(GetFeedsQueryParams{}),
+	// 	// TODO: these names are terrible, they dont convey that a Query is being
+	// 	// modified within it
+	// 	parseSortParams(app.DB.Feeds.ModelInfo, "modification_time"),
+	// 	parseLimitParams,
+	// 	func(c *gin.Context) {
+	// 		params := c.MustGet(paramsCtxKey).(*GetFeedsQueryParams)
+	// 		query := ensureQueryExists(c)
+	//
+	// 		if params.URL != "" {
+	// 			query.Filter = db.M{"url": params.URL}
+	// 		} else if params.ITunesID != 0 {
+	// 			query.Filter = db.M{"itunes_id": params.ITunesID}
+	// 		}
+	//
+	// 		if query.Filter == nil {
+	// 			var feeds []db.Feed
+	// 			if err := app.DB.Feeds.Find(query).All(&feeds); err != nil {
+	// 				c.AbortWithError(http.StatusInternalServerError, err)
+	// 			} else {
+	// 				c.JSON(http.StatusOK, feeds)
+	// 			}
+	// 			return
+	// 		}
+	//
+	// 		// TODO: use a switch here
+	// 		var feed db.Feed
+	// 		if err := app.DB.Feeds.Find(query).One(&feed); err != nil {
+	// 			if err == db.ErrNotFound {
+	// 				c.AbortWithStatus(http.StatusNotFound)
+	// 			} else {
+	// 				c.AbortWithError(http.StatusInternalServerError, err)
+	// 			}
+	// 			return
+	// 		}
+	//
+	// 		c.JSON(http.StatusOK, &feed)
+	// 	},
+	// )
 
-			if params.URL != "" {
-				query.Filter = db.M{"url": params.URL}
-			} else if params.ITunesID != 0 {
-				query.Filter = db.M{"itunes_id": params.ITunesID}
-			}
-
-			if query.Filter == nil {
-				var feeds []db.Feed
-				if err := app.DB.Feeds.Find(query).All(&feeds); err != nil {
-					c.AbortWithError(http.StatusInternalServerError, err)
-				} else {
-					c.JSON(http.StatusOK, feeds)
-				}
-				return
-			}
-
-			// TODO: use a switch here
-			var feed db.Feed
-			if err := app.DB.Feeds.Find(query).One(&feed); err != nil {
-				if err == db.ErrNotFound {
-					c.AbortWithStatus(http.StatusNotFound)
-				} else {
-					c.AbortWithError(http.StatusInternalServerError, err)
-				}
-				return
-			}
-
-			c.JSON(http.StatusOK, &feed)
-		},
-	)
+	api.GET("/feeds", app.RegisterEndpoint(&GetFeedsQueryEndpoint{}))
 
 	// POST /api/feeds
 	api.POST("/feeds", unmarshalFeed, func(c *gin.Context) {
