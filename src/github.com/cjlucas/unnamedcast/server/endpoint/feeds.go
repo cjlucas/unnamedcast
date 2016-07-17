@@ -231,14 +231,18 @@ func (e *GetFeedUsers) Handle(c *gin.Context) {
 }
 
 type CreateFeedItem struct {
-	DB     *db.DB
-	Item   db.Item
-	FeedID db.ID
+	DB   *db.DB
+	Item db.Item
+	Feed db.Feed
 }
 
 func (e *CreateFeedItem) Bind() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
-		middleware.RequireExistingModelWithID(e.DB.Feeds.FindByID, "id", &e.FeedID),
+		middleware.RequireExistingModel(&middleware.RequireExistingModelOpts{
+			Collection: e.DB.Feeds,
+			BoundName:  "id",
+			Result:     &e.Feed,
+		}),
 		middleware.UnmarshalBody(&e.Item),
 	}
 }
@@ -255,14 +259,9 @@ func (e *CreateFeedItem) Handle(c *gin.Context) {
 		return
 	}
 
-	feed, err := e.DB.Feeds.FeedByID(e.FeedID)
-	if err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
-		return
-	}
-	feed.Items = append(feed.Items, e.Item.ID)
+	e.Feed.Items = append(e.Feed.Items, e.Item.ID)
 
-	if err := e.DB.Feeds.Update(feed); err != nil {
+	if err := e.DB.Feeds.Update(&e.Feed); err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
@@ -272,27 +271,29 @@ func (e *CreateFeedItem) Handle(c *gin.Context) {
 
 type GetFeedItem struct {
 	DB     *db.DB
-	FeedID db.ID
+	Feed   db.Feed
 	ItemID db.ID
 }
 
 func (e *GetFeedItem) Bind() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
-		middleware.RequireExistingModelWithID(e.DB.Feeds.FindByID, "id", &e.FeedID),
-		middleware.RequireExistingModelWithID(e.DB.Items.FindByID, "itemID", &e.ItemID),
+		middleware.RequireExistingModel(&middleware.RequireExistingModelOpts{
+			Collection: e.DB.Feeds,
+			BoundName:  "id",
+			Result:     &e.Feed,
+		}),
+		middleware.RequireExistingModel(&middleware.RequireExistingModelOpts{
+			Collection: e.DB.Items,
+			BoundName:  "itemID",
+			ID:         &e.ItemID,
+		}),
 	}
 }
 
 func (e *GetFeedItem) Handle(c *gin.Context) {
-	// TODO: RequireExistingModelWithID can be modified to do this boilerplate as well
-	// (Just pass a ref to the function, if the ref is non-nil, store it at the provided ref)
-	feed, err := e.DB.Feeds.FeedByID(e.FeedID)
-	if err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
-		return
-	}
-
-	if !feed.HasItemWithID(e.ItemID) {
+	// TODO: HasItemWithID should be a method on FeedCollection.
+	// Fetching the entire feed object is overkill
+	if !e.Feed.HasItemWithID(e.ItemID) {
 		c.AbortWithError(http.StatusNotFound, errors.New("item does not belong to feed"))
 		return
 	}
@@ -308,15 +309,23 @@ func (e *GetFeedItem) Handle(c *gin.Context) {
 
 type UpdateFeedItem struct {
 	DB     *db.DB
-	FeedID db.ID
+	Feed   db.Feed
 	ItemID db.ID
 	Item   db.Item
 }
 
 func (e *UpdateFeedItem) Bind() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
-		middleware.RequireExistingModelWithID(e.DB.Feeds.FindByID, "id", &e.FeedID),
-		middleware.RequireExistingModelWithID(e.DB.Items.FindByID, "itemID", &e.ItemID),
+		middleware.RequireExistingModel(&middleware.RequireExistingModelOpts{
+			Collection: e.DB.Feeds,
+			BoundName:  "id",
+			Result:     &e.Feed,
+		}),
+		middleware.RequireExistingModel(&middleware.RequireExistingModelOpts{
+			Collection: e.DB.Items,
+			BoundName:  "itemID",
+			ID:         &e.ItemID,
+		}),
 		middleware.UnmarshalBody(&e.Item),
 	}
 }
@@ -324,13 +333,7 @@ func (e *UpdateFeedItem) Bind() []gin.HandlerFunc {
 func (e *UpdateFeedItem) Handle(c *gin.Context) {
 	e.Item.ID = e.ItemID
 
-	feed, err := e.DB.Feeds.FeedByID(e.FeedID)
-	if err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
-		return
-	}
-
-	if !feed.HasItemWithID(e.Item.ID) {
+	if !e.Feed.HasItemWithID(e.Item.ID) {
 		c.AbortWithError(http.StatusNotFound, errors.New("item does not belong to feed"))
 		return
 	}
