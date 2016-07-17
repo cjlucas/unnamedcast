@@ -108,6 +108,8 @@ func (app *App) setupRoutes() {
 	api.GET("/jobs", app.RegisterEndpoint(&endpoint.GetJobs{}))
 	api.GET("/jobs/:id", app.RegisterEndpoint(&endpoint.GetJob{}))
 	api.POST("/jobs", app.RegisterEndpoint(&endpoint.CreateJob{}))
+
+	api.GET("/stats/queues", app.RegisterEndpoint(&endpoint.GetQueueStats{}))
 }
 
 func (app *App) Run(addr string) error {

@@ -1,8 +1,10 @@
 package endpoint
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cjlucas/unnamedcast/db"
@@ -10,10 +12,30 @@ import (
 )
 
 type GetQueueStats struct {
-	DB *db.DB
+	DB         *db.DB
+	Times      string `param:"ts,require"`
+	TimeSeries []time.Duration
 }
 
-func (e *GetQueueStats) Bind() []gin.HandlerFunc { return nil }
+func (e *GetQueueStats) parseTimesParam(c *gin.Context) {
+	split := strings.Split(e.Times, ",")
+	e.TimeSeries = make([]time.Duration, len(split))
+
+	for i, s := range split {
+		n, err := strconv.ParseInt(s, 10, 64)
+		if err != nil {
+			c.AbortWithError(http.StatusBadRequest, errors.New("invalid times param"))
+			return
+		}
+		e.TimeSeries[i] = time.Duration(n) * time.Second
+	}
+}
+
+func (e *GetQueueStats) Bind() []gin.HandlerFunc {
+	return []gin.HandlerFunc{
+		e.parseTimesParam,
+	}
+}
 
 func (e *GetQueueStats) Handle(c *gin.Context) {
 	states := []string{
@@ -32,9 +54,9 @@ func (e *GetQueueStats) Handle(c *gin.Context) {
 
 	type fetchInfo struct {
 		// inputs
-		Queue   string
-		State   string
-		Seconds int
+		Queue    string
+		State    string
+		Duration time.Duration
 		// outputs
 		Count int
 		Error error
@@ -43,7 +65,7 @@ func (e *GetQueueStats) Handle(c *gin.Context) {
 	now := time.Now()
 	ch := make(chan fetchInfo)
 	fetch := func(info fetchInfo) {
-		t := now.Add(time.Duration(-info.Seconds) * time.Second)
+		t := now.Add(-info.Duration)
 
 		query := db.Query{
 			Filter: db.M{
@@ -59,12 +81,12 @@ func (e *GetQueueStats) Handle(c *gin.Context) {
 
 	numJobs := 0
 	for _, queue := range queues {
-		for _, seconds := range []int{3600, 3600 * 24 * 7, 3600 * 24 * 7 * 30} {
+		for _, dur := range e.TimeSeries {
 			for _, state := range states {
 				go fetch(fetchInfo{
-					Queue:   queue,
-					State:   state,
-					Seconds: seconds,
+					Queue:    queue,
+					State:    state,
+					Duration: dur,
 				})
 				numJobs++
 			}
@@ -87,7 +109,7 @@ func (e *GetQueueStats) Handle(c *gin.Context) {
 			queueInfo[info.Queue] = make(countMap)
 		}
 
-		key := strconv.Itoa(info.Seconds)
+		key := strconv.Itoa(int(info.Duration / time.Second))
 		if _, ok := queueInfo[info.Queue][key]; !ok {
 			queueInfo[info.Queue][key] = make(map[string]int)
 		}
