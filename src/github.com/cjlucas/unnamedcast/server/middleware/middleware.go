@@ -21,7 +21,7 @@ func UnmarshalBody(data interface{}) gin.HandlerFunc {
 }
 
 type Collection interface {
-	FindByID(id db.ID) db.Cursor
+	FindByID(id db.ID) *db.Result
 }
 
 type RequireExistingModelOpts struct {

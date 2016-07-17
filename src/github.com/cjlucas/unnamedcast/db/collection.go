@@ -12,15 +12,15 @@ type collection struct {
 	ModelInfo ModelInfo
 }
 
-func (c collection) Find(q *Query) Cursor {
+func (c collection) Find(q *Query) *Result {
 	if q == nil {
-		return &query{
+		return &Result{
 			s: c.c.Database.Session,
 			q: c.c.Find(nil),
 		}
 	}
 
-	cur := &query{
+	cur := &Result{
 		s: c.c.Database.Session,
 		q: c.c.Find(q.Filter),
 	}
@@ -33,7 +33,7 @@ func (c collection) Find(q *Query) Cursor {
 		sel[s] = -1
 	}
 	if len(sel) > 0 {
-		cur.Select(sel)
+		cur.q.Select(sel)
 	}
 
 	if q.SortField != "" {
@@ -41,18 +41,18 @@ func (c collection) Find(q *Query) Cursor {
 		if q.SortDesc {
 			sortField = "-" + sortField
 		}
-		cur.Sort(sortField)
+		cur.q.Sort(sortField)
 	}
 
 	if q.Limit > 0 {
-		cur.Limit(q.Limit)
+		cur.q.Limit(q.Limit)
 	}
 
 	return cur
 }
 
-func (c collection) FindByID(id ID) Cursor {
-	return &query{
+func (c collection) FindByID(id ID) *Result {
+	return &Result{
 		s: c.c.Database.Session,
 		q: c.c.FindId(id),
 	}
