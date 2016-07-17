@@ -1,9 +1,11 @@
 package middleware
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/cjlucas/unnamedcast/db"
+	"github.com/cjlucas/unnamedcast/server/queryparser"
 	"github.com/gin-gonic/gin"
 )
 
@@ -73,6 +75,17 @@ func RequireExistingModel(opts *RequireExistingModelOpts) gin.HandlerFunc {
 			if err := cur.One(opts.Result); err != nil {
 				c.AbortWithError(http.StatusInternalServerError, err)
 			}
+		}
+	}
+}
+
+func ParseQueryParams(info *queryparser.QueryParamInfo, params interface{}) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		_, err := info.ParsePtr(params, c.Request.URL.Query())
+		if err != nil {
+			fmt.Println(err)
+			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("failed to parse query params: %s", err))
+			return
 		}
 	}
 }

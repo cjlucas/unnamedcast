@@ -15,6 +15,8 @@ import (
 	"github.com/cjlucas/koda-go"
 	"github.com/cjlucas/unnamedcast/db"
 	"github.com/cjlucas/unnamedcast/server/endpoint"
+	"github.com/cjlucas/unnamedcast/server/middleware"
+	"github.com/cjlucas/unnamedcast/server/queryparser"
 	"github.com/gin-gonic/gin"
 	"github.com/robfig/cron"
 )
@@ -51,154 +53,8 @@ func NewApp(cfg Config) *App {
 	return &app
 }
 
-func unmarshalFeed(c *gin.Context) {
-	var feed db.Feed
-	if err := c.BindJSON(&feed); err != nil {
-		c.AbortWithStatus(http.StatusBadRequest)
-	}
-
-	if len(feed.Items) > 0 {
-		c.JSON(http.StatusConflict, gin.H{
-			"reason": "items is a read-only property",
-		})
-		c.Abort()
-	}
-
-	c.Set(feedCtxKey, &feed)
-}
-
-// TODO: Remove. Will be obsolete.
-func ensureQueryExists(c *gin.Context) *db.Query {
-	if q, ok := c.Get(queryCtxKey); ok {
-		return q.(*db.Query)
-	}
-
-	q := &db.Query{}
-	c.Set(queryCtxKey, q)
-	return q
-}
-
-func parseSortParams(mi db.ModelInfo, sortableFields ...string) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		params, ok := c.MustGet(paramsCtxKey).(SortParams)
-		if !ok {
-			panic("parseSortParams called with an invalid configuration")
-		}
-
-		field := params.SortField()
-		if field == "" {
-			return
-		}
-
-		found := false
-		for _, f := range sortableFields {
-			if field == f {
-				found = true
-				break
-			}
-		}
-
-		if !found {
-			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("\"%s\" is not a sortable field", field))
-			return
-		}
-
-		info, ok := mi.LookupAPIName(field)
-		if !ok {
-			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("\"%s\" is not a known field", field))
-			return
-		}
-		field = info.BSONName
-
-		query := ensureQueryExists(c)
-		query.SortField = field
-		query.SortDesc = params.Desc()
-	}
-}
-
-// TODO: get rid of sortable fields and store sorting information in model tag
-func parseSortParamsNew(mi db.ModelInfo, query *db.Query, params SortParams, sortableFields ...string) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if params == nil {
-			return
-		}
-
-		field := params.SortField()
-		if field == "" {
-			return
-		}
-
-		found := false
-		for _, f := range sortableFields {
-			if field == f {
-				found = true
-				break
-			}
-		}
-
-		if !found {
-			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("\"%s\" is not a sortable field", field))
-			return
-		}
-
-		info, ok := mi.LookupAPIName(field)
-		if !ok {
-			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("\"%s\" is not a known field", field))
-			return
-		}
-		field = info.BSONName
-
-		query.SortField = field
-		query.SortDesc = params.Desc()
-	}
-}
-
-func parseLimitParams(c *gin.Context) {
-	params, ok := c.MustGet(paramsCtxKey).(LimitParams)
-	if !ok {
-		panic("parseLimitParams called with an invalid configuration")
-	}
-
-	query := ensureQueryExists(c)
-	query.Limit = params.Limit()
-}
-
-func parseLimitParamsNew(query *db.Query, params LimitParams) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if params != nil {
-			query.Limit = params.Limit()
-		}
-	}
-}
-
-func parseQueryParams(spec interface{}) gin.HandlerFunc {
-	info := NewQueryParamInfo(spec)
-
-	return func(c *gin.Context) {
-		params, err := info.Parse(c.Request.URL.Query())
-		if err != nil {
-			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("failed to parse query params: %s", err))
-			return
-		}
-
-		c.Set(paramsCtxKey, params)
-	}
-}
-
-func parseQueryParamsNew(info *QueryParamInfo, params interface{}) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		_, err := info.ParsePtr(params, c.Request.URL.Query())
-		if err != nil {
-			fmt.Println(err)
-			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("failed to parse query params: %s", err))
-			return
-		}
-		c.Set(paramsCtxKey, params)
-	}
-}
-
 func (app *App) RegisterEndpoint(e endpoint.Interface) gin.HandlerFunc {
-	queryParamInfo := NewQueryParamInfo(e)
+	queryParamInfo := queryparser.NewQueryParamInfo(e)
 	endpointType := reflect.TypeOf(e).Elem()
 
 	return func(c *gin.Context) {
@@ -217,7 +73,7 @@ func (app *App) RegisterEndpoint(e endpoint.Interface) gin.HandlerFunc {
 			}
 		}
 
-		parseQueryParamsNew(&queryParamInfo, endpoint)(c)
+		middleware.ParseQueryParams(&queryParamInfo, endpoint)(c)
 
 		for _, middleware := range endpoint.Bind() {
 			middleware(c)
@@ -257,90 +113,19 @@ func (app *App) logErrors(c *gin.Context) {
 	})
 }
 
-func (app *App) requireModelID(f func(id db.ID) db.Cursor, paramName, boundName string) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		id, err := db.IDFromString(c.Param(paramName))
-		if err != nil {
-			c.AbortWithError(http.StatusBadRequest, err)
-			return
-		}
-
-		n, err := f(id).Count()
-		if err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-		} else if n < 1 {
-			c.AbortWithStatus(http.StatusNotFound)
-		}
-
-		c.Set(boundName, id)
-	}
-}
-
-func (app *App) loadUserWithID(paramName string) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		boundName := userIDCtxKey
-		app.requireModelID(app.DB.Users.FindByID, paramName, boundName)(c)
-		if c.IsAborted() {
-			return
-		}
-
-		id := c.MustGet(boundName).(db.ID)
-
-		var user db.User
-		if err := app.DB.Users.FindByID(id).One(&user); err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-			return
-		}
-		c.Set(userCtxKey, &user)
-	}
-}
-
-func (app *App) requireUserID(paramName string) gin.HandlerFunc {
-	return app.requireModelID(app.DB.Users.FindByID, paramName, userIDCtxKey)
-}
-
-func (app *App) requireFeedID(paramName string) gin.HandlerFunc {
-	return app.requireModelID(app.DB.Feeds.FindByID, paramName, feedIDCtxKey)
-}
-
-func (app *App) requireItemID(paramName string) gin.HandlerFunc {
-	return app.requireModelID(app.DB.Items.FindByID, paramName, itemIDCtxKey)
-}
-
-func (app *App) requireJobID(paramName string) gin.HandlerFunc {
-	return app.requireModelID(app.DB.Jobs.FindByID, paramName, jobIDCtxKey)
-}
-
 func (app *App) setupRoutes() {
 	app.g = gin.Default()
 
-	// GET /search_feeds
-	type SearchFeedsParams struct {
-		limitParams
-		Query string `param:"q,require"`
-	}
-
 	app.g.GET("/search_feeds", app.RegisterEndpoint(&endpoint.SearchFeeds{}))
-
-	// GET /login
-
-	type LoginParams struct {
-		Username string `param:",require"`
-		Password string `param:",require"`
-	}
-
 	app.g.GET("/login", app.RegisterEndpoint(&endpoint.Login{}))
 
 	api := app.g.Group("/api", app.logErrors)
 
 	api.GET("/users", app.RegisterEndpoint(&endpoint.GetUsers{}))
-
-	// POST /api/users (TODO: this endpoint needs to be refactored)
 	api.POST("/users", app.RegisterEndpoint(&endpoint.CreateUser{}))
 	api.GET("/users/:id", app.RegisterEndpoint(&endpoint.GetUser{}))
 	api.GET("/users/:id/feeds", app.RegisterEndpoint(&endpoint.GetUserFeeds{}))
 	api.PUT("/users/:id/feeds", app.RegisterEndpoint(&endpoint.UpdateUserFeeds{}))
-
 	api.GET("/users/:id/states", app.RegisterEndpoint(&endpoint.GetUserItemStates{}))
 	api.PUT("/users/:id/states/:itemID", app.RegisterEndpoint(&endpoint.UpdateUserItemState{}))
 	api.DELETE("/users/:id/states/:itemID", app.RegisterEndpoint(&endpoint.DeleteUserItemState{}))
@@ -352,29 +137,17 @@ func (app *App) setupRoutes() {
 	// TODO: modify the ?url and ?itunes_id variants to return a list for consistency
 	api.GET("/feeds", app.RegisterEndpoint(&endpoint.GetFeeds{}))
 	api.POST("/feeds", app.RegisterEndpoint(&endpoint.CreateFeed{}))
-
-	// GET /api/feeds/:id
 	api.GET("/feeds/:id", app.RegisterEndpoint(&endpoint.FetchFeed{}))
-
 	api.PUT("/feeds/:id", app.RegisterEndpoint(&endpoint.UpdateFeed{}))
-
-	// GET /api/feeds/:id/items[?modified_since=2006-01-02T15:04:05Z07:00]
-	// NOTE: modified_since date check is strictly greater than
-
 	api.GET("/feeds/:id/items", app.RegisterEndpoint(&endpoint.GetFeedItems{}))
 	api.GET("/feeds/:id/users", app.RegisterEndpoint(&endpoint.GetFeedUsers{}))
 	api.POST("/feeds/:id/items", app.RegisterEndpoint(&endpoint.CreateFeedItem{}))
-
-	// GET /api/feeds/:id/items/:itemID
-	// NOTE: Placeholder for feed id MUST be :id due to a limitation in gin's router
-	// that is not expected to be resolved. See: https://github.com/gin-gonic/gin/issues/388
 	api.GET("/feeds/:id/items/:itemID", app.RegisterEndpoint(&endpoint.GetFeedItem{}))
-
 	api.PUT("/feeds/:id/items/:itemID", app.RegisterEndpoint(&endpoint.UpdateFeedItem{}))
 
 	api.GET("/jobs", app.RegisterEndpoint(&endpoint.GetJobs{}))
-	api.POST("/jobs", app.RegisterEndpoint(&endpoint.CreateJob{}))
 	api.GET("/jobs/:id", app.RegisterEndpoint(&endpoint.GetJob{}))
+	api.POST("/jobs", app.RegisterEndpoint(&endpoint.CreateJob{}))
 }
 
 func (app *App) Run(addr string) error {
