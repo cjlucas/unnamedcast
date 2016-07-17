@@ -65,8 +65,7 @@ func RequireExistingModel(opts *RequireExistingModelOpts) gin.HandlerFunc {
 
 func ParseQueryParams(info *queryparser.QueryParamInfo, params interface{}) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		_, err := info.ParsePtr(params, c.Request.URL.Query())
-		if err != nil {
+		if err := info.Parse(params, c.Request.URL.Query()); err != nil {
 			fmt.Println(err)
 			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("failed to parse query params: %s", err))
 			return

@@ -87,50 +87,7 @@ func NewQueryParamInfo(spec interface{}) QueryParamInfo {
 	return info
 }
 
-func (info *QueryParamInfo) Parse(vals url.Values) (interface{}, error) {
-	spec := reflect.New(reflect.TypeOf(info.spec)).Interface()
-	v := reflect.ValueOf(spec).Elem()
-
-	for i, f := range readFields(v) {
-		p := info.Params[i]
-		val := vals.Get(p.Name)
-		if val == "" {
-			if p.Required {
-				return nil, fmt.Errorf("required param not found: %s", p.Name)
-			}
-			continue
-		}
-
-		switch f.V.Interface().(type) {
-		case string:
-			f.V.SetString(val)
-		case int, int64:
-			n, err := strconv.ParseInt(val, 10, 0)
-			if err != nil {
-				return nil, err
-			}
-			f.V.SetInt(n)
-		case uint, uint64:
-			n, err := strconv.ParseUint(val, 10, 0)
-			if err != nil {
-				return nil, err
-			}
-			f.V.SetUint(n)
-		case time.Time:
-			t, err := time.Parse(time.RFC3339Nano, val)
-			if err != nil {
-				return nil, err
-			}
-			f.V.Set(reflect.ValueOf(t))
-		default:
-			return nil, fmt.Errorf("unknown type for field: \"%s\"", f.F.Name)
-		}
-	}
-
-	return spec, nil
-}
-
-func (info *QueryParamInfo) ParsePtr(instance interface{}, vals url.Values) (interface{}, error) {
+func (info *QueryParamInfo) Parse(instance interface{}, vals url.Values) error {
 	v := reflect.ValueOf(instance).Elem()
 
 	for i, f := range readFields(v) {
@@ -138,7 +95,7 @@ func (info *QueryParamInfo) ParsePtr(instance interface{}, vals url.Values) (int
 		val := vals.Get(p.Name)
 		if val == "" {
 			if p.Required {
-				return nil, fmt.Errorf("required param not found: %s", p.Name)
+				return fmt.Errorf("required param not found: %s", p.Name)
 			}
 			continue
 		}
@@ -149,25 +106,25 @@ func (info *QueryParamInfo) ParsePtr(instance interface{}, vals url.Values) (int
 		case int, int64:
 			n, err := strconv.ParseInt(val, 10, 0)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			f.V.SetInt(n)
 		case uint, uint64:
 			n, err := strconv.ParseUint(val, 10, 0)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			f.V.SetUint(n)
 		case time.Time:
 			t, err := time.Parse(time.RFC3339Nano, val)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			f.V.Set(reflect.ValueOf(t))
 		default:
-			return nil, fmt.Errorf("unknown type for field: \"%s\"", f.F.Name)
+			return fmt.Errorf("unknown type for field: \"%s\"", f.F.Name)
 		}
 	}
 
-	return nil, nil
+	return nil
 }
