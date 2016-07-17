@@ -1,11 +1,7 @@
 package main
 
 import (
-	"bytes"
-	"errors"
 	"fmt"
-	"io/ioutil"
-	"net/http"
 	"net/url"
 	"os"
 	"reflect"
@@ -21,17 +17,6 @@ import (
 	"github.com/robfig/cron"
 )
 
-const (
-	feedCtxKey   = "feed"
-	userCtxKey   = "user"
-	queryCtxKey  = "query"
-	paramsCtxKey = "params"
-	userIDCtxKey = "userID"
-	feedIDCtxKey = "feedID"
-	itemIDCtxKey = "itemID"
-	jobIDCtxKey  = "jobID"
-)
-
 type App struct {
 	DB   *db.DB
 	Koda *koda.Client
@@ -43,6 +28,8 @@ type Config struct {
 	Koda *koda.Client
 }
 
+// TODO: Make default App usable and remove Config.
+// Perform setupRoutes in Run()
 func NewApp(cfg Config) *App {
 	app := App{
 		DB:   cfg.DB,
@@ -86,40 +73,13 @@ func (app *App) RegisterEndpoint(e endpoint.Interface) gin.HandlerFunc {
 	}
 }
 
-func (app *App) logErrors(c *gin.Context) {
-	body, err := ioutil.ReadAll(c.Request.Body)
-	c.Request.Body.Close()
-
-	if err != nil {
-		c.AbortWithError(http.StatusInternalServerError, errors.New("could not read body"))
-		return
-	}
-
-	c.Request.Body = ioutil.NopCloser(bytes.NewReader(body))
-	c.Next()
-
-	if len(c.Errors) == 0 {
-		return
-	}
-
-	app.DB.Logs.Create(&db.Log{
-		Method:        c.Request.Method,
-		RequestHeader: c.Request.Header,
-		RequestBody:   string(body),
-		URL:           c.Request.URL.String(),
-		StatusCode:    c.Writer.Status(),
-		RemoteAddr:    c.ClientIP(),
-		Errors:        c.Errors,
-	})
-}
-
 func (app *App) setupRoutes() {
 	app.g = gin.Default()
 
 	app.g.GET("/search_feeds", app.RegisterEndpoint(&endpoint.SearchFeeds{}))
 	app.g.GET("/login", app.RegisterEndpoint(&endpoint.Login{}))
 
-	api := app.g.Group("/api", app.logErrors)
+	api := app.g.Group("/api", middleware.LogErrors(app.DB.Logs))
 
 	api.GET("/users", app.RegisterEndpoint(&endpoint.GetUsers{}))
 	api.POST("/users", app.RegisterEndpoint(&endpoint.CreateUser{}))

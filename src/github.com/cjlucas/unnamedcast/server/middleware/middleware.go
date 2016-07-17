@@ -1,7 +1,10 @@
 package middleware
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 
 	"github.com/cjlucas/unnamedcast/db"
@@ -87,5 +90,34 @@ func ParseQueryParams(info *queryparser.QueryParamInfo, params interface{}) gin.
 			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("failed to parse query params: %s", err))
 			return
 		}
+	}
+}
+
+func LogErrors(logs db.LogCollection) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		body, err := ioutil.ReadAll(c.Request.Body)
+		c.Request.Body.Close()
+
+		if err != nil {
+			c.AbortWithError(http.StatusInternalServerError, errors.New("could not read body"))
+			return
+		}
+
+		c.Request.Body = ioutil.NopCloser(bytes.NewReader(body))
+		c.Next()
+
+		if len(c.Errors) == 0 {
+			return
+		}
+
+		logs.Create(&db.Log{
+			Method:        c.Request.Method,
+			RequestHeader: c.Request.Header,
+			RequestBody:   string(body),
+			URL:           c.Request.URL.String(),
+			StatusCode:    c.Writer.Status(),
+			RemoteAddr:    c.ClientIP(),
+			Errors:        c.Errors,
+		})
 	}
 }
