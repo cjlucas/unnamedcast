@@ -1,4 +1,4 @@
-package main
+package queryparser
 
 import (
 	"fmt"
@@ -28,11 +28,18 @@ func readFields(v reflect.Value) []rawField {
 	var fields []rawField
 
 	t := v.Type()
+	for t.Kind() == reflect.Ptr || t.Kind() == reflect.Interface {
+		v = v.Elem()
+		t = v.Type()
+	}
+
 	for i := 0; i < v.NumField(); i++ {
 		vf := v.Field(i)
 		tf := t.Field(i)
 
-		if vf.Kind() == reflect.Struct && tf.Anonymous {
+		// HACK: hard coding struct types that we use in Parse
+		// We don't want to recurse down into structs that arent ours
+		if vf.Kind() == reflect.Struct && tf.Type != reflect.TypeOf(time.Time{}) {
 			fields = append(fields, readFields(vf)...)
 			continue
 		}
@@ -80,16 +87,15 @@ func NewQueryParamInfo(spec interface{}) QueryParamInfo {
 	return info
 }
 
-func (info *QueryParamInfo) Parse(vals url.Values) (interface{}, error) {
-	spec := reflect.New(reflect.TypeOf(info.spec)).Interface()
-	v := reflect.ValueOf(spec).Elem()
+func (info *QueryParamInfo) Parse(instance interface{}, vals url.Values) error {
+	v := reflect.ValueOf(instance).Elem()
 
 	for i, f := range readFields(v) {
 		p := info.Params[i]
 		val := vals.Get(p.Name)
 		if val == "" {
 			if p.Required {
-				return nil, fmt.Errorf("required param not found: %s", p.Name)
+				return fmt.Errorf("required param not found: %s", p.Name)
 			}
 			continue
 		}
@@ -100,25 +106,25 @@ func (info *QueryParamInfo) Parse(vals url.Values) (interface{}, error) {
 		case int, int64:
 			n, err := strconv.ParseInt(val, 10, 0)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			f.V.SetInt(n)
 		case uint, uint64:
 			n, err := strconv.ParseUint(val, 10, 0)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			f.V.SetUint(n)
 		case time.Time:
 			t, err := time.Parse(time.RFC3339Nano, val)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			f.V.Set(reflect.ValueOf(t))
 		default:
-			return nil, fmt.Errorf("unknown type for field: \"%s\"", f.F.Name)
+			return fmt.Errorf("unknown type for field: \"%s\"", f.F.Name)
 		}
 	}
 
-	return spec, nil
+	return nil
 }

@@ -19,8 +19,15 @@ function jobs(state = [], action) {
   return state;
 }
 
+function queueStats(state = [], action) {
+  if (action.type == "RECEIVED_QUEUE_STATS") {
+    return action.stats || [];
+  }
+  return state;
+}
 
 export default combineReducers({
   selectedStateFilter,
-  jobs
+  jobs,
+  queueStats,
 });

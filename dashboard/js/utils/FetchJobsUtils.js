@@ -9,3 +9,7 @@ export function fetchJobs() {
 export function fetchJob(id) {
   return get(`/api/jobs${id}`);
 }
+
+export function fetchQueueStates(times) {
+  return get(`/api/stats/queues?ts=${times.join(",")}`);
+}

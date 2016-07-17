@@ -1,7 +1,60 @@
 import React from "react";
 import classNames from "classnames";
+import {Bar as BarChart} from "react-chartjs";
+import _ from "lodash";
 
 import * as Actions from "../actions/JobsListActionCreators";
+
+class QueueList extends React.Component {
+  chartForQueue(queue) {
+    var states = [
+      {name: "queued", color: [0, 181, 173]},
+      {name: "working", color: [163, 51, 200]},
+      {name: "finished", color: [33, 186, 69]},
+      {name: "dead", color: [219, 40, 40]},
+    ];
+
+    var times = Object.keys(queue.jobs);
+
+    var datasets = states.map(state => {
+      var fillColor = state.color.concat([0.2]).join(",");
+      var strokeColor = state.color.concat([0.2]).join(",");
+
+      return {
+        label: _.upperFirst(state.name),
+        data: times.map(time => queue.jobs[time][state.name]),
+        fillColor: `rgba(${fillColor})`,
+        strokeColor: `rgba(${strokeColor})`,
+      };
+    });
+
+    var data = {
+      labels: times,
+      datasets: datasets,
+    };
+
+    return (
+      <div key={queue.name} className="eight wide column">
+        <h3>{queue.name}</h3>
+        <BarChart data={data} width="500%" height="300%" />
+      </div>
+    );
+  }
+
+  render() {
+    // Label will be each time series
+    // Each state will be its own dataset
+    const {stats} = this.props;
+
+    var charts = _.sortBy(stats, "name").map(this.chartForQueue);
+
+    return (
+      <div className="ui grid container center aligned">
+        {charts}
+      </div>
+    );
+  }
+}
 
 class Button extends React.Component {
   render() {
@@ -66,23 +119,23 @@ class JobEntry extends React.Component {
     var title;
     var icon;
     switch(this.props.state) {
-    case "finished":
+      case "finished":
       title = "Finished";
       icon = "checkmark";
       break;
-    case "queued":
+      case "queued":
       title = "Queued";
       icon = "hourglass half";
       break;
-    case "dead":
+      case "dead":
       title = "Dead";
       icon = "remove";
       break;
-    case "working":
+      case "working":
       title = "Working";
       icon = "refresh";
       break;
-    default:
+      default:
       title = `Unknown: ${this.props.state}`;
       icon = "help";
     }
@@ -114,8 +167,9 @@ JobEntry.propTypes = {
 export default class JobsList extends React.Component {
   constructor(props) {
     super(props);
-    this.stateFilter = this.getSelectedFilter();
-    this.fetchJobs();
+    this.state = {
+      stateFilter: this.getSelectedFilter()
+    };
   }
 
   getState() {
@@ -126,18 +180,24 @@ export default class JobsList extends React.Component {
     return this.getState().selectedStateFilter;
   }
 
-  fetchJobs() {
+  fetchData() {
     this.props.store.dispatch(Actions.requestJobs());
+    this.props.store.dispatch(Actions.fetchQueueStats([
+      5 * 60,
+      10 * 60,
+      30 * 60,
+    ]));
   }
 
   componentWillMount() {
-    setInterval(this.fetchJobs.bind(this), 2000);
+    this.fetchData();
+    setInterval(this.fetchData.bind(this), 2000);
   }
 
   componentWillUpdate() {
     var filter = this.getSelectedFilter();
-    if (filter != this.stateFilter) {
-      this.fetchJobs();
+    if (filter != this.state.stateFilter) {
+      this.props.store.dispatch(Actions.requestJobs());
     }
     this.stateFilter = filter;
   }
@@ -158,6 +218,10 @@ export default class JobsList extends React.Component {
     const {store} = this.props;
     return (
       <div className="ui container">
+        <h1>Queues</h1>
+        <QueueList stats={this.getState().queueStats}/>
+
+        <h1>Jobs</h1>
         <QueueFilterButtons
           selectedButton={this.getSelectedFilter()}
           onFilterSelected={filter => store.dispatch(Actions.selectedFilter(filter))}
