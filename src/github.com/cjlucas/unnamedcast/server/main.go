@@ -11,12 +11,12 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
-	"time"
 
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/cjlucas/koda-go"
 	"github.com/cjlucas/unnamedcast/db"
+	"github.com/cjlucas/unnamedcast/server/endpoint"
 	"github.com/gin-gonic/gin"
 	"github.com/robfig/cron"
 )
@@ -82,6 +82,7 @@ func unmarshalFeed(c *gin.Context) {
 	c.Set(feedCtxKey, &feed)
 }
 
+// TODO: Remove. Will be obsolete.
 func ensureQueryExists(c *gin.Context) *db.Query {
 	if q, ok := c.Get(queryCtxKey); ok {
 		return q.(*db.Query)
@@ -203,6 +204,7 @@ func parseQueryParamsNew(info *QueryParamInfo, params interface{}) gin.HandlerFu
 	return func(c *gin.Context) {
 		_, err := info.ParsePtr(params, c.Request.URL.Query())
 		if err != nil {
+			fmt.Println(err)
 			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("failed to parse query params: %s", err))
 			return
 		}
@@ -210,14 +212,14 @@ func parseQueryParamsNew(info *QueryParamInfo, params interface{}) gin.HandlerFu
 	}
 }
 
-func (app *App) RegisterEndpoint(e Endpoint) gin.HandlerFunc {
+func (app *App) RegisterEndpoint(e endpoint.Interface) gin.HandlerFunc {
 	queryParamInfo := NewQueryParamInfo(e)
 	endpointType := reflect.TypeOf(e).Elem()
 
 	return func(c *gin.Context) {
 		// Create type
 		v := reflect.New(endpointType)
-		endpoint := v.Interface().(Endpoint)
+		endpoint := v.Interface().(endpoint.Interface)
 
 		// Inspect type for any special types to inject (*db.DB, *koda.Client)
 		for i := 0; i < v.Elem().NumField(); i++ {
@@ -419,415 +421,44 @@ func (app *App) setupRoutes() {
 
 	api := app.g.Group("/api", app.logErrors)
 
-	type GetUsersParams struct {
-		sortParams
-		limitParams
-	}
-
-	// GET /api/users
-	api.GET("/users",
-		parseQueryParams(GetUsersParams{}),
-		parseSortParams(app.DB.Users.ModelInfo, "modification_time"),
-		parseLimitParams,
-		func(c *gin.Context) {
-			query := ensureQueryExists(c)
-			var users []db.User
-			if err := app.DB.Users.Find(query).All(&users); err != nil {
-				c.AbortWithError(http.StatusInternalServerError, err)
-				return
-			}
-			c.JSON(http.StatusOK, users)
-		},
-	)
+	api.GET("/users", app.RegisterEndpoint(&endpoint.GetUsers{}))
 
 	// POST /api/users (TODO: this endpoint needs to be refactored)
+	api.POST("/users", app.RegisterEndpoint(&endpoint.CreateUser{}))
+	api.GET("/users/:id", app.RegisterEndpoint(&endpoint.GetUser{}))
+	api.GET("/users/:id/feeds", app.RegisterEndpoint(&endpoint.GetUserFeeds{}))
+	api.PUT("/users/:id/feeds", app.RegisterEndpoint(&endpoint.UpdateUserFeeds{}))
 
-	type CreateUserParams struct {
-		Username string `param:",require"`
-		Password string `param:",require"`
-	}
-
-	api.POST("/users",
-		parseQueryParams(CreateUserParams{}),
-		func(c *gin.Context) {
-			params := c.MustGet(paramsCtxKey).(*CreateUserParams)
-			for _, s := range []*string{&params.Username, &params.Password} {
-				*s = strings.TrimSpace(*s)
-			}
-
-			switch user, err := app.DB.Users.Create(params.Username, params.Password); {
-			case err == nil:
-				c.JSON(http.StatusOK, user)
-			case db.IsDup(err):
-				c.JSON(http.StatusConflict, gin.H{
-					"reason": "user already exists",
-				})
-				c.Abort()
-			default:
-				c.AbortWithError(http.StatusInternalServerError, err)
-			}
-		})
-
-	// GET /api/users/:id
-	api.GET("/users/:id", app.loadUserWithID("id"), func(c *gin.Context) {
-		user := c.MustGet(userCtxKey).(*db.User)
-		c.JSON(http.StatusOK, &user)
-	})
-
-	// GET /api/users/:id/feeds
-	api.GET("/users/:id/feeds", app.loadUserWithID("id"), func(c *gin.Context) {
-		user := c.MustGet(userCtxKey).(*db.User)
-		c.JSON(http.StatusOK, &user.FeedIDs)
-	})
-
-	// PUT /api/users/:id/feeds
-	api.PUT("/users/:id/feeds", app.loadUserWithID("id"), func(c *gin.Context) {
-		user := c.MustGet(userCtxKey).(*db.User)
-
-		var ids []db.ID
-		if err := c.BindJSON(&ids); err != nil {
-			c.AbortWithError(http.StatusBadRequest, err)
-			return
-		}
-
-		user.FeedIDs = ids
-		if err := app.DB.Users.Update(user); err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-			return
-		}
-		c.JSON(http.StatusOK, &user)
-	})
-
-	// GET /api/users/:id/states
-	type GetUserItemStatesParams struct {
-		ModifiedSince time.Time `param:"modified_since"`
-	}
-
-	api.GET("/users/:id/states",
-		parseQueryParams(GetUserItemStatesParams{}),
-		app.requireUserID("id"),
-		func(c *gin.Context) {
-			params := c.MustGet(paramsCtxKey).(*GetUserItemStatesParams)
-			userID := c.MustGet(userIDCtxKey).(db.ID)
-
-			query := db.Query{Filter: make(db.M)}
-			if !params.ModifiedSince.IsZero() {
-				query.Filter["modification_time"] = db.M{"$gt": params.ModifiedSince}
-			}
-
-			states, err := app.DB.Users.FindItemStates(userID, query)
-			if err != nil {
-				c.AbortWithError(http.StatusInternalServerError, err)
-				return
-			}
-
-			c.JSON(http.StatusOK, states)
-		})
-
-	api.PUT("/users/:id/states/:itemID", app.requireUserID("id"), app.requireItemID("itemID"), func(c *gin.Context) {
-		userID := c.MustGet(userIDCtxKey).(db.ID)
-		itemID := c.MustGet(itemIDCtxKey).(db.ID)
-
-		var state db.ItemState
-		if err := c.BindJSON(&state); err != nil {
-			c.AbortWithError(http.StatusBadRequest, err)
-			return
-		}
-
-		state.ItemID = itemID
-
-		switch err := app.DB.Users.UpsertItemState(userID, &state); err {
-		case nil:
-			c.JSON(http.StatusOK, &state)
-		case db.ErrOutdatedResource:
-			c.JSON(http.StatusConflict, gin.H{"error": "resource is out of date"})
-			c.Abort()
-		default:
-			c.AbortWithError(http.StatusInternalServerError, err)
-		}
-	})
-
-	api.DELETE("/users/:id/states/:itemID",
-		app.requireUserID("id"),
-		app.requireItemID("itemID"),
-		func(c *gin.Context) {
-			userID := c.MustGet(userIDCtxKey).(db.ID)
-			itemID := c.MustGet(itemIDCtxKey).(db.ID)
-
-			if err := app.DB.Users.DeleteItemState(userID, itemID); err != nil {
-				c.AbortWithError(http.StatusInternalServerError, err)
-				return
-			}
-
-			c.Status(http.StatusOK)
-		},
-	)
+	api.GET("/users/:id/states", app.RegisterEndpoint(&endpoint.GetUserItemStates{}))
+	api.PUT("/users/:id/states/:itemID", app.RegisterEndpoint(&endpoint.UpdateUserItemState{}))
+	api.DELETE("/users/:id/states/:itemID", app.RegisterEndpoint(&endpoint.DeleteUserItemState{}))
 
 	// GET /api/feeds
 	// GET /api/feeds?url=http://url.com
 	// GET /api/feeds?itunes_id=43912431
 	//
 	// TODO: modify the ?url and ?itunes_id variants to return a list for consistency
-
-	type GetFeedsQueryParams struct {
-		sortParams
-		limitParams
-		URL      string
-		ITunesID int `param:"itunes_id"`
-	}
-
-	// api.GET("/feeds",
-	// 	parseQueryParams(GetFeedsQueryParams{}),
-	// 	// TODO: these names are terrible, they dont convey that a Query is being
-	// 	// modified within it
-	// 	parseSortParams(app.DB.Feeds.ModelInfo, "modification_time"),
-	// 	parseLimitParams,
-	// 	func(c *gin.Context) {
-	// 		params := c.MustGet(paramsCtxKey).(*GetFeedsQueryParams)
-	// 		query := ensureQueryExists(c)
-	//
-	// 		if params.URL != "" {
-	// 			query.Filter = db.M{"url": params.URL}
-	// 		} else if params.ITunesID != 0 {
-	// 			query.Filter = db.M{"itunes_id": params.ITunesID}
-	// 		}
-	//
-	// 		if query.Filter == nil {
-	// 			var feeds []db.Feed
-	// 			if err := app.DB.Feeds.Find(query).All(&feeds); err != nil {
-	// 				c.AbortWithError(http.StatusInternalServerError, err)
-	// 			} else {
-	// 				c.JSON(http.StatusOK, feeds)
-	// 			}
-	// 			return
-	// 		}
-	//
-	// 		// TODO: use a switch here
-	// 		var feed db.Feed
-	// 		if err := app.DB.Feeds.Find(query).One(&feed); err != nil {
-	// 			if err == db.ErrNotFound {
-	// 				c.AbortWithStatus(http.StatusNotFound)
-	// 			} else {
-	// 				c.AbortWithError(http.StatusInternalServerError, err)
-	// 			}
-	// 			return
-	// 		}
-	//
-	// 		c.JSON(http.StatusOK, &feed)
-	// 	},
-	// )
-
-	api.GET("/feeds", app.RegisterEndpoint(&GetFeedsQueryEndpoint{}))
-
-	// POST /api/feeds
-	api.POST("/feeds", unmarshalFeed, func(c *gin.Context) {
-		feed := c.MustGet(feedCtxKey).(*db.Feed)
-
-		switch err := app.DB.Feeds.Create(feed); {
-		case db.IsDup(err):
-			c.JSON(http.StatusConflict, gin.H{"reason": "duplicate url found"})
-			c.Abort()
-			return
-		case err != nil:
-			c.AbortWithError(http.StatusInternalServerError, err)
-			return
-		}
-
-		out, err := app.DB.Feeds.FeedByID(feed.ID)
-		if err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-			return
-		}
-		c.JSON(http.StatusOK, out)
-	})
+	api.GET("/feeds", app.RegisterEndpoint(&endpoint.GetFeeds{}))
+	api.POST("/feeds", app.RegisterEndpoint(&endpoint.CreateFeed{}))
 
 	// GET /api/feeds/:id
-	api.GET("/feeds/:id", app.requireFeedID("id"), func(c *gin.Context) {
-		id := c.MustGet(feedIDCtxKey).(db.ID)
-		feed, err := app.DB.Feeds.FeedByID(id)
-		if err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-			return
-		}
-		c.JSON(http.StatusOK, feed)
-	})
+	api.GET("/feeds/:id", app.RegisterEndpoint(&endpoint.FetchFeed{}))
 
-	// PUT /api/feeds/:id
-	api.PUT("/feeds/:id", app.requireFeedID("id"), unmarshalFeed, func(c *gin.Context) {
-		feed := c.MustGet(feedCtxKey).(*db.Feed)
-		feed.ID = c.MustGet(feedIDCtxKey).(db.ID)
-
-		existingFeed, err := app.DB.Feeds.FeedByID(feed.ID)
-		if err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-			return
-		}
-		// Persist existing items
-		feed.Items = existingFeed.Items
-
-		if err := app.DB.Feeds.Update(feed); err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-			return
-		}
-
-		c.JSON(http.StatusOK, &feed)
-	})
+	api.PUT("/feeds/:id", app.RegisterEndpoint(&endpoint.UpdateFeed{}))
 
 	// GET /api/feeds/:id/items[?modified_since=2006-01-02T15:04:05Z07:00]
 	// NOTE: modified_since date check is strictly greater than
 
-	type GetFeedItemsParams struct {
-		sortParams
-		limitParams
-
-		ModifiedSince time.Time `param:"modified_since"`
-	}
-
-	api.GET("/feeds/:id/items",
-		parseQueryParams(GetFeedItemsParams{}),
-		parseSortParams(app.DB.Items.ModelInfo, "modification_time"),
-		parseLimitParams,
-		app.requireFeedID("id"),
-		func(c *gin.Context) {
-			query := ensureQueryExists(c)
-			params := c.MustGet(paramsCtxKey).(*GetFeedItemsParams)
-			feedID := c.MustGet(feedIDCtxKey).(db.ID)
-
-			feed, err := app.DB.Feeds.FeedByID(feedID)
-			if err != nil {
-				c.AbortWithError(http.StatusInternalServerError, err)
-				return
-			}
-
-			query.Filter = db.M{
-				"_id": db.M{"$in": feed.Items},
-			}
-			if !params.ModifiedSince.IsZero() {
-				query.Filter["modification_time"] = db.M{"$gt": params.ModifiedSince}
-			}
-
-			var items []db.Item
-			if err := app.DB.Items.Find(query).All(&items); err != nil {
-				c.AbortWithError(http.StatusInternalServerError, err)
-				return
-			}
-
-			c.JSON(http.StatusOK, &items)
-		})
-
-	// GET /api/feeds/:id/users
-	api.GET("/feeds/:id/users", app.requireFeedID("id"), func(c *gin.Context) {
-		id := c.MustGet(feedIDCtxKey).(db.ID)
-
-		cur := app.DB.Users.Find(&db.Query{
-			Filter: db.M{
-				"feed_ids": db.M{
-					"$in": []db.ID{id},
-				},
-			},
-		})
-
-		var users []db.User
-		if err := cur.All(&users); err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-			return
-		}
-
-		c.JSON(http.StatusOK, &users)
-	})
-
-	// POST /api/feeds/:id/items
-	api.POST("/feeds/:id/items", app.requireFeedID("id"), func(c *gin.Context) {
-		var item db.Item
-		if err := c.BindJSON(&item); err != nil {
-			c.AbortWithError(http.StatusBadRequest, err)
-			return
-		}
-
-		if err := app.DB.Items.Create(&item); err != nil {
-			if db.IsDup(err) {
-				c.JSON(http.StatusConflict, gin.H{
-					"reason": "duplicate id",
-				})
-			} else {
-				c.AbortWithError(http.StatusBadRequest, err)
-			}
-			return
-		}
-
-		id := c.MustGet(feedIDCtxKey).(db.ID)
-		feed, err := app.DB.Feeds.FeedByID(id)
-		if err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-			return
-		}
-		feed.Items = append(feed.Items, item.ID)
-
-		if err := app.DB.Feeds.Update(feed); err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-			return
-		}
-
-		c.JSON(http.StatusOK, &item)
-	})
+	api.GET("/feeds/:id/items", app.RegisterEndpoint(&endpoint.GetFeedItems{}))
+	api.GET("/feeds/:id/users", app.RegisterEndpoint(&endpoint.GetFeedUsers{}))
+	api.POST("/feeds/:id/items", app.RegisterEndpoint(&endpoint.CreateFeedItem{}))
 
 	// GET /api/feeds/:id/items/:itemID
 	// NOTE: Placeholder for feed id MUST be :id due to a limitation in gin's router
 	// that is not expected to be resolved. See: https://github.com/gin-gonic/gin/issues/388
-	api.GET("/feeds/:id/items/:itemID", app.requireFeedID("id"), app.requireItemID("itemID"), func(c *gin.Context) {
-		feedID := c.MustGet(feedIDCtxKey).(db.ID)
-		itemID := c.MustGet(itemIDCtxKey).(db.ID)
+	api.GET("/feeds/:id/items/:itemID", app.RegisterEndpoint(&endpoint.GetFeedItem{}))
 
-		feed, err := app.DB.Feeds.FeedByID(feedID)
-		if err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-			return
-		}
-
-		if !feed.HasItemWithID(itemID) {
-			c.AbortWithError(http.StatusNotFound, errors.New("item does not belong to feed"))
-			return
-		}
-
-		var item db.Item
-		if err := app.DB.Items.FindByID(itemID).One(&item); err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-			return
-		}
-
-		c.JSON(http.StatusOK, &item)
-	})
-
-	// PUT /api/feeds/:id/items/:itemID
-	api.PUT("/feeds/:id/items/:itemID", app.requireFeedID("id"), app.requireItemID("itemID"), func(c *gin.Context) {
-		feedID := c.MustGet(feedIDCtxKey).(db.ID)
-		itemID := c.MustGet(itemIDCtxKey).(db.ID)
-
-		var item db.Item
-		if err := c.BindJSON(&item); err != nil {
-			c.AbortWithError(http.StatusBadRequest, err)
-			return
-		}
-		item.ID = itemID
-
-		feed, err := app.DB.Feeds.FeedByID(feedID)
-		if err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-			return
-		}
-
-		if !feed.HasItemWithID(itemID) {
-			c.AbortWithError(http.StatusNotFound, errors.New("item does not belong to feed"))
-			return
-		}
-
-		if err := app.DB.Items.Update(&item); err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-			return
-		}
-
-		c.JSON(http.StatusOK, &item)
-	})
+	api.PUT("/feeds/:id/items/:itemID", app.RegisterEndpoint(&endpoint.UpdateFeedItem{}))
 
 	type GetJobsParams struct {
 		limitParams
