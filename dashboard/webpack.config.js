@@ -10,7 +10,10 @@ module.exports = {
         test: /\.jsx?$/,
         exclude: /(node_modules)/,
         loader: 'babel',
-        query: {presets: ['react', 'es2015']}
+        query: {
+          presets: ['react'],
+          plugins: ['transform-es2015-modules-commonjs'],
+        }
       }
     ]
   }
