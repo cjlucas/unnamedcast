@@ -106,12 +106,12 @@ func (e *CreateFeed) Handle(c *gin.Context) {
 	c.JSON(http.StatusOK, out)
 }
 
-type FetchFeed struct {
+type GetFeed struct {
 	DB   *db.DB
 	Feed db.Feed
 }
 
-func (e *FetchFeed) Bind() []gin.HandlerFunc {
+func (e *GetFeed) Bind() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
 		middleware.RequireExistingModel(&middleware.RequireExistingModelOpts{
 			Collection: e.DB.Feeds,
@@ -121,7 +121,7 @@ func (e *FetchFeed) Bind() []gin.HandlerFunc {
 	}
 }
 
-func (e *FetchFeed) Handle(c *gin.Context) {
+func (e *GetFeed) Handle(c *gin.Context) {
 	c.JSON(http.StatusOK, &e.Feed)
 }
 

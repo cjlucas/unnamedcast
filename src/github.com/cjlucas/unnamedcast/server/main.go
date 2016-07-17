@@ -97,7 +97,7 @@ func (app *App) setupRoutes() {
 	// TODO: modify the ?url and ?itunes_id variants to return a list for consistency
 	api.GET("/feeds", app.RegisterEndpoint(&endpoint.GetFeeds{}))
 	api.POST("/feeds", app.RegisterEndpoint(&endpoint.CreateFeed{}))
-	api.GET("/feeds/:id", app.RegisterEndpoint(&endpoint.FetchFeed{}))
+	api.GET("/feeds/:id", app.RegisterEndpoint(&endpoint.GetFeed{}))
 	api.PUT("/feeds/:id", app.RegisterEndpoint(&endpoint.UpdateFeed{}))
 	api.GET("/feeds/:id/items", app.RegisterEndpoint(&endpoint.GetFeedItems{}))
 	api.GET("/feeds/:id/users", app.RegisterEndpoint(&endpoint.GetFeedUsers{}))
