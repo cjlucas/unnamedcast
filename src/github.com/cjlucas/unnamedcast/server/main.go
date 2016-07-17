@@ -12,8 +12,6 @@ import (
 	"strconv"
 	"strings"
 
-	"golang.org/x/crypto/bcrypt"
-
 	"github.com/cjlucas/koda-go"
 	"github.com/cjlucas/unnamedcast/db"
 	"github.com/cjlucas/unnamedcast/server/endpoint"
@@ -322,35 +320,7 @@ func (app *App) setupRoutes() {
 		Query string `param:"q,require"`
 	}
 
-	app.g.GET("/search_feeds",
-		parseQueryParams(SearchFeedsParams{}),
-		func(c *gin.Context) {
-			params := c.MustGet(paramsCtxKey).(*SearchFeedsParams)
-			query := &db.Query{
-				Filter: db.M{
-					"$text": db.M{"$search": params.Query},
-				},
-				SortField: "$textScore:score",
-				SortDesc:  true,
-				Limit:     params.Limit(),
-			}
-
-			if query.Limit > 50 {
-				query.Limit = 50
-			}
-
-			var results []db.Feed
-			if err := app.DB.Feeds.Find(query).All(&results); err != nil {
-				c.AbortWithError(http.StatusInternalServerError, err)
-				return
-			}
-
-			if results == nil {
-				results = make([]db.Feed, 0)
-			}
-
-			c.JSON(http.StatusOK, results)
-		})
+	app.g.GET("/search_feeds", app.RegisterEndpoint(&endpoint.SearchFeeds{}))
 
 	// GET /login
 
@@ -359,29 +329,7 @@ func (app *App) setupRoutes() {
 		Password string `param:",require"`
 	}
 
-	app.g.GET("/login",
-		parseQueryParams(LoginParams{}),
-		func(c *gin.Context) {
-			params := c.MustGet(paramsCtxKey).(*LoginParams)
-
-			cur := app.DB.Users.Find(&db.Query{
-				Filter: db.M{"username": params.Username},
-				Limit:  1,
-			})
-
-			var user db.User
-			if err := cur.One(&user); err != nil {
-				c.AbortWithStatus(http.StatusBadRequest)
-				return
-			}
-
-			if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(params.Password)); err != nil {
-				c.AbortWithStatus(http.StatusUnauthorized)
-				return
-			}
-
-			c.JSON(http.StatusOK, &user)
-		})
+	app.g.GET("/login", app.RegisterEndpoint(&endpoint.Login{}))
 
 	api := app.g.Group("/api", app.logErrors)
 
@@ -425,9 +373,8 @@ func (app *App) setupRoutes() {
 	api.PUT("/feeds/:id/items/:itemID", app.RegisterEndpoint(&endpoint.UpdateFeedItem{}))
 
 	api.GET("/jobs", app.RegisterEndpoint(&endpoint.GetJobs{}))
-	api.GET("/jobs/:id", app.RegisterEndpoint(&endpoint.GetJob{}))
-
 	api.POST("/jobs", app.RegisterEndpoint(&endpoint.CreateJob{}))
+	api.GET("/jobs/:id", app.RegisterEndpoint(&endpoint.GetJob{}))
 }
 
 func (app *App) Run(addr string) error {
