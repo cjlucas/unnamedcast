@@ -56,6 +56,10 @@ class QueueList extends React.Component {
   }
 }
 
+QueueList.propTypes = {
+  stats: React.PropTypes.array,
+};
+
 class Button extends React.Component {
   render() {
     var cls = {
@@ -119,23 +123,23 @@ class JobEntry extends React.Component {
     var title;
     var icon;
     switch(this.props.state) {
-      case "finished":
+    case "finished":
       title = "Finished";
       icon = "checkmark";
       break;
-      case "queued":
+    case "queued":
       title = "Queued";
       icon = "hourglass half";
       break;
-      case "dead":
+    case "dead":
       title = "Dead";
       icon = "remove";
       break;
-      case "working":
+    case "working":
       title = "Working";
       icon = "refresh";
       break;
-      default:
+    default:
       title = `Unknown: ${this.props.state}`;
       icon = "help";
     }
