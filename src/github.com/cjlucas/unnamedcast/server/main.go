@@ -32,34 +32,21 @@ const (
 	jobIDCtxKey  = "jobID"
 )
 
-type JobCreator interface {
-	CreateJob(payload interface{}) (koda.Job, error)
-}
-
-type JobSubmitter interface {
-	SubmitJob(queue koda.Queue, priority int, job koda.Job) (koda.Job, error)
-}
-
-type defaultKodaClient struct{}
-
 type App struct {
-	DB           *db.DB
-	g            *gin.Engine
-	jobCreator   JobCreator
-	jobSubmitter JobSubmitter
+	DB   *db.DB
+	Koda *koda.Client
+	g    *gin.Engine
 }
 
 type Config struct {
-	DB           *db.DB
-	JobCreator   JobCreator
-	JobSubmitter JobSubmitter
+	DB   *db.DB
+	Koda *koda.Client
 }
 
 func NewApp(cfg Config) *App {
 	app := App{
-		DB:           cfg.DB,
-		jobCreator:   cfg.JobCreator,
-		jobSubmitter: cfg.JobSubmitter,
+		DB:   cfg.DB,
+		Koda: cfg.Koda,
 	}
 
 	app.setupRoutes()
@@ -221,20 +208,19 @@ func (app *App) RegisterEndpoint(e endpoint.Interface) gin.HandlerFunc {
 		v := reflect.New(endpointType)
 		endpoint := v.Interface().(endpoint.Interface)
 
-		// Inspect type for any special types to inject (*db.DB, *koda.Client)
+		// Inspect type for any special properties to inject
 		for i := 0; i < v.Elem().NumField(); i++ {
 			f := v.Elem().Field(i)
 			switch f.Interface().(type) {
 			case *db.DB:
 				f.Set(reflect.ValueOf(app.DB))
+			case *koda.Client:
+				f.Set(reflect.ValueOf(app.Koda))
 			}
 		}
 
-		// Bind query parameters
 		parseQueryParamsNew(&queryParamInfo, endpoint)(c)
 
-		// call binder
-		// call each gin.HandlerFunc returned by the binder
 		for _, middleware := range endpoint.Bind() {
 			middleware(c)
 			if c.IsAborted() {
@@ -244,28 +230,6 @@ func (app *App) RegisterEndpoint(e endpoint.Interface) gin.HandlerFunc {
 
 		endpoint.Handle(c)
 	}
-}
-
-func (app *App) submitJob(job db.Job) (db.Job, error) {
-	j, err := app.jobCreator.CreateJob(job.Payload)
-	if err != nil {
-		return db.Job{}, err
-	}
-
-	job.KodaID = j.ID
-	job.State = "initial"
-	job, err = app.DB.Jobs.Create(job)
-
-	j, err = app.jobSubmitter.SubmitJob(koda.Queue{Name: job.Queue}, job.Priority, j)
-	if err != nil {
-		return db.Job{}, err
-	}
-
-	if err := app.DB.Jobs.UpdateState(job.ID, "queued"); err != nil {
-		return db.Job{}, err
-	}
-
-	return job, nil
 }
 
 func (app *App) logErrors(c *gin.Context) {
@@ -460,75 +424,10 @@ func (app *App) setupRoutes() {
 
 	api.PUT("/feeds/:id/items/:itemID", app.RegisterEndpoint(&endpoint.UpdateFeedItem{}))
 
-	type GetJobsParams struct {
-		limitParams
-		sortParams
+	api.GET("/jobs", app.RegisterEndpoint(&endpoint.GetJobs{}))
+	api.GET("/jobs/:id", app.RegisterEndpoint(&endpoint.GetJob{}))
 
-		Queue string
-		State string
-	}
-
-	api.GET("/jobs",
-		parseQueryParams(GetJobsParams{}),
-		parseLimitParams,
-		parseSortParams(app.DB.Jobs.ModelInfo, "completion_time"),
-		func(c *gin.Context) {
-			params := c.MustGet(paramsCtxKey).(*GetJobsParams)
-			query := ensureQueryExists(c)
-
-			filter := db.M{}
-			if params.Queue != "" {
-				filter["queue"] = params.Queue
-			}
-			if params.State != "" {
-				filter["state"] = params.State
-			}
-			query.Filter = filter
-
-			var jobs []db.Job
-			if err := app.DB.Jobs.Find(query).All(&jobs); err != nil {
-				c.AbortWithError(http.StatusInternalServerError, err)
-				return
-			}
-
-			c.JSON(http.StatusOK, jobs)
-		})
-
-	api.GET("/jobs/:id",
-		app.requireJobID("id"),
-		func(c *gin.Context) {
-			id := c.MustGet(jobIDCtxKey).(db.ID)
-
-			var job db.Job
-			if err := app.DB.Jobs.FindByID(id).One(&job); err != nil {
-				c.AbortWithError(http.StatusInternalServerError, err)
-				return
-			}
-
-			c.JSON(http.StatusOK, &job)
-		},
-	)
-
-	api.POST("/jobs", func(c *gin.Context) {
-		var job db.Job
-		if err := c.BindJSON(&job); err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-			return
-		}
-
-		if job.Queue == "" {
-			c.AbortWithStatus(http.StatusBadRequest)
-			return
-		}
-
-		job, err := app.submitJob(job)
-		if err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-			return
-		}
-
-		c.JSON(http.StatusOK, &job)
-	})
+	api.POST("/jobs", app.RegisterEndpoint(&endpoint.CreateJob{}))
 }
 
 func (app *App) Run(addr string) error {
@@ -575,18 +474,22 @@ func main() {
 	}
 
 	app := NewApp(Config{
-		DB:           dbConn,
-		JobCreator:   kodaClient,
-		JobSubmitter: kodaClient,
+		DB:   dbConn,
+		Koda: kodaClient,
 	})
 
 	c.AddFunc("0 */10 * * * *", func() {
 		fmt.Println("Updating user feeds")
-		_, err := app.submitJob(db.Job{
-			Queue:    "update-user-feeds",
-			Priority: 0,
-		})
-		if err != nil {
+		ep := endpoint.CreateJob{
+			DB:   dbConn,
+			Koda: kodaClient,
+			Job: db.Job{
+				Queue:    "update-user-feeds",
+				Priority: 0,
+			},
+		}
+
+		if _, err := ep.Create(); err != nil {
 			fmt.Println("Error updating user feeds:", err)
 			return
 		}
