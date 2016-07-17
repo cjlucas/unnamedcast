@@ -107,47 +107,45 @@ func (e *CreateFeed) Handle(c *gin.Context) {
 }
 
 type FetchFeed struct {
-	DB     *db.DB
-	FeedID db.ID
+	DB   *db.DB
+	Feed db.Feed
 }
 
 func (e *FetchFeed) Bind() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
-		middleware.RequireExistingModelWithID(e.DB.Feeds.FindByID, "id", &e.FeedID),
+		middleware.RequireExistingModel(&middleware.RequireExistingModelOpts{
+			Collection: e.DB.Feeds,
+			BoundName:  "id",
+			Result:     &e.Feed,
+		}),
 	}
 }
 
 func (e *FetchFeed) Handle(c *gin.Context) {
-	feed, err := e.DB.Feeds.FeedByID(e.FeedID)
-	if err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
-		return
-	}
-	c.JSON(http.StatusOK, feed)
+	c.JSON(http.StatusOK, &e.Feed)
 }
 
 type UpdateFeed struct {
-	DB     *db.DB
-	Feed   db.Feed
-	FeedID db.ID
+	DB           *db.DB
+	Feed         db.Feed
+	ExistingFeed db.Feed
 }
 
 func (e *UpdateFeed) Bind() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
 		middleware.UnmarshalBody(&e.Feed),
 		validateFeed(&e.Feed),
-		middleware.RequireExistingModelWithID(e.DB.Feeds.FindByID, "id", &e.FeedID),
+		middleware.RequireExistingModel(&middleware.RequireExistingModelOpts{
+			Collection: e.DB.Feeds,
+			BoundName:  "id",
+			Result:     &e.ExistingFeed,
+		}),
 	}
 }
 
 func (e *UpdateFeed) Handle(c *gin.Context) {
-	existingFeed, err := e.DB.Feeds.FeedByID(e.FeedID)
-	if err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
-		return
-	}
 	// Persist existing items
-	e.Feed.Items = existingFeed.Items
+	e.Feed.Items = e.ExistingFeed.Items
 
 	if err := e.DB.Feeds.Update(&e.Feed); err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
@@ -158,9 +156,9 @@ func (e *UpdateFeed) Handle(c *gin.Context) {
 }
 
 type GetFeedItems struct {
-	DB     *db.DB
-	FeedID db.ID
-	Query  db.Query
+	DB    *db.DB
+	Feed  db.Feed
+	Query db.Query
 
 	Params struct {
 		sortParams
@@ -173,19 +171,17 @@ func (e *GetFeedItems) Bind() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
 		middleware.AddQuerySortInfo(e.DB.Items.ModelInfo, &e.Query, &e.Params, "modification_time"),
 		middleware.AddQueryLimitInfo(&e.Query, &e.Params),
-		middleware.RequireExistingModelWithID(e.DB.Feeds.FindByID, "id", &e.FeedID),
+		middleware.RequireExistingModel(&middleware.RequireExistingModelOpts{
+			Collection: e.DB.Feeds,
+			BoundName:  "id",
+			Result:     &e.Feed,
+		}),
 	}
 }
 
 func (e *GetFeedItems) Handle(c *gin.Context) {
-	feed, err := e.DB.Feeds.FeedByID(e.FeedID)
-	if err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
-		return
-	}
-
 	e.Query.Filter = db.M{
-		"_id": db.M{"$in": feed.Items},
+		"_id": db.M{"$in": e.Feed.Items},
 	}
 
 	if !e.Params.ModifiedSince.IsZero() {
@@ -208,7 +204,11 @@ type GetFeedUsers struct {
 
 func (e *GetFeedUsers) Bind() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
-		middleware.RequireExistingModelWithID(e.DB.Feeds.FindByID, "id", &e.FeedID),
+		middleware.RequireExistingModel(&middleware.RequireExistingModelOpts{
+			Collection: e.DB.Feeds,
+			BoundName:  "id",
+			ID:         &e.FeedID,
+		}),
 	}
 }
 

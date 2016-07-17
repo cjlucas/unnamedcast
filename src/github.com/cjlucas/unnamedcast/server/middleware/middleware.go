@@ -20,25 +20,6 @@ func UnmarshalBody(data interface{}) gin.HandlerFunc {
 	}
 }
 
-// TODO: obsolete me
-func RequireExistingModelWithID(f func(id db.ID) db.Cursor, paramName string, id *db.ID) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		var err error
-		*id, err = db.IDFromString(c.Param(paramName))
-		if err != nil {
-			c.AbortWithError(http.StatusBadRequest, err)
-			return
-		}
-
-		n, err := f(*id).Count()
-		if err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
-		} else if n < 1 {
-			c.AbortWithStatus(http.StatusNotFound)
-		}
-	}
-}
-
 type Collection interface {
 	FindByID(id db.ID) db.Cursor
 }
