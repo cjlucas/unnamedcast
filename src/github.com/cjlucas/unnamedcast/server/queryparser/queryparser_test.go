@@ -1,4 +1,4 @@
-package main
+package queryparser
 
 import (
 	"net/url"
@@ -38,10 +38,35 @@ func TestNewQueryParamInfo(t *testing.T) {
 				},
 			},
 		},
+		{
+			In: struct {
+				A time.Time `param:"foo"`
+			}{},
+			ExpectedParams: []QueryParam{
+				{
+					Name:     "foo",
+					Required: false,
+				},
+			},
+		},
+		{
+			In: struct {
+				Params struct {
+					A string `param:"foo"`
+				}
+			}{},
+			ExpectedParams: []QueryParam{
+				{
+					Name:     "foo",
+					Required: false,
+				},
+			},
+		},
 	}
 
 	for _, c := range cases {
 		out := NewQueryParamInfo(c.In)
+		out = NewQueryParamInfo(&c.In)
 		if len(out.Params) != len(c.ExpectedParams) {
 			t.Fatalf("Params length mismatch: %d != %d", len(out.Params), len(c.ExpectedParams))
 		}
@@ -122,8 +147,9 @@ func TestParseQueryParams(t *testing.T) {
 
 		typ := reflect.TypeOf(c.Expected)
 		info := NewQueryParamInfo(reflect.New(typ).Elem().Interface())
+		inst := reflect.New(reflect.TypeOf(info.spec)).Interface()
 
-		out, err := info.Parse(vals)
+		err = info.Parse(inst, vals)
 		if err != nil && c.ShouldError {
 			continue
 		} else if err != nil && !c.ShouldError {
@@ -133,7 +159,7 @@ func TestParseQueryParams(t *testing.T) {
 		}
 
 		// Use the concrete type of out when comparing against c.Expected
-		actual := reflect.ValueOf(out).Elem().Interface()
+		actual := reflect.ValueOf(inst).Elem().Interface()
 		if !reflect.DeepEqual(actual, c.Expected) {
 			t.Errorf("%#v != %#v", actual, c.Expected)
 		}
@@ -149,8 +175,9 @@ func BenchmarkParseQueryParams(b *testing.B) {
 	}
 
 	info := NewQueryParamInfo(spec{})
+	inst := &spec{}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		info.Parse(vals)
+		info.Parse(inst, vals)
 	}
 }

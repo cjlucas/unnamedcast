@@ -53,12 +53,13 @@ func newTestApp() *App {
 		panic(err)
 	}
 
-	m := &mockJobCreatorSubmitter{}
+	kodaClient := koda.NewClient(&koda.Options{
+		URL: os.Getenv("REDIS_URL"),
+	})
 
 	return NewApp(Config{
-		DB:           dbConn,
-		JobCreator:   m,
-		JobSubmitter: m,
+		DB:   dbConn,
+		Koda: kodaClient,
 	})
 }
 
