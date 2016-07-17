@@ -1,4 +1,4 @@
-package main
+package endpoint
 
 type SortParams interface {
 	SortField() string
