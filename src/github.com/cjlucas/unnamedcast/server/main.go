@@ -114,29 +114,22 @@ func (app *App) Run(addr string) error {
 	return app.g.Run(addr)
 }
 
+func getenv(key, fallback string) string {
+	val := os.Getenv(key)
+	if val == "" {
+		return fallback
+	}
+	return val
+}
+
 func main() {
 	c := cron.New()
 
-	rdbURL := os.Getenv("REDIS_URL")
-	if rdbURL == "" {
-		rdbURL = "redis://localhost:6379"
-	}
-
 	kodaClient := koda.NewClient(&koda.Options{
-		URL: rdbURL,
+		URL: getenv("REDIS_URL", "redis://localhost:6379"),
 	})
 
-	dbURL := os.Getenv("DB_URL")
-	if dbURL == "" {
-		dbURL = "mongodb://localhost/cast"
-	}
-
-	apiURL := os.Getenv("API_URL")
-	if apiURL == "" {
-		apiURL = "http://localhost:80"
-	}
-
-	url, err := url.Parse(apiURL)
+	url, err := url.Parse(getenv("API_URL", "http://localhost:80"))
 	if err != nil {
 		panic(err)
 	}
@@ -147,10 +140,10 @@ func main() {
 	}
 
 	dbConn, err := db.New(db.Config{
-		URL: dbURL,
+		URL: getenv("DB_URL", "mongodb://localhost/cast"),
 	})
 	if err != nil {
-		panic(fmt.Errorf("Failed to connect to DB: %s (%s)", err, dbURL))
+		panic(fmt.Errorf("Failed to connect to DB: %s", err))
 	}
 
 	app := NewApp(Config{
