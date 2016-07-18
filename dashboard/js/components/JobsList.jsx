@@ -171,9 +171,7 @@ JobEntry.propTypes = {
 export default class JobsList extends React.Component {
   constructor(props) {
     super(props);
-    this.state = {
-      stateFilter: this.getSelectedFilter()
-    };
+    this.stateFilter = this.getSelectedFilter();
   }
 
   getState() {
@@ -200,7 +198,7 @@ export default class JobsList extends React.Component {
 
   componentWillUpdate() {
     var filter = this.getSelectedFilter();
-    if (filter != this.state.stateFilter) {
+    if (filter != this.stateFilter) {
       this.props.store.dispatch(Actions.requestJobs());
     }
     this.stateFilter = filter;
@@ -221,30 +219,34 @@ export default class JobsList extends React.Component {
 
     const {store} = this.props;
     return (
-      <div className="ui container">
-        <h1>Queues</h1>
-        <QueueList stats={this.getState().queueStats}/>
+      <div>
+        <div className="ui container">
+          <h1 className="ui header">Queues</h1>
+          <QueueList stats={this.getState().queueStats}/>
+        </div>
+        <div className="ui container">
 
-        <h1>Jobs</h1>
-        <QueueFilterButtons
-          selectedButton={this.getSelectedFilter()}
-          onFilterSelected={filter => store.dispatch(Actions.selectedFilter(filter))}
-          />
+          <h1 className="ui header">Jobs</h1>
+          <QueueFilterButtons
+            selectedButton={this.getSelectedFilter()}
+            onFilterSelected={filter => store.dispatch(Actions.selectedFilter(filter))}
+            />
 
-        <table className="ui celled table">
-          <thead>
-            <tr>
-              <th>State</th>
-              <th>Job ID</th>
-              <th>Queue</th>
-              <th>Payload</th>
-              <th>Completion Time</th>
-            </tr>
-          </thead>
-          <tbody>
-            {jobs}
-          </tbody>
-        </table>
+          <table className="ui celled table">
+            <thead>
+              <tr>
+                <th>State</th>
+                <th>Job ID</th>
+                <th>Queue</th>
+                <th>Payload</th>
+                <th>Completion Time</th>
+              </tr>
+            </thead>
+            <tbody>
+              {jobs}
+            </tbody>
+          </table>
+        </div>
       </div>
     );
   }
