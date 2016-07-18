@@ -144,6 +144,43 @@ JobEntry.propTypes = {
   state: React.PropTypes.string,
 };
 
+class JobsTable extends React.Component {
+  render() {
+    var jobs = this.props.jobs.map(job => {
+      return (
+        <JobEntry
+          key={job.id}
+          id={job.id}
+          queue={job.queue}
+          state={job.state}
+          payload={job.payload}
+          modificationTime={job.modification_time}/>
+      );
+    });
+
+    return (
+      <table className="ui celled table">
+        <thead>
+          <tr>
+            <th>State</th>
+            <th>Job ID</th>
+            <th>Queue</th>
+            <th>Payload</th>
+            <th>Modification Time</th>
+          </tr>
+        </thead>
+        <tbody>
+          {jobs}
+        </tbody>
+      </table>
+    );
+  }
+}
+
+JobsTable.propTypes = {
+  jobs: React.PropTypes.array.isRequired,
+};
+
 export default class JobsPage extends React.Component {
   constructor(props) {
     super(props);
@@ -182,18 +219,6 @@ export default class JobsPage extends React.Component {
   }
 
   render() {
-    var jobs = this.getState().jobs.map(job => {
-      return (
-        <JobEntry
-          key={job.id}
-          id={job.id}
-          queue={job.queue}
-          state={job.state}
-          payload={job.payload}
-          modificationTime={job.modification_time}/>
-      );
-    });
-
     const {store} = this.props;
     return (
       <div>
@@ -202,27 +227,11 @@ export default class JobsPage extends React.Component {
           <QueueList stats={this.getState().queueStats}/>
         </div>
         <div className="ui container">
-
           <h1 className="ui header">Jobs</h1>
           <QueueFilterButtons
             selectedButton={this.getSelectedFilter()}
-            onFilterSelected={filter => store.dispatch(Actions.selectedFilter(filter))}
-            />
-
-          <table className="ui celled table">
-            <thead>
-              <tr>
-                <th>State</th>
-                <th>Job ID</th>
-                <th>Queue</th>
-                <th>Payload</th>
-                <th>Modification Time</th>
-              </tr>
-            </thead>
-            <tbody>
-              {jobs}
-            </tbody>
-          </table>
+            onFilterSelected={filter => store.dispatch(Actions.selectedFilter(filter))} />
+          <JobsTable jobs={this.getState().jobs} />
         </div>
       </div>
     );
@@ -230,5 +239,5 @@ export default class JobsPage extends React.Component {
 }
 
 JobsPage.propTypes = {
-  store: React.PropTypes.object,
+  store: React.PropTypes.object.isRequired,
 };
