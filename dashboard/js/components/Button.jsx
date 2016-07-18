@@ -10,10 +10,8 @@ export default class Button extends React.Component {
     };
     cls[this.props.color] = true;
 
-    cls = classNames(cls);
-
     return (
-      <button className={cls} onClick={this.props.onClick}>
+      <button className={classNames(cls)} onClick={this.props.onClick}>
         {this.props.text}
       </button>
     );
