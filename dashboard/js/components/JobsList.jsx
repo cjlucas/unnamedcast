@@ -4,6 +4,7 @@ import {Bar as BarChart} from "react-chartjs";
 import _ from "lodash";
 
 import * as Actions from "../actions/JobsListActionCreators";
+import {shortDuration} from "../util/time";
 
 class QueueList extends React.Component {
   chartForQueue(queue) {
@@ -29,7 +30,7 @@ class QueueList extends React.Component {
     });
 
     var data = {
-      labels: times,
+      labels: times.map(shortDuration),
       datasets: datasets,
     };
 
@@ -188,6 +189,7 @@ export default class JobsList extends React.Component {
       5 * 60,
       10 * 60,
       30 * 60,
+      60 * 60,
     ]));
   }
 
