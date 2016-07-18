@@ -3,7 +3,7 @@ import classNames from "classnames";
 import {Bar as BarChart} from "react-chartjs";
 import _ from "lodash";
 
-import * as Actions from "../actions/JobsListActionCreators";
+import * as Actions from "../actions/JobsPageActionCreators";
 import {shortDuration} from "../util/time";
 
 class QueueList extends React.Component {
@@ -169,7 +169,7 @@ JobEntry.propTypes = {
   state: React.PropTypes.string,
 };
 
-export default class JobsList extends React.Component {
+export default class JobsPage extends React.Component {
   constructor(props) {
     super(props);
     this.stateFilter = this.getSelectedFilter();
@@ -254,6 +254,6 @@ export default class JobsList extends React.Component {
   }
 }
 
-JobsList.propTypes = {
+JobsPage.propTypes = {
   store: React.PropTypes.object,
 };

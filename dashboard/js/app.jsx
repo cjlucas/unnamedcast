@@ -8,14 +8,14 @@ import classNames from "classnames";
 import _ from "lodash";
 
 import reducers from "./reducers";
-import JobsList from "./components/JobsList.jsx";
+import JobsPage from "./containers/JobsPage.jsx";
 
 const store = createStore(reducers, applyMiddleware(thunk));
 
-class JobsListWrapper extends React.Component {
+class JobsPageWrapper extends React.Component {
   render() {
     return (
-      <JobsList store={store} />
+      <JobsPage store={store} />
     );
   }
 }
@@ -59,7 +59,7 @@ const routes = {
   childRoutes: [
     {
       path: "jobs",
-      component: JobsListWrapper,
+      component: JobsPageWrapper,
     }
   ]
 };
