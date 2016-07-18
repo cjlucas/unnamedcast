@@ -1,7 +1,8 @@
 import React from "react";
-import classNames from "classnames";
 import {Bar as BarChart} from "react-chartjs";
 import _ from "lodash";
+
+import Button from "../components/Button.jsx";
 
 import * as Actions from "../actions/JobsPageActionCreators";
 import {shortDuration} from "../util/time";
@@ -59,32 +60,6 @@ class QueueList extends React.Component {
 
 QueueList.propTypes = {
   stats: React.PropTypes.array,
-};
-
-class Button extends React.Component {
-  render() {
-    var cls = {
-      ui: true,
-      button: true,
-      basic: !this.props.selected,
-    };
-    cls[this.props.color] = true;
-
-    cls = classNames(cls);
-
-    return (
-      <button className={cls} onClick={this.props.onClick}>
-        {this.props.text}
-      </button>
-    );
-  }
-}
-
-Button.propTypes = {
-  text: React.PropTypes.string,
-  color: React.PropTypes.string,
-  selected: React.PropTypes.bool,
-  onClick: React.PropTypes.func,
 };
 
 class QueueFilterButtons extends React.Component {
