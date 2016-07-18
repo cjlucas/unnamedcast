@@ -130,7 +130,7 @@ class JobEntry extends React.Component {
         <td className="collapsing">{this.props.id}</td>
         <td className="collapsing">{this.props.queue}</td>
         <td className="mono">{JSON.stringify(this.props.payload)}</td>
-        <td className="collapsing">{this.props.completionTime}</td>
+        <td className="collapsing">{this.props.modificationTime}</td>
       </tr>
     );
   }
@@ -140,7 +140,7 @@ JobEntry.propTypes = {
   id: React.PropTypes.string,
   queue: React.PropTypes.string,
   payload: React.PropTypes.object,
-  completionTime: React.PropTypes.string,
+  modificationTime: React.PropTypes.string,
   state: React.PropTypes.string,
 };
 
@@ -190,7 +190,7 @@ export default class JobsPage extends React.Component {
           queue={job.queue}
           state={job.state}
           payload={job.payload}
-          completionTime={job.completion_time}/>
+          modificationTime={job.modification_time}/>
       );
     });
 
@@ -216,7 +216,7 @@ export default class JobsPage extends React.Component {
                 <th>Job ID</th>
                 <th>Queue</th>
                 <th>Payload</th>
-                <th>Completion Time</th>
+                <th>Modification Time</th>
               </tr>
             </thead>
             <tbody>
