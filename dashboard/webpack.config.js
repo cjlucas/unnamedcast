@@ -1,9 +1,16 @@
+var HtmlWebpackPlugin = require('html-webpack-plugin');
+
 module.exports = {
   entry: './js/app.jsx',
   output: {
-    path: __dirname,
+    path: 'dist',
     filename: "bundle.js"
   },
+  plugins: [
+      new HtmlWebpackPlugin({  // Also generate a test.html
+      template: 'index.ejs'
+    })
+  ],
   module: {
     loaders: [
       {
