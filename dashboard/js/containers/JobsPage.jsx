@@ -1,6 +1,7 @@
 import React from "react";
 import {Bar as BarChart} from "react-chartjs";
 import _ from "lodash";
+import { connect } from "react-redux";
 
 import Button from "../components/Button.jsx";
 
@@ -181,28 +182,10 @@ JobsTable.propTypes = {
   jobs: React.PropTypes.array.isRequired,
 };
 
-export default class JobsPage extends React.Component {
-  constructor(props) {
-    super(props);
-    this.stateFilter = this.getSelectedFilter();
-  }
-
-  getState() {
-    return this.props.store.getState();
-  }
-
-  getSelectedFilter() {
-    return this.getState().selectedStateFilter;
-  }
-
+class JobsPage extends React.Component {
   fetchData() {
-    this.props.store.dispatch(Actions.requestJobs());
-    this.props.store.dispatch(Actions.fetchQueueStats([
-      5 * 60,
-      10 * 60,
-      30 * 60,
-      60 * 60,
-    ]));
+    this.props.requestJobs();
+    this.props.fetchQueueStats();
   }
 
   componentWillMount() {
@@ -210,28 +193,20 @@ export default class JobsPage extends React.Component {
     setInterval(this.fetchData.bind(this), 2000);
   }
 
-  componentWillUpdate() {
-    var filter = this.getSelectedFilter();
-    if (filter != this.stateFilter) {
-      this.props.store.dispatch(Actions.requestJobs());
-    }
-    this.stateFilter = filter;
-  }
-
   render() {
-    const {store} = this.props;
+    const { selectedStateFilter, queueStats, jobs } = this.props;
     return (
       <div>
         <div className="ui container">
           <h1 className="ui header">Queues</h1>
-          <QueueList stats={this.getState().queueStats}/>
+          <QueueList stats={queueStats}/>
         </div>
         <div className="ui container">
           <h1 className="ui header">Jobs</h1>
           <QueueFilterButtons
-            selectedButton={this.getSelectedFilter()}
-            onFilterSelected={filter => store.dispatch(Actions.selectedFilter(filter))} />
-          <JobsTable jobs={this.getState().jobs} />
+            selectedButton={selectedStateFilter}
+            onFilterSelected={filter => this.props.selectedFilter(filter)} />
+          <JobsTable jobs={jobs} />
         </div>
       </div>
     );
@@ -240,4 +215,35 @@ export default class JobsPage extends React.Component {
 
 JobsPage.propTypes = {
   store: React.PropTypes.object.isRequired,
+  selectedStateFilter: React.PropTypes.string,
+  queueStats: React.PropTypes.array,
+  jobs: React.PropTypes.array,
 };
+
+function mapStateToProps(state) {
+  return {
+    selectedStateFilter: state.selectedStateFilter,
+    queueStats: state.queueStats,
+    jobs: state.jobs,
+  };
+}
+
+function mapDispatchToProps(dispatch) {
+  return {
+    selectedFilter: filter => {
+      dispatch(Actions.selectedFilter(filter));
+      dispatch(Actions.requestJobs());
+    },
+    requestJobs: () => dispatch(Actions.requestJobs()),
+    fetchQueueStats: () => {
+      return Actions.fetchQueueStats([
+        5 * 60,
+        10 * 60,
+        30 * 60,
+        60 * 60,
+      ]);
+    }
+  };
+}
+
+export default connect(mapStateToProps, mapDispatchToProps)(JobsPage);
