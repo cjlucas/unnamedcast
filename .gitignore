@@ -10,3 +10,7 @@ src/github.com/cjlucas/*
 !src/github.com/cjlucas/unnamedcast
 
 .DS_Store
+
+dashboard/node_modules
+dashboard/dist
+npm-debug.log

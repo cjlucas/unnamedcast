@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"reflect"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 
@@ -78,7 +78,7 @@ func (app *App) setupRoutes() {
 	app.g = gin.Default()
 
 	cwd, _ := filepath.Abs(filepath.Dir(os.Args[0]))
-	app.g.Static("/dashboard", filepath.Join(cwd, "dashboard"))
+	app.g.Static("/dashboard", filepath.Join(cwd, "dashboard", "dist"))
 
 	app.g.GET("/search_feeds", app.RegisterEndpoint(&endpoint.SearchFeeds{}))
 	app.g.GET("/login", app.RegisterEndpoint(&endpoint.Login{}))

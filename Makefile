@@ -47,11 +47,13 @@ buildContext:
 	mkdir build
 	@echo "Copying project to /build..."
 	@git ls-files | cpio -pdm build/ 2> /dev/null
+	rm -rf build/dashboard
 
 dockerCompose: buildContext
 	@echo "Building docker image (docker-compose)..."
 	@docker-compose -f tools/docker-compose.yml build web
 	@docker-compose -f tools/docker-compose.yml build worker
+	@docker-compose -f tools/docker-compose.yml run watcher npm install --unsafe-perm
 
 docker: buildContext
 	@echo "Building docker image..."

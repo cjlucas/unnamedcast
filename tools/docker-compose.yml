@@ -1,4 +1,7 @@
 version: '2'
+volumes:
+  dashboard: {}
+  node_modules: {}
 services:
   web:
     build:
@@ -17,6 +20,8 @@ services:
     ports:
       - "12100:80"
     command: server
+    volumes:
+      - dashboard:/app/dashboard/dist
   worker:
     build:
       context: ../build
@@ -42,3 +47,12 @@ services:
     image: mongo
     ports:
       - "12102:27017"
+  watcher:
+    build:
+      context: .
+      dockerfile: Dockerfile.webdev
+    volumes:
+      - ../dashboard:/app
+      - dashboard:/app/dist
+      - node_modules:/app/node_modules
+    command: webpack --watch --watch-poll

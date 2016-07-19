@@ -1,0 +1,9 @@
+FROM alpine
+MAINTAINER Chris Lucas
+
+RUN apk update
+RUN apk add make nodejs
+
+WORKDIR /app
+
+ENV PATH $PATH:/app/node_modules/.bin
