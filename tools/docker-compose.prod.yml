@@ -33,7 +33,7 @@ services:
       - DB_URL=mongodb://db:27017/cast
       - API_URL=http://web:80
       - REDIS_URL=redis://rdb:6379
-    command: worker
+    command: worker -q update-feed:10 -q update-user-feeds
   redis:
     image: redis
     ports:
