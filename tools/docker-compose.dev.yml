@@ -4,12 +4,11 @@ volumes:
   dashboard: {}
   # node_modules is overlayed on top of the users share
   node_modules: {}
-  build: {}
 services:
   web:
     build:
       context: ../build
-      dockerfile: tools/Dockerfile.dev
+      dockerfile: tools/Dockerfile
     depends_on:
       - redis
       - mongodb
@@ -25,7 +24,6 @@ services:
     command: server
     volumes:
       - dashboard:/app/dashboard/dist
-      - build:/app/build
   worker:
     build:
       context: ../build
@@ -51,10 +49,12 @@ services:
     image: mongo
     ports:
       - "12102:27017"
-  webwatcher:
+  webdev:
     build:
       context: .
       dockerfile: Dockerfile.dev
+    depends_on:
+      - web
     volumes:
       - ../dashboard:/app
       - dashboard:/app/dist

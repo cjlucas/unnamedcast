@@ -1,9 +1,10 @@
-FROM alpine
+FROM golang:1.6-alpine
 MAINTAINER Chris Lucas
 
 RUN apk update
 RUN apk add make nodejs
 
-WORKDIR /app
-
+RUN npm install
 ENV PATH $PATH:/app/node_modules/.bin
+
+WORKDIR /app

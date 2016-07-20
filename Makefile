@@ -43,13 +43,13 @@ buildContext:
 	@echo "Copying project to /build..."
 	@git ls-files | cpio -pdm build/ 2> /dev/null
 
-devBuild:
+devBuild: buildContext
 	$(DC_DEV) build web
 	$(DC_DEV) build worker
-	$(DC_DEV) build webwatcher
+	$(DC_DEV) build webdev
 
-watch:
-	@docker-compose -f tools/docker-compose.yml run watcher npm install --unsafe-perm
+watch: devBuild
+	@$(DC_DEV) up
 
 docker: buildContext
 	@echo "Building docker image..."
