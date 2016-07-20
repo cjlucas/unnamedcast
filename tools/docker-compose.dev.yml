@@ -1,12 +1,15 @@
 version: '2'
 volumes:
+  # Used by webwatch. it writes the webpack bundle here
   dashboard: {}
+  # node_modules is overlayed on top of the users share
   node_modules: {}
+  build: {}
 services:
   web:
     build:
       context: ../build
-      dockerfile: tools/Dockerfile
+      dockerfile: tools/Dockerfile.dev
     depends_on:
       - redis
       - mongodb
@@ -22,6 +25,7 @@ services:
     command: server
     volumes:
       - dashboard:/app/dashboard/dist
+      - build:/app/build
   worker:
     build:
       context: ../build
@@ -47,10 +51,10 @@ services:
     image: mongo
     ports:
       - "12102:27017"
-  watcher:
+  webwatcher:
     build:
       context: .
-      dockerfile: Dockerfile.webdev
+      dockerfile: Dockerfile.dev
     volumes:
       - ../dashboard:/app
       - dashboard:/app/dist

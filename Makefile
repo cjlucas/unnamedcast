@@ -1,9 +1,13 @@
 .PHONY: server
 
-FILES = $(shell git ls-files)
+FILES  = $(shell git ls-files)
 BRANCH = $(shell git rev-parse --abbrev-ref HEAD | awk -F'/' '{print $$NF}')
+
 IMGNAME = cast
 TAGNAME = $(BRANCH)
+
+DC_PROD = docker-compose -f tools/docker-compose.prod.yml
+DC_DEV  = docker-compose -f tools/docker-compose.dev.yml
 
 default: all
 
@@ -13,15 +17,6 @@ deps: serverDeps kodaDeps workerDeps
 gvt:
 	go get -u github.com/FiloSottile/gvt
 	gvt restore
-
-serverDeps: gvt
-	cd src/github.com/cjlucas/unnamedcast/server; gvt restore
-
-kodaDeps: gvt
-	cd src/github.com/cjlucas/unnamedcast/koda; gvt restore
-
-workerDeps: gvt
-	cd src/github.com/cjlucas/unnamedcast/worker; gvt restore
 
 server:
 	@cd src/github.com/cjlucas/unnamedcast/server; go install
@@ -47,12 +42,13 @@ buildContext:
 	mkdir build
 	@echo "Copying project to /build..."
 	@git ls-files | cpio -pdm build/ 2> /dev/null
-	rm -rf build/dashboard
 
-dockerCompose: buildContext
-	@echo "Building docker image (docker-compose)..."
-	@docker-compose -f tools/docker-compose.yml build web
-	@docker-compose -f tools/docker-compose.yml build worker
+devBuild:
+	$(DC_DEV) build web
+	$(DC_DEV) build worker
+	$(DC_DEV) build webwatcher
+
+watch:
 	@docker-compose -f tools/docker-compose.yml run watcher npm install --unsafe-perm
 
 docker: buildContext

@@ -1,6 +1,7 @@
 import React from "react";
 import {Bar as BarChart} from "react-chartjs";
 import _ from "lodash";
+import { bindActionCreators } from "redux";
 import { connect } from "react-redux";
 
 import Button from "../components/Button.jsx";
@@ -214,10 +215,12 @@ class JobsPage extends React.Component {
 }
 
 JobsPage.propTypes = {
-  store: React.PropTypes.object.isRequired,
   selectedStateFilter: React.PropTypes.string,
   queueStats: React.PropTypes.array,
   jobs: React.PropTypes.array,
+  requestJobs: React.PropTypes.func,
+  fetchQueueStats: React.PropTypes.func,
+  selectedFilter: React.PropTypes.func,
 };
 
 function mapStateToProps(state) {
@@ -229,21 +232,20 @@ function mapStateToProps(state) {
 }
 
 function mapDispatchToProps(dispatch) {
-  return {
+  return Object.assign(bindActionCreators(Actions, dispatch), {
     selectedFilter: filter => {
       dispatch(Actions.selectedFilter(filter));
       dispatch(Actions.requestJobs());
     },
-    requestJobs: () => dispatch(Actions.requestJobs()),
     fetchQueueStats: () => {
-      return Actions.fetchQueueStats([
+      dispatch(Actions.fetchQueueStats([
         5 * 60,
         10 * 60,
         30 * 60,
         60 * 60,
-      ]);
-    }
-  };
+      ]));
+    },
+  });
 }
 
 export default connect(mapStateToProps, mapDispatchToProps)(JobsPage);
