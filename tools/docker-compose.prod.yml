@@ -15,7 +15,7 @@ services:
       - REDIS_URL=redis://rdb:6379
       - API_URL=http://web:80
     ports:
-      - "10000:80"
+      - "80:80"
     command: server
   worker:
     build:
@@ -37,8 +37,8 @@ services:
   redis:
     image: redis
     ports:
-      - "10001:6379"
+      - "6379:6379"
   mongodb:
     image: mongo
     ports:
-      - "10002:27017"
+      - "27017:27017"
