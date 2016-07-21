@@ -1,0 +1,12 @@
+FROM golang:1.6-alpine
+MAINTAINER Chris Lucas
+
+RUN apk update
+RUN apk add make nodejs
+
+# Install dependencies for watcher
+RUN npm install
+# webpack is installed here
+ENV PATH $PATH:/app/node_modules/.bin
+
+WORKDIR /app

@@ -25,17 +25,15 @@ worker:
 
 install: server worker
 
-localUnittest:
+localTest:
 	@cd src/github.com/cjlucas/unnamedcast; go list ./... | grep -v vendor | xargs go test
 
-# TODO: figure out a good method for executing integration tests
-localTest: localUnittest
+test:
+	$(DC_DEV) build web
+	@${DC_DEV} run -e DB_URL=mongodb://db/casttest web make localTest
 
-unittest: docker
-	@docker run $(IMGNAME):$(TAGNAME) make localUnittest
-
-test: dockerCompose
-	@docker-compose -f tools/docker-compose.yml run -e DB_URL=mongodb://db/casttest web make localTest
+deploy: prodBuild
+	$(DC_PROD) up
 
 buildContext:
 	rm -rf build
@@ -46,7 +44,11 @@ buildContext:
 devBuild: buildContext
 	$(DC_DEV) build web
 	$(DC_DEV) build worker
-	$(DC_DEV) build webdev
+	$(DC_DEV) build watcher
+
+prodBuild: buildContext
+	$(DC_DEV) build web
+	$(DC_DEV) build worker
 
 watch: devBuild
 	@$(DC_DEV) up

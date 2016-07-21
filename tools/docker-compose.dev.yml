@@ -8,7 +8,7 @@ services:
   web:
     build:
       context: ../build
-      dockerfile: tools/Dockerfile
+      dockerfile: tools/Dockerfile.dev
     depends_on:
       - redis
       - mongodb
@@ -21,13 +21,13 @@ services:
       - API_URL=http://web:80
     ports:
       - "12100:80"
-    command: server
+    command: sh -c 'make server && server'
     volumes:
       - dashboard:/app/dashboard/dist
   worker:
     build:
       context: ../build
-      dockerfile: tools/Dockerfile
+      dockerfile: tools/Dockerfile.dev
     depends_on:
       - web
       - redis
@@ -40,7 +40,7 @@ services:
       - DB_URL=mongodb://db:27017/cast
       - API_URL=http://web:80
       - REDIS_URL=redis://rdb:6379
-    command: worker
+    command: sh -c 'make worker && worker'
   redis:
     image: redis
     ports:
@@ -49,10 +49,10 @@ services:
     image: mongo
     ports:
       - "12102:27017"
-  webdev:
+  watcher:
     build:
       context: .
-      dockerfile: Dockerfile.dev
+      dockerfile: Dockerfile.watcher
     depends_on:
       - web
     volumes:

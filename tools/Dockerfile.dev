@@ -2,9 +2,12 @@ FROM golang:1.6-alpine
 MAINTAINER Chris Lucas
 
 RUN apk update
-RUN apk add make nodejs
+RUN apk add make
 
-RUN npm install
-ENV PATH $PATH:/app/node_modules/.bin
+ENV PATH $PATH:/app/bin
 
+COPY . /app
 WORKDIR /app
+
+ENV GOPATH /app
+ENV PATH $PATH:/app/bin
