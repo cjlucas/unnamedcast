@@ -2,6 +2,7 @@ package endpoint
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/cjlucas/koda-go"
@@ -80,20 +81,23 @@ func (e *CreateJob) Bind() []gin.HandlerFunc {
 func (e *CreateJob) Create() (db.Job, error) {
 	j, err := e.Koda.CreateJob(e.Job.Payload)
 	if err != nil {
-		return db.Job{}, err
+		return db.Job{}, fmt.Errorf("failed to create koda job: %s", err)
 	}
 
 	e.Job.KodaID = j.ID
 	e.Job.State = "initial"
 	job, err := e.DB.Jobs.Create(e.Job)
+	if err != nil {
+		return db.Job{}, fmt.Errorf("failed to create job db entry: %s", err)
+	}
 
 	j, err = e.Koda.SubmitJob(koda.Queue{Name: job.Queue}, job.Priority, j)
 	if err != nil {
-		return db.Job{}, err
+		return db.Job{}, fmt.Errorf("failed to submit job: %s", err)
 	}
 
 	if err := e.DB.Jobs.UpdateState(job.ID, "queued"); err != nil {
-		return db.Job{}, err
+		return db.Job{}, fmt.Errorf("failed to update state: %s", err)
 	}
 
 	return job, nil
