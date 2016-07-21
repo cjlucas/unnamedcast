@@ -1,0 +1,44 @@
+version: '2'
+services:
+  web:
+    build:
+      context: ../build
+      dockerfile: tools/Dockerfile
+    depends_on:
+      - redis
+      - mongodb
+    links:
+      - redis:rdb
+      - mongodb:db
+    environment:
+      - DB_URL=mongodb://db:27017/cast
+      - REDIS_URL=redis://rdb:6379
+      - API_URL=http://web:80
+    ports:
+      - "80:80"
+    command: server
+  worker:
+    build:
+      context: ../build
+      dockerfile: tools/Dockerfile
+    depends_on:
+      - web
+      - redis
+      - mongodb
+    links:
+      - web
+      - redis:rdb
+      - mongodb:db
+    environment:
+      - DB_URL=mongodb://db:27017/cast
+      - API_URL=http://web:80
+      - REDIS_URL=redis://rdb:6379
+    command: worker -q update-feed:10 -q update-user-feeds
+  redis:
+    image: redis
+    ports:
+      - "6379:6379"
+  mongodb:
+    image: mongo
+    ports:
+      - "27017:27017"
