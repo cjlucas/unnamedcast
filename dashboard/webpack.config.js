@@ -11,6 +11,7 @@ module.exports = {
       template: 'index.ejs'
     })
   ],
+  devtool: 'source-map',
   module: {
     loaders: [
       {
