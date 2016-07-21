@@ -1,16 +1,16 @@
-### Testing ###
+# Testing #
 
 ```
 make test
 ```
 
-### Development ###
+# Development #
 
 ```
 make watch
 ```
 
-### Production ###
+# Production #
 
 ```
 make deploy
