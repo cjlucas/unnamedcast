@@ -23,7 +23,7 @@ type GetJobs struct {
 
 func (e *GetJobs) Bind() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
-		middleware.AddQuerySortInfo(e.DB.Jobs.ModelInfo, &e.Query, &e.Params, "completion_time"),
+		middleware.AddQuerySortInfo(e.DB.Jobs.ModelInfo, &e.Query, &e.Params, "modification_time"),
 		middleware.AddQueryLimitInfo(&e.Query, &e.Params),
 	}
 }
