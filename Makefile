@@ -28,13 +28,6 @@ install: server worker
 localTest:
 	@cd src/github.com/cjlucas/unnamedcast; go list ./... | grep -v vendor | xargs go test
 
-test:
-	$(DC_DEV) build web
-	@${DC_DEV} run -e DB_URL=mongodb://db/casttest web make localTest
-
-deploy: prodBuild
-	$(DC_PROD) up
-
 buildContext:
 	rm -rf build
 	mkdir build
@@ -47,8 +40,15 @@ devBuild: buildContext
 	$(DC_DEV) build watcher
 
 prodBuild: buildContext
+	$(DC_PROD) build web
+	$(DC_PROD) build worker
+
+test:
 	$(DC_DEV) build web
-	$(DC_DEV) build worker
+	@${DC_DEV} run -e DB_URL=mongodb://db/casttest web make localTest
+
+deploy: prodBuild
+	$(DC_PROD) up
 
 watch: devBuild
 	@$(DC_DEV) up
