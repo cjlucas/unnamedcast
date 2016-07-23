@@ -83,7 +83,7 @@ func (app *App) setupRoutes() {
 	app.g.GET("/search_feeds", app.RegisterEndpoint(&endpoint.SearchFeeds{}))
 	app.g.GET("/login", app.RegisterEndpoint(&endpoint.Login{}))
 
-	api := app.g.Group("/api", middleware.LogErrors(app.DB.Logs))
+	api := app.g.Group("/api", middleware.LogRequest(app.DB.Logs, false))
 
 	api.GET("/users", app.RegisterEndpoint(&endpoint.GetUsers{}))
 	api.POST("/users", app.RegisterEndpoint(&endpoint.CreateUser{}))

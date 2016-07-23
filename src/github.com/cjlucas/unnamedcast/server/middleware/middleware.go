@@ -73,7 +73,7 @@ func ParseQueryParams(info *queryparser.QueryParamInfo, params interface{}) gin.
 	}
 }
 
-func LogErrors(logs db.LogCollection) gin.HandlerFunc {
+func LogRequest(logs db.LogCollection, onlyErrors bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		body, err := ioutil.ReadAll(c.Request.Body)
 		c.Request.Body.Close()
@@ -86,7 +86,7 @@ func LogErrors(logs db.LogCollection) gin.HandlerFunc {
 		c.Request.Body = ioutil.NopCloser(bytes.NewReader(body))
 		c.Next()
 
-		if len(c.Errors) == 0 {
+		if onlyErrors && len(c.Errors) == 0 {
 			return
 		}
 
