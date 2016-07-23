@@ -39,7 +39,7 @@ func TestUpdateItem_NoModification(t *testing.T) {
 		t.Fatal("Could not update item:", err)
 	}
 
-	if modTime != item.ModificationTime {
+	if !modTime.Equal(item.ModificationTime) {
 		t.Errorf("ModificationTime mismatch: %s != %s", item.ModificationTime, modTime)
 	}
 }

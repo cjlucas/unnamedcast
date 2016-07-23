@@ -43,7 +43,7 @@ prodBuild: buildContext
 	$(DC_PROD) build web
 	$(DC_PROD) build worker
 
-test:
+test: buildContext
 	$(DC_DEV) build web
 	@${DC_DEV} run -e DB_URL=mongodb://db/casttest web make localTest
 
