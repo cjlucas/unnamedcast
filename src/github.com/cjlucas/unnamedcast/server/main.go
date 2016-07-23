@@ -113,6 +113,8 @@ func (app *App) setupRoutes() {
 	api.GET("/jobs/:id", app.RegisterEndpoint(&endpoint.GetJob{}))
 	api.POST("/jobs", app.RegisterEndpoint(&endpoint.CreateJob{}))
 
+	api.GET("/logs", app.RegisterEndpoint(&endpoint.GetLogs{}))
+
 	api.GET("/stats/queues", app.RegisterEndpoint(&endpoint.GetQueueStats{}))
 }
 
