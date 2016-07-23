@@ -86,7 +86,12 @@ func LogRequest(logs db.LogCollection, onlyErrors bool) gin.HandlerFunc {
 		c.Request.Body = ioutil.NopCloser(bytes.NewReader(body))
 		c.Next()
 
-		if onlyErrors && len(c.Errors) == 0 {
+		var errs []string
+		for _, e := range c.Errors {
+			errs = append(errs, e.Error())
+		}
+
+		if onlyErrors && len(errs) == 0 {
 			return
 		}
 
@@ -97,7 +102,7 @@ func LogRequest(logs db.LogCollection, onlyErrors bool) gin.HandlerFunc {
 			URL:           c.Request.URL.String(),
 			StatusCode:    c.Writer.Status(),
 			RemoteAddr:    c.ClientIP(),
-			Errors:        c.Errors,
+			Errors:        errs,
 		})
 	}
 }
