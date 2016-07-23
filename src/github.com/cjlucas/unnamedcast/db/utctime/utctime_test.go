@@ -6,11 +6,15 @@ import (
 )
 
 func TestBefore(t *testing.T) {
+	ti := time.Now()
+
 	cases := []struct {
 		lhs time.Time
 		rhs time.Time
 	}{
-		{time.Time{}, time.Time{}},
+		{ti, ti},
+		{ti.Add(-1 * time.Second), ti.Add(1 * time.Second)},
+		{ti.Add(1 * time.Second), ti.Add(-1 * time.Second)},
 	}
 
 	for _, c := range cases {
