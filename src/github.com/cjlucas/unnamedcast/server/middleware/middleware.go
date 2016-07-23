@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"time"
 
 	"github.com/cjlucas/unnamedcast/db"
 	"github.com/cjlucas/unnamedcast/server/queryparser"
@@ -84,7 +85,10 @@ func LogRequest(logs db.LogCollection) gin.HandlerFunc {
 		}
 
 		c.Request.Body = ioutil.NopCloser(bytes.NewReader(body))
+
+		start := time.Now()
 		c.Next()
+		executionTime := float32(time.Now().Sub(start)) / float32(time.Second)
 
 		logs.Create(&db.Log{
 			Method:        c.Request.Method,
@@ -93,6 +97,7 @@ func LogRequest(logs db.LogCollection) gin.HandlerFunc {
 			URL:           c.Request.URL.String(),
 			StatusCode:    c.Writer.Status(),
 			RemoteAddr:    c.ClientIP(),
+			ExecutionTime: executionTime,
 			Errors:        c.Errors.Errors(),
 		})
 	}
