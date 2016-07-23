@@ -91,10 +91,6 @@ func LogRequest(logs db.LogCollection) gin.HandlerFunc {
 			errs = append(errs, e.Error())
 		}
 
-		if len(errs) == 0 {
-			return
-		}
-
 		logs.Create(&db.Log{
 			Method:        c.Request.Method,
 			RequestHeader: c.Request.Header,
