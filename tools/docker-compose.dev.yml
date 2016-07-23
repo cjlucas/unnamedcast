@@ -40,7 +40,7 @@ services:
       - DB_URL=mongodb://db:27017/cast
       - API_URL=http://web:80
       - REDIS_URL=redis://rdb:6379
-    command: sh -c 'make worker && worker -q update-feed -q update-user-feeds'
+    command: sh -c 'make worker && worker'
   redis:
     image: redis
     ports:

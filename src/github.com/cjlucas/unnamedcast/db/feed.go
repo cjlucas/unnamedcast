@@ -1,7 +1,6 @@
 package db
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/cjlucas/unnamedcast/db/utctime"
@@ -119,7 +118,6 @@ func (c ItemCollection) Update(item *Item) error {
 	}
 
 	if CopyModel(&origItem, item, "CreationTime", "ModificationTime") {
-		fmt.Println("item was modified")
 		item.ModificationTime = utctime.Now()
 	}
 
