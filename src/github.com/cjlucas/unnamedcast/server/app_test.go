@@ -360,9 +360,7 @@ func TestGetUserItemStates_WithModifiedSinceParam(t *testing.T) {
 	modTime := user.ItemStates[0].ModificationTime
 
 	urlWithTime := func(modTime utctime.Time) string {
-		url := fmt.Sprintf("/api/users/%s/states?modified_since=%s", user.ID.Hex(), modTime.Format(time.RFC3339))
-		fmt.Println(url)
-		return url
+		return fmt.Sprintf("/api/users/%s/states?modified_since=%s", user.ID.Hex(), modTime.Format(time.RFC3339))
 	}
 
 	var out []db.ItemState
