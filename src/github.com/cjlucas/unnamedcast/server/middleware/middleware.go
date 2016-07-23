@@ -86,11 +86,6 @@ func LogRequest(logs db.LogCollection) gin.HandlerFunc {
 		c.Request.Body = ioutil.NopCloser(bytes.NewReader(body))
 		c.Next()
 
-		var errs []string
-		for _, e := range c.Errors {
-			errs = append(errs, e.Error())
-		}
-
 		logs.Create(&db.Log{
 			Method:        c.Request.Method,
 			RequestHeader: c.Request.Header,
@@ -98,7 +93,7 @@ func LogRequest(logs db.LogCollection) gin.HandlerFunc {
 			URL:           c.Request.URL.String(),
 			StatusCode:    c.Writer.Status(),
 			RemoteAddr:    c.ClientIP(),
-			Errors:        errs,
+			Errors:        c.Errors.Errors(),
 		})
 	}
 }
