@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"time"
 
 	"github.com/cjlucas/unnamedcast/db"
 	"github.com/cjlucas/unnamedcast/server/queryparser"
@@ -73,7 +74,7 @@ func ParseQueryParams(info *queryparser.QueryParamInfo, params interface{}) gin.
 	}
 }
 
-func LogErrors(logs db.LogCollection) gin.HandlerFunc {
+func LogRequest(logs db.LogCollection) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		body, err := ioutil.ReadAll(c.Request.Body)
 		c.Request.Body.Close()
@@ -84,11 +85,10 @@ func LogErrors(logs db.LogCollection) gin.HandlerFunc {
 		}
 
 		c.Request.Body = ioutil.NopCloser(bytes.NewReader(body))
-		c.Next()
 
-		if len(c.Errors) == 0 {
-			return
-		}
+		start := time.Now()
+		c.Next()
+		executionTime := float32(time.Now().Sub(start)) / float32(time.Second)
 
 		logs.Create(&db.Log{
 			Method:        c.Request.Method,
@@ -97,7 +97,8 @@ func LogErrors(logs db.LogCollection) gin.HandlerFunc {
 			URL:           c.Request.URL.String(),
 			StatusCode:    c.Writer.Status(),
 			RemoteAddr:    c.ClientIP(),
-			Errors:        c.Errors,
+			ExecutionTime: executionTime,
+			Errors:        c.Errors.Errors(),
 		})
 	}
 }
