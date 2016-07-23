@@ -1,19 +1,23 @@
 package db
 
-import "time"
+import (
+	"time"
+
+	"github.com/cjlucas/unnamedcast/db/utctime"
+)
 
 type Feed struct {
-	ID                ID        `bson:"_id,omitempty" json:"id"`
-	Title             string    `json:"title" bson:"title" index:",text"`
-	URL               string    `json:"url" bson:"url" index:",unique"`
-	Author            string    `json:"author" bson:"author"`
-	Items             []ID      `json:"items" bson:"items"`
-	CreationTime      time.Time `json:"creation_time" bson:"creation_time"`
-	ModificationTime  time.Time `json:"modification_time" bson:"modification_time" index:"modification_time"`
-	ImageURL          string    `json:"image_url" bson:"image_url"`
-	ITunesID          int       `json:"itunes_id" bson:"itunes_id" index:"itunes_id"`
-	ITunesReviewCount int       `json:"itunes_review_count" bson:"itunes_review_count"`
-	ITunesRatingCount int       `json:"itunes_rating_count" bson:"itunes_rating_count"`
+	ID                ID           `bson:"_id,omitempty" json:"id"`
+	Title             string       `json:"title" bson:"title" index:",text"`
+	URL               string       `json:"url" bson:"url" index:",unique"`
+	Author            string       `json:"author" bson:"author"`
+	Items             []ID         `json:"items" bson:"items"`
+	CreationTime      utctime.Time `json:"creation_time" bson:"creation_time"`
+	ModificationTime  utctime.Time `json:"modification_time" bson:"modification_time" index:"modification_time"`
+	ImageURL          string       `json:"image_url" bson:"image_url"`
+	ITunesID          int          `json:"itunes_id" bson:"itunes_id" index:"itunes_id"`
+	ITunesReviewCount int          `json:"itunes_review_count" bson:"itunes_review_count"`
+	ITunesRatingCount int          `json:"itunes_rating_count" bson:"itunes_rating_count"`
 
 	Category struct {
 		Name          string   `json:"name" bson:"name"`
@@ -42,9 +46,9 @@ type Item struct {
 	Description      string        `json:"description" bson:"description"`
 	Duration         time.Duration `json:"duration" bson:"duration"`
 	Size             int           `json:"size" bson:"size"`
-	PublicationTime  time.Time     `json:"publication_time" bson:"publication_time"`
-	CreationTime     time.Time     `json:"creation_time" bson:"creation_time"`
-	ModificationTime time.Time     `json:"modification_time" bson:"modification_time"`
+	PublicationTime  utctime.Time  `json:"publication_time" bson:"publication_time"`
+	CreationTime     utctime.Time  `json:"creation_time" bson:"creation_time"`
+	ModificationTime utctime.Time  `json:"modification_time" bson:"modification_time"`
 	ImageURL         string        `json:"image_url" bson:"image_url"`
 }
 
@@ -62,8 +66,8 @@ func (c FeedCollection) FeedByID(id ID) (*Feed, error) {
 
 func (c FeedCollection) Create(feed *Feed) error {
 	feed.ID = NewID()
-	feed.CreationTime = time.Now().UTC()
-	feed.ModificationTime = time.Now().UTC()
+	feed.CreationTime = utctime.Now()
+	feed.ModificationTime = utctime.Now()
 	return c.insert(feed)
 }
 
@@ -90,7 +94,7 @@ func (c FeedCollection) Update(feed *Feed) error {
 	}
 
 	if CopyModel(origFeed, feed, ignoredFields...) {
-		origFeed.ModificationTime = time.Now().UTC()
+		origFeed.ModificationTime = utctime.Now()
 	}
 
 	return c.c.UpdateId(origFeed.ID, &origFeed)
@@ -102,8 +106,8 @@ type ItemCollection struct {
 
 func (c ItemCollection) Create(item *Item) error {
 	item.ID = NewID()
-	item.CreationTime = time.Now().UTC()
-	item.ModificationTime = time.Now().UTC()
+	item.CreationTime = utctime.Now()
+	item.ModificationTime = utctime.Now()
 	return c.insert(item)
 }
 
@@ -113,16 +117,8 @@ func (c ItemCollection) Update(item *Item) error {
 		return err
 	}
 
-	// Time needs to be UTC because CopyModel will detect
-	// a change if the time zones don't match.
-	//
-	// An alternate solution would be require UTC for all times, everywhere.
-	// This would have to be done at a choke point like the JSON/BSON
-	// [un]marshallers
-	item.PublicationTime = item.PublicationTime.UTC()
-	origItem.PublicationTime = origItem.PublicationTime.UTC()
 	if CopyModel(&origItem, item, "CreationTime", "ModificationTime") {
-		item.ModificationTime = time.Now().UTC()
+		item.ModificationTime = utctime.Now()
 	}
 
 	return c.c.UpdateId(origItem.ID, &origItem)

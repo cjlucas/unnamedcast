@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+
+	"github.com/cjlucas/unnamedcast/db/utctime"
 )
 
 type FieldInfo struct {
@@ -141,6 +143,21 @@ func (info *ModelInfo) LookupDBName(name string) (FieldInfo, bool) {
 	return info.lookupName(name, info.bsonNameMap)
 }
 
+// fieldsEqual checks if two values are equal. It handles special cases
+// such as utctime.Time, which would be flagged as false if both operand's
+// location were not set to UTC.
+func fieldsEqual(a, b reflect.Value) bool {
+	inA := a.Interface()
+	inB := b.Interface()
+
+	switch t := inA.(type) {
+	case utctime.Time:
+		return t.Equal(inB.(utctime.Time))
+	}
+
+	return reflect.DeepEqual(inA, inB)
+}
+
 // CopyModel copies all the fields from m2 into m1 excluding any fields
 // specified by ignoredFields. A boolean is returned representing whether
 // any data has changed in m1 as a result of the copy.
@@ -176,7 +193,7 @@ func CopyModel(m1, m2 interface{}, ignoredFields ...string) bool {
 			continue
 		}
 
-		if !reflect.DeepEqual(f.Interface(), f2.Interface()) {
+		if !fieldsEqual(f, f2) {
 			changed = true
 			if !f.CanSet() {
 				panic(fmt.Sprintf("Cannot set field %s", fieldName))

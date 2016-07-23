@@ -1,14 +1,14 @@
 package db
 
 import (
-	"time"
+	"github.com/cjlucas/unnamedcast/db/utctime"
 
 	"gopkg.in/mgo.v2/bson"
 )
 
 type JobLogEntry struct {
-	Time time.Time `json:"time" bson:"time"`
-	Line string    `json:"line" bson:"line"`
+	Time utctime.Time `json:"time" bson:"time"`
+	Line string       `json:"line" bson:"line"`
 }
 
 type Job struct {
@@ -19,9 +19,9 @@ type Job struct {
 	State    string      `json:"state" bson:"state" index:"state"`
 	Payload  interface{} `json:"payload" bson:"payload"`
 	// CreationTime is the time at which the job was created in koda
-	CreationTime     time.Time     `json:"creation_time" bson:"creation_time" index:"creation_time"`
-	ModificationTime time.Time     `json:"modification_time" bson:"modification_time" index:"modification_time"`
-	CompletionTime   time.Time     `json:"completion_time" bson:"completion_time"`
+	CreationTime     utctime.Time  `json:"creation_time" bson:"creation_time" index:"creation_time"`
+	ModificationTime utctime.Time  `json:"modification_time" bson:"modification_time" index:"modification_time"`
+	CompletionTime   utctime.Time  `json:"completion_time" bson:"completion_time"`
 	Log              []JobLogEntry `json:"log" bson:"log"`
 }
 
@@ -37,14 +37,14 @@ func (c JobCollection) FindByKodaID(id int) *Result {
 
 func (c JobCollection) Create(job Job) (Job, error) {
 	job.ID = NewID()
-	job.CreationTime = time.Now().UTC()
+	job.CreationTime = utctime.Now()
 	job.ModificationTime = job.CreationTime
 	return job, c.c.Insert(job)
 }
 
 func (c JobCollection) UpdateState(jobID ID, state string) error {
 	update := bson.M{"state": state}
-	update["modification_time"] = time.Now().UTC()
+	update["modification_time"] = utctime.Now()
 	if state == "finished" || state == "dead" {
 		update["completion_time"] = update["modification_time"]
 	}
@@ -53,7 +53,7 @@ func (c JobCollection) UpdateState(jobID ID, state string) error {
 
 func (c JobCollection) AppendLog(jobID ID, line string) error {
 	entry := JobLogEntry{
-		Time: time.Now().UTC(),
+		Time: utctime.Now(),
 		Line: line,
 	}
 	return c.c.Update(bson.M{"_id": jobID}, bson.M{

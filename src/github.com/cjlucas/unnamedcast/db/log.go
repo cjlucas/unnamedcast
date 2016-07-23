@@ -1,6 +1,6 @@
 package db
 
-import "time"
+import "github.com/cjlucas/unnamedcast/db/utctime"
 
 type Log struct {
 	ID            ID                  `bson:"_id,omitempty" json:"id"`
@@ -11,7 +11,7 @@ type Log struct {
 	StatusCode    int                 `bson:"status_code" json:"status_code"`
 	RemoteAddr    string              `bson:"remote_addr" json:"remote_addr"`
 	Errors        interface{}         `bson:"errors" json:"errors"`
-	CreationTime  time.Time           `bson:"creation_time" json:"creation_time"`
+	CreationTime  utctime.Time        `bson:"creation_time" json:"creation_time"`
 }
 
 type LogCollection struct {
@@ -28,6 +28,6 @@ func (c LogCollection) LogByID(id ID) (*Log, error) {
 
 func (c LogCollection) Create(log *Log) error {
 	log.ID = NewID()
-	log.CreationTime = time.Now().UTC()
+	log.CreationTime = utctime.Now()
 	return c.insert(log)
 }

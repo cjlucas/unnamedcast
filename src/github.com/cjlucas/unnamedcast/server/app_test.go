@@ -14,6 +14,7 @@ import (
 	"github.com/cjlucas/koda-go"
 	"github.com/cjlucas/unnamedcast/api"
 	"github.com/cjlucas/unnamedcast/db"
+	"github.com/cjlucas/unnamedcast/db/utctime"
 	"github.com/gin-gonic/gin"
 )
 
@@ -349,7 +350,7 @@ func TestGetUserItemStates_WithModifiedSinceParam(t *testing.T) {
 	user.ItemStates = append(user.ItemStates, db.ItemState{
 		ItemID:           db.NewID(),
 		Position:         5,
-		ModificationTime: time.Now(),
+		ModificationTime: utctime.Now(),
 	})
 
 	if err := app.DB.Users.Update(user); err != nil {
@@ -358,7 +359,7 @@ func TestGetUserItemStates_WithModifiedSinceParam(t *testing.T) {
 
 	modTime := user.ItemStates[0].ModificationTime
 
-	urlWithTime := func(modTime time.Time) string {
+	urlWithTime := func(modTime utctime.Time) string {
 		return fmt.Sprintf("/api/users/%s/states?modified_since=%s", user.ID.Hex(), modTime.Format(time.RFC3339))
 	}
 
@@ -593,11 +594,11 @@ func TestGetFeedSortedByModificationTime(t *testing.T) {
 	app := newTestApp()
 	feed1 := createFeed(t, app, &db.Feed{
 		URL:              "http://google.com",
-		ModificationTime: time.Now(),
+		ModificationTime: utctime.Now(),
 	})
 	feed2 := createFeed(t, app, &db.Feed{
 		URL:              "http://google2.com",
-		ModificationTime: time.Now(),
+		ModificationTime: utctime.Now(),
 	})
 
 	var out []db.Feed

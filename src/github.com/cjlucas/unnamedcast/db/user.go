@@ -1,7 +1,7 @@
 package db
 
 import (
-	"time"
+	"github.com/cjlucas/unnamedcast/db/utctime"
 
 	"golang.org/x/crypto/bcrypt"
 
@@ -19,20 +19,20 @@ const (
 // ItemState represents the state of an unplayed/in progress items
 // Played items will not have an associated state.
 type ItemState struct {
-	ItemID           ID        `json:"item_id" bson:"item_id"`
-	State            itemState `json:"state" bson:"state"`
-	Position         float64   `json:"position" bson:"position"` // 0 if item is unplayed
-	ModificationTime time.Time `json:"modification_time" bson:"modification_time"`
+	ItemID           ID           `json:"item_id" bson:"item_id"`
+	State            itemState    `json:"state" bson:"state"`
+	Position         float64      `json:"position" bson:"position"` // 0 if item is unplayed
+	ModificationTime utctime.Time `json:"modification_time" bson:"modification_time"`
 }
 
 type User struct {
-	ID               ID          `bson:"_id,omitempty" json:"id"`
-	Username         string      `json:"username" bson:"username" index:",unique"`
-	Password         string      `json:"-" bson:"password"` // encrypted
-	FeedIDs          []ID        `json:"feeds" bson:"feed_ids" index:"feed_ids"`
-	ItemStates       []ItemState `json:"states" bson:"states"`
-	CreationTime     time.Time   `json:"creation_time" bson:"creation_time"`
-	ModificationTime time.Time   `json:"modification_time" bson:"modification_time"`
+	ID               ID           `bson:"_id,omitempty" json:"id"`
+	Username         string       `json:"username" bson:"username" index:",unique"`
+	Password         string       `json:"-" bson:"password"` // encrypted
+	FeedIDs          []ID         `json:"feeds" bson:"feed_ids" index:"feed_ids"`
+	ItemStates       []ItemState  `json:"states" bson:"states"`
+	CreationTime     utctime.Time `json:"creation_time" bson:"creation_time"`
+	ModificationTime utctime.Time `json:"modification_time" bson:"modification_time"`
 }
 
 type UserCollection struct {
@@ -47,7 +47,7 @@ func (c UserCollection) Create(username, password string) (*User, error) {
 		return nil, err
 	}
 
-	now := time.Now().UTC()
+	now := utctime.Now()
 	user := User{
 		ID:               NewID(),
 		Username:         username,
@@ -139,7 +139,7 @@ func (c UserCollection) Update(user *User) error {
 	}
 
 	if CopyModel(&origUser, user, "ID", "Username", "Password") {
-		user.ModificationTime = time.Now().UTC()
+		user.ModificationTime = utctime.Now()
 	}
 
 	return c.c.UpdateId(origUser.ID, &origUser)
