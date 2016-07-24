@@ -37,7 +37,6 @@ buildContext:
 devBuild: buildContext
 	$(DC_DEV) build web
 	$(DC_DEV) build worker
-	$(DC_DEV) build watcher
 
 prodBuild: buildContext
 	$(DC_PROD) build web
