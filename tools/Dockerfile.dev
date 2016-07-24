@@ -11,3 +11,5 @@ WORKDIR /app
 
 ENV GOPATH /app
 ENV PATH $PATH:/app/bin
+
+RUN make install

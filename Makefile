@@ -50,8 +50,12 @@ test: buildContext
 deploy: prodBuild
 	$(DC_PROD) up
 
-watch: devBuild
-	@$(DC_DEV) up
+dev: devBuild
+	$(DC_DEV) up
+
+watch:
+	@$(DC_DEV) build --no-cache watcher
+	@$(DC_DEV) run watcher webpack --watch --watch-poll
 
 docker: buildContext
 	@echo "Building docker image..."

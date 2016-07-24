@@ -40,7 +40,7 @@ services:
       - DB_URL=mongodb://db:27017/cast
       - API_URL=http://web:80
       - REDIS_URL=redis://rdb:6379
-    command: sh -c 'make worker && worker'
+    entrypoint: worker
   redis:
     image: redis
     ports:
@@ -53,10 +53,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.watcher
-    depends_on:
-      - web
     volumes:
       - ../dashboard:/app
       - dashboard:/app/dist
       - node_modules:/app/node_modules
-    command: webpack --watch --watch-poll
+    command: ls
