@@ -109,6 +109,7 @@ func newModelInfo(m interface{}) ModelInfo {
 		if tag.IndexName != "" {
 			if idx, ok := info.Indexes[tag.IndexName]; ok {
 				idx.Key = append(idx.Key, tag.BSONName)
+				info.Indexes[tag.IndexName] = idx
 			} else {
 				info.Indexes[tag.IndexName] = Index{
 					Name:   tag.IndexName,

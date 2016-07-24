@@ -91,6 +91,19 @@ func TestNewModelInfo(t *testing.T) {
 				},
 			},
 		},
+		{
+			In: struct {
+				A int    `json:"a" bson:"a" index:"idx"`
+				B string `json:"b" bson:"b" index:"idx"`
+			}{},
+			ExpectedIndexes: map[string]Index{
+				"idx": {
+					Name:   "idx",
+					Key:    []string{"a", "b"},
+					Unique: false,
+				},
+			},
+		},
 	}
 
 	for _, c := range cases {
