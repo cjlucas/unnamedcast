@@ -7,7 +7,8 @@ type Log struct {
 	Method        string              `bson:"method" json:"method"`
 	RequestHeader map[string][]string `bson:"request_header" json:"request_header"`
 	RequestBody   string              `bson:"request_body" json:"request_body"`
-	URL           string              `bson:"url" json:"url"`
+	Endpoint      string              `bson:"endpoint" json:"endpoint" index:"endpoint"`
+	Query         string              `bson:"query" json:"query"`
 	StatusCode    int                 `bson:"status_code" json:"status_code" index:"status_code"`
 	RemoteAddr    string              `bson:"remote_addr" json:"remote_addr"`
 	Errors        []string            `bson:"errors" json:"errors"`

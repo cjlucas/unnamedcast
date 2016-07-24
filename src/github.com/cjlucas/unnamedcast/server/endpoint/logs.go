@@ -38,6 +38,10 @@ func (e *GetLogs) buildQuery(c *gin.Context) {
 
 	var split []int
 	for _, s := range strings.Split(e.Params.Code, "-") {
+		if s == "" {
+			continue
+		}
+
 		n, err := strconv.Atoi(s)
 		if err != nil {
 			c.AbortWithError(http.StatusBadRequest, fmt.Errorf("bad status code: %s", s))
@@ -53,6 +57,10 @@ func (e *GetLogs) buildQuery(c *gin.Context) {
 			"$gte": split[0],
 			"$lte": split[1],
 		}
+	}
+
+	if e.Query.Limit > 100 {
+		e.Query.Limit = 100
 	}
 }
 

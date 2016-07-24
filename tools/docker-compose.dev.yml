@@ -21,7 +21,7 @@ services:
       - API_URL=http://web:80
     ports:
       - "12100:80"
-    command: sh -c 'make server && server'
+    command: server
     volumes:
       - dashboard:/app/dashboard/dist
   worker:
