@@ -222,6 +222,23 @@ func (w *UpdateFeedWorker) Work(j *Job) error {
 	}
 	defer resp.Body.Close()
 
+	etag := resp.Header.Get("ETag")
+	if etag != "" && etag == origFeed.SourceETag {
+		j.Logf("ETag has not changed since last scrape, will not update")
+		return nil
+	}
+
+	var lastModifiedTime time.Time
+	if val := resp.Header.Get("Last-Modified"); val != "" {
+		lastModifiedTime, err = time.Parse(time.RFC1123, val)
+		if err != nil {
+			j.Logf("Failed to parse Last-Modified header: %s", err)
+		} else if lastModifiedTime.Equal(origFeed.SourceLastModified) {
+			j.Logf("Last-Modified has not changed since last scrape, will not update")
+			return nil
+		}
+	}
+
 	doc, err := rss.ParseFeed(resp.Body)
 	if err != nil {
 		return err
@@ -276,6 +293,8 @@ func (w *UpdateFeedWorker) Work(j *Job) error {
 	feed.ITunesRatingCount = origFeed.ITunesRatingCount
 	feed.ITunesReviewCount = origFeed.ITunesReviewCount
 	feed.LastScrapedTime = time.Now()
+	feed.SourceETag = etag
+	feed.SourceLastModified = lastModifiedTime
 	if err := w.API.UpdateFeed(feed); err != nil {
 		return err
 	}

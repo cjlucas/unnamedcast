@@ -38,18 +38,20 @@ type ItemState struct {
 }
 
 type Feed struct {
-	ID                string    `json:"id,omitempty"`
-	Title             string    `json:"title"`
-	URL               string    `json:"url"`
-	Author            string    `json:"author"`
-	ImageURL          string    `json:"image_url"`
-	ITunesID          int       `json:"itunes_id"`
-	ITunesReviewCount int       `json:"itunes_review_count"`
-	ITunesRatingCount int       `json:"itunes_rating_count"`
-	CreationTime      time.Time `json:"creation_time"`
-	ModificationTime  time.Time `json:"modification_time"`
-	LastScrapedTime   time.Time `json:"last_scraped_time"`
-	Items             []string  `json:"items"`
+	ID                 string    `json:"id,omitempty"`
+	Title              string    `json:"title"`
+	URL                string    `json:"url"`
+	Author             string    `json:"author"`
+	ImageURL           string    `json:"image_url"`
+	ITunesID           int       `json:"itunes_id"`
+	ITunesReviewCount  int       `json:"itunes_review_count"`
+	ITunesRatingCount  int       `json:"itunes_rating_count"`
+	CreationTime       time.Time `json:"creation_time"`
+	ModificationTime   time.Time `json:"modification_time"`
+	LastScrapedTime    time.Time `json:"last_scraped_time"`
+	Items              []string  `json:"items"`
+	SourceETag         string    `json:"src_etag"`
+	SourceLastModified time.Time `json:"src_last_modified"`
 
 	Category struct {
 		Name          string   `json:"name"`

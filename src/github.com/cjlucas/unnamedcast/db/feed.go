@@ -8,17 +8,19 @@ import (
 )
 
 type Feed struct {
-	ID                ID           `bson:"_id,omitempty" json:"id"`
-	Title             string       `json:"title" bson:"title" index:",text"`
-	URL               string       `json:"url" bson:"url" index:",unique"`
-	Author            string       `json:"author" bson:"author"`
-	CreationTime      utctime.Time `json:"creation_time" bson:"creation_time"`
-	ModificationTime  utctime.Time `json:"modification_time" bson:"modification_time" index:"modification_time"`
-	LastScrapedTime   utctime.Time `json:"last_scraped_time" bson:"last_scraped_time"`
-	ImageURL          string       `json:"image_url" bson:"image_url"`
-	ITunesID          int          `json:"itunes_id" bson:"itunes_id" index:"itunes_id"`
-	ITunesReviewCount int          `json:"itunes_review_count" bson:"itunes_review_count"`
-	ITunesRatingCount int          `json:"itunes_rating_count" bson:"itunes_rating_count"`
+	ID                 ID           `bson:"_id,omitempty" json:"id"`
+	Title              string       `json:"title" bson:"title" index:",text"`
+	URL                string       `json:"url" bson:"url" index:",unique"`
+	Author             string       `json:"author" bson:"author"`
+	CreationTime       utctime.Time `json:"creation_time" bson:"creation_time"`
+	ModificationTime   utctime.Time `json:"modification_time" bson:"modification_time" index:"modification_time"`
+	LastScrapedTime    utctime.Time `json:"last_scraped_time" bson:"last_scraped_time"`
+	ImageURL           string       `json:"image_url" bson:"image_url"`
+	ITunesID           int          `json:"itunes_id" bson:"itunes_id" index:"itunes_id"`
+	ITunesReviewCount  int          `json:"itunes_review_count" bson:"itunes_review_count"`
+	ITunesRatingCount  int          `json:"itunes_rating_count" bson:"itunes_rating_count"`
+	SourceETag         string       `json:"src_etag" bson:"src_etag"`
+	SourceLastModified utctime.Time `json:"src_last_modified" bson:"src_last_modified"`
 
 	Category struct {
 		Name          string   `json:"name" bson:"name"`
