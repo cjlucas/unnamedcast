@@ -74,7 +74,7 @@ func ParseQueryParams(info *queryparser.QueryParamInfo, params interface{}) gin.
 	}
 }
 
-func LogRequest(logs db.LogCollection) gin.HandlerFunc {
+func LogRequest(logs db.LogCollection, endpointCtxKey string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		body, err := ioutil.ReadAll(c.Request.Body)
 		c.Request.Body.Close()
@@ -94,7 +94,7 @@ func LogRequest(logs db.LogCollection) gin.HandlerFunc {
 			Method:        c.Request.Method,
 			RequestHeader: c.Request.Header,
 			RequestBody:   string(body),
-			Endpoint:      c.Request.URL.Path,
+			Endpoint:      c.MustGet(endpointCtxKey).(string),
 			Query:         c.Request.URL.RawQuery,
 			StatusCode:    c.Writer.Status(),
 			RemoteAddr:    c.ClientIP(),
