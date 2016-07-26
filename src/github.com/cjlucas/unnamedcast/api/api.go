@@ -48,6 +48,7 @@ type Feed struct {
 	ITunesRatingCount int       `json:"itunes_rating_count"`
 	CreationTime      time.Time `json:"creation_time"`
 	ModificationTime  time.Time `json:"modification_time"`
+	LastScrapedTime   time.Time `json:"last_scraped_time"`
 	Items             []string  `json:"items"`
 
 	Category struct {

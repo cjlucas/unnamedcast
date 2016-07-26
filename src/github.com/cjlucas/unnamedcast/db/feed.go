@@ -14,6 +14,7 @@ type Feed struct {
 	Author            string       `json:"author" bson:"author"`
 	CreationTime      utctime.Time `json:"creation_time" bson:"creation_time"`
 	ModificationTime  utctime.Time `json:"modification_time" bson:"modification_time" index:"modification_time"`
+	LastScrapedTime   utctime.Time `json:"last_scraped_time" bson:"last_scraped_time"`
 	ImageURL          string       `json:"image_url" bson:"image_url"`
 	ITunesID          int          `json:"itunes_id" bson:"itunes_id" index:"itunes_id"`
 	ITunesReviewCount int          `json:"itunes_review_count" bson:"itunes_review_count"`
