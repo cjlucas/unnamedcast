@@ -28,7 +28,7 @@ type Feed struct {
 type Item struct {
 	ID               ID            `json:"id" bson:"_id,omitempty"`
 	FeedID           ID            `json:"-" bson:"feed_id" index:"feed_id"`
-	GUID             string        `json:"guid" bson:"guid"`
+	GUID             string        `json:"guid" bson:"guid" index:"guid"`
 	Link             string        `json:"link" bson:"link"`
 	Title            string        `json:"title" bson:"title"`
 	URL              string        `json:"url" bson:"url"`
