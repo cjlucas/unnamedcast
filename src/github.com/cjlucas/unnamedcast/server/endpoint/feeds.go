@@ -141,9 +141,9 @@ func (e *UpdateFeed) Handle(c *gin.Context) {
 }
 
 type GetFeedItems struct {
-	DB    *db.DB
-	Feed  db.Feed
-	Query db.Query
+	DB     *db.DB
+	FeedID db.ID
+	Query  db.Query
 
 	Params struct {
 		sortParams
@@ -159,14 +159,14 @@ func (e *GetFeedItems) Bind() []gin.HandlerFunc {
 		middleware.RequireExistingModel(&middleware.RequireExistingModelOpts{
 			Collection: e.DB.Feeds,
 			BoundName:  "id",
-			Result:     &e.Feed,
+			ID:         &e.FeedID,
 		}),
 	}
 }
 
 func (e *GetFeedItems) Handle(c *gin.Context) {
 	e.Query.Filter = db.M{
-		"_id": db.M{"$in": []db.ID{}},
+		"feed_id": e.FeedID,
 	}
 
 	if !e.Params.ModifiedSince.IsZero() {
@@ -289,7 +289,7 @@ func (e *GetFeedItem) Handle(c *gin.Context) {
 
 type UpdateFeedItem struct {
 	DB     *db.DB
-	Feed   db.Feed
+	FeedID db.ID
 	ItemID db.ID
 	Item   db.Item
 }
@@ -299,7 +299,7 @@ func (e *UpdateFeedItem) Bind() []gin.HandlerFunc {
 		middleware.RequireExistingModel(&middleware.RequireExistingModelOpts{
 			Collection: e.DB.Feeds,
 			BoundName:  "id",
-			Result:     &e.Feed,
+			ID:         &e.FeedID,
 		}),
 		middleware.RequireExistingModel(&middleware.RequireExistingModelOpts{
 			Collection: e.DB.Items,
@@ -312,6 +312,7 @@ func (e *UpdateFeedItem) Bind() []gin.HandlerFunc {
 
 func (e *UpdateFeedItem) Handle(c *gin.Context) {
 	e.Item.ID = e.ItemID
+	e.Item.FeedID = e.FeedID
 
 	// if !e.Feed.HasItemWithID(e.Item.ID) {
 	// 	c.AbortWithError(http.StatusNotFound, errors.New("item does not belong to feed"))

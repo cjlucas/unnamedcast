@@ -1,6 +1,7 @@
 package db
 
 import (
+	"errors"
 	"time"
 
 	"github.com/cjlucas/unnamedcast/db/utctime"
@@ -95,6 +96,11 @@ type ItemCollection struct {
 }
 
 func (c ItemCollection) Create(item *Item) error {
+	// Put a method on ID to check for empty ID
+	var emptyID ID
+	if item.FeedID == emptyID {
+		return errors.New("feed id not set")
+	}
 	item.ID = NewID()
 	item.CreationTime = utctime.Now()
 	item.ModificationTime = utctime.Now()
@@ -112,4 +118,10 @@ func (c ItemCollection) Update(item *Item) error {
 	}
 
 	return c.c.UpdateId(origItem.ID, &origItem)
+}
+
+func (c ItemCollection) ItemsWithFeedID(feedID ID) *Result {
+	return c.Find(&Query{
+		Filter: M{"feed_id": feedID},
+	})
 }

@@ -66,14 +66,14 @@ func newTestApp() *App {
 
 func createFeed(t *testing.T, app *App, feed *db.Feed) *db.Feed {
 	if err := app.DB.Feeds.Create(feed); err != nil {
-		t.Fatal("Failed to create feed")
+		t.Fatalf("Failed to create feed: %s", err)
 	}
 	return feed
 }
 
 func createItem(t *testing.T, app *App, item *db.Item) *db.Item {
 	if err := app.DB.Items.Create(item); err != nil {
-		t.Fatal("Failed to create item")
+		t.Fatalf("Failed to create item: %s", err)
 	}
 	return item
 }
@@ -81,7 +81,7 @@ func createItem(t *testing.T, app *App, item *db.Item) *db.Item {
 func createUser(t *testing.T, app *App, username, password string) *db.User {
 	user, err := app.DB.Users.Create(username, password)
 	if err != nil {
-		t.Fatal("Failed to create user")
+		t.Fatalf("Failed to create user: %s", err)
 	}
 	return user
 }
@@ -89,7 +89,7 @@ func createUser(t *testing.T, app *App, username, password string) *db.User {
 func createJob(t *testing.T, app *App, job db.Job) db.Job {
 	job, err := app.DB.Jobs.Create(job)
 	if err != nil {
-		t.Fatal("Failed to create user")
+		t.Fatalf("Failed to create user: %s", err)
 	}
 	return job
 }
@@ -416,7 +416,8 @@ func TestPutUserItemState(t *testing.T) {
 	app := newTestApp()
 	user := createUser(t, app, "chris", "hithere")
 	item := createItem(t, app, &db.Item{
-		GUID: "http://google.com/1",
+		GUID:   "http://google.com/1",
+		FeedID: createFeed(t, app, &db.Feed{URL: "http://google.com"}).ID,
 	})
 
 	state := api.ItemState{
@@ -441,7 +442,8 @@ func TestPutUserItemState_WithOutdatedState(t *testing.T) {
 	app := newTestApp()
 	user := createUser(t, app, "chris", "hithere")
 	item := createItem(t, app, &db.Item{
-		GUID: "http://google.com/1",
+		GUID:   "http://google.com/1",
+		FeedID: createFeed(t, app, &db.Feed{URL: "http://google.com"}).ID,
 	})
 
 	state := api.ItemState{
@@ -472,7 +474,8 @@ func TestDeleteUserItemState(t *testing.T) {
 	app := newTestApp()
 	user := createUser(t, app, "chris", "hithere")
 	item := createItem(t, app, &db.Item{
-		GUID: "http://google.com/1",
+		GUID:   "http://google.com/1",
+		FeedID: createFeed(t, app, &db.Feed{URL: "http://google.com"}).ID,
 	})
 
 	user.ItemStates = append(user.ItemStates, db.ItemState{
@@ -537,20 +540,6 @@ func TestCreateFeed(t *testing.T) {
 	testEndpoint(t, endpointTestInfo{
 		Request:      newRequest("POST", "/api/feeds", nil),
 		ExpectedCode: http.StatusBadRequest,
-	})
-}
-
-func TestCreateFeedWithItems(t *testing.T) {
-	app := newTestApp()
-	feed := &db.Feed{
-		URL:   "http://google.com",
-		Items: []db.ID{db.NewID()},
-	}
-
-	testEndpoint(t, endpointTestInfo{
-		App:          app,
-		Request:      newRequest("POST", "/api/feeds", feed),
-		ExpectedCode: http.StatusConflict,
 	})
 }
 
@@ -717,14 +706,13 @@ func TestPutFeed(t *testing.T) {
 // Regression test to ensure items array is not modified
 func TestPutFeedWithExistingItems(t *testing.T) {
 	app := newTestApp()
-	item := createItem(t, app, &db.Item{
-		GUID: "http://google.com/item",
-	})
 	feed := createFeed(t, app, &db.Feed{
-		URL:   "http://google.com",
-		Items: []db.ID{item.ID},
+		URL: "http://google.com",
 	})
-	feed.Items = []db.ID{}
+	createItem(t, app, &db.Item{
+		GUID:   "http://google.com/item",
+		FeedID: feed.ID,
+	})
 
 	url := fmt.Sprintf("/api/feeds/%s", feed.ID.Hex())
 	testEndpoint(t, endpointTestInfo{
@@ -733,42 +721,24 @@ func TestPutFeedWithExistingItems(t *testing.T) {
 		ExpectedCode: http.StatusOK,
 	})
 
-	feed, err := app.DB.Feeds.FeedByID(feed.ID)
+	n, err := app.DB.Items.ItemsWithFeedID(feed.ID).Count()
 	if err != nil {
-		t.Fatal("Could not find feed")
+		t.Fatalf("ItemsWithFeedID failed: %s", err)
 	}
 
-	if len(feed.Items) != 1 {
-		t.Error("Items list was emptied")
+	if n != 1 {
+		t.Errorf("num items mismatch: %d != 1", n)
 	}
-}
-
-func TestPutFeedWithItems(t *testing.T) {
-	app := newTestApp()
-	item := createItem(t, app, &db.Item{
-		GUID: "http://google.com/item",
-	})
-	feed := createFeed(t, app, &db.Feed{
-		URL: "http://google.com",
-	})
-	feed.Items = append(feed.Items, item.ID)
-
-	url := fmt.Sprintf("/api/feeds/%s", feed.ID.Hex())
-	testEndpoint(t, endpointTestInfo{
-		App:          app,
-		Request:      newRequest("PUT", url, feed),
-		ExpectedCode: http.StatusConflict,
-	})
 }
 
 func TestGetUserFeedItems(t *testing.T) {
 	app := newTestApp()
-	item := createItem(t, app, &db.Item{
-		GUID: "http://google.com/item",
-	})
 	feed := createFeed(t, app, &db.Feed{
-		URL:   "http://google.com",
-		Items: []db.ID{item.ID},
+		URL: "http://google.com",
+	})
+	item := createItem(t, app, &db.Item{
+		GUID:   "http://google.com/item",
+		FeedID: feed.ID,
 	})
 
 	req := newRequest("GET", fmt.Sprintf("/api/feeds/%s/items", feed.ID.Hex()), nil)
@@ -782,20 +752,19 @@ func TestGetUserFeedItems(t *testing.T) {
 
 	if len(items) != 1 {
 		t.Errorf("items len mismatch: %d != %d", len(items), 1)
-		if items[0].ID != feed.Items[0] {
-			t.Errorf("item id mismatch: %s != %s", items[0].ID, feed.Items[0])
-		}
+	} else if items[0].ID != item.ID {
+		t.Errorf("item id mismatch: %s != %s", items[0].ID, item.ID)
 	}
 }
 
 func TestGetUserFeedItemsWithModTime(t *testing.T) {
 	app := newTestApp()
-	item := createItem(t, app, &db.Item{
-		GUID: "http://google.com/item",
-	})
 	feed := createFeed(t, app, &db.Feed{
-		URL:   "http://google.com",
-		Items: []db.ID{item.ID},
+		URL: "http://google.com",
+	})
+	item := createItem(t, app, &db.Item{
+		GUID:   "http://google.com/item",
+		FeedID: feed.ID,
 	})
 
 	modTime := item.ModificationTime.Add(1 * time.Second)
@@ -863,8 +832,8 @@ func TestGetFeedsUsers(t *testing.T) {
 func TestCreateFeedItem(t *testing.T) {
 	app := newTestApp()
 	feedID := createFeed(t, app, &db.Feed{URL: "http://google.com"}).ID
-
 	item := db.Item{GUID: "http://google.com/items/1"}
+
 	req := newRequest("POST", fmt.Sprintf("/api/feeds/%s/items", feedID.Hex()), &item)
 	var out db.Item
 	testEndpoint(t, endpointTestInfo{
@@ -878,24 +847,26 @@ func TestCreateFeedItem(t *testing.T) {
 		t.Errorf("GUID mismatch: %s != %s", out.GUID, item.GUID)
 	}
 
-	feed, err := app.DB.Feeds.FeedByID(feedID)
-	if err != nil {
-		t.Fatal("Could not fetch feed")
+	var items []db.Item
+	if err := app.DB.Items.ItemsWithFeedID(feedID).All(&items); err != nil {
+		t.Fatalf("ItemsWithFeedID failed: %s", err)
 	}
 
-	if len(feed.Items) != 1 {
-		t.Errorf("feed.Items len mismatch: %d != %d", len(feed.Items), 1)
-	} else if feed.Items[0] != out.ID {
-		t.Errorf("item.ID mismatch: %s != %s", feed.Items[0], out.ID)
+	if len(items) != 1 {
+		t.Errorf("items len mismatch: %d != %d", len(items), 1)
+	} else if items[0].ID != out.ID {
+		t.Errorf("id mismatch: %s != %s", items[0].ID, out.ID)
 	}
 }
 
 func TestGetFeedItem(t *testing.T) {
 	app := newTestApp()
-	item := createItem(t, app, &db.Item{GUID: "http://google.com/item"})
 	feed := createFeed(t, app, &db.Feed{
-		URL:   "http://google.com",
-		Items: []db.ID{item.ID},
+		URL: "http://google.com",
+	})
+	item := createItem(t, app, &db.Item{
+		GUID:   "http://google.com/item",
+		FeedID: feed.ID,
 	})
 
 	url := fmt.Sprintf("/api/feeds/%s/items/%s", feed.ID.Hex(), item.ID.Hex())
@@ -915,10 +886,12 @@ func TestGetFeedItem(t *testing.T) {
 
 func TestPutFeedItem(t *testing.T) {
 	app := newTestApp()
-	item := createItem(t, app, &db.Item{GUID: "http://google.com/item"})
 	feed := createFeed(t, app, &db.Feed{
-		URL:   "http://google.com",
-		Items: []db.ID{item.ID},
+		URL: "http://google.com",
+	})
+	item := createItem(t, app, &db.Item{
+		GUID:   "http://google.com/item",
+		FeedID: feed.ID,
 	})
 
 	item.URL = "http://google.com/item.mp3"
