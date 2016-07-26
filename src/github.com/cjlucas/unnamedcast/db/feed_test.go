@@ -72,3 +72,46 @@ func TestItemsWithFeedID(t *testing.T) {
 		t.Errorf("num items mismatch: %d != 1", n)
 	}
 }
+
+func TestCreateItem(t *testing.T) {
+	db := newDB()
+
+	feedID := createFeed(t, db, &Feed{URL: "http://google.com"}).ID
+	createItem(t, db, &Item{
+		GUID:   "http://google.com/1",
+		FeedID: feedID,
+	})
+	createItem(t, db, &Item{
+		GUID:   "http://google.com/2",
+		FeedID: feedID,
+	})
+
+	n, err := db.Items.Find(nil).Count()
+	if err != nil {
+		t.Fatalf("find items failed: %s", err)
+	}
+
+	if n != 2 {
+		t.Errorf("num items mismatch: %d != 2", n)
+	}
+}
+
+func TestCreateItem_Dupe(t *testing.T) {
+	db := newDB()
+
+	item := Item{
+		GUID:   "http://google.com/1",
+		FeedID: createFeed(t, db, &Feed{URL: "http://google.com"}).ID,
+	}
+	createItem(t, db, &item)
+	createItem(t, db, &item)
+
+	n, err := db.Items.Find(nil).Count()
+	if err != nil {
+		t.Fatalf("find items failed: %s", err)
+	}
+
+	if n != 1 {
+		t.Errorf("num items mismatch: %d != 1", n)
+	}
+}

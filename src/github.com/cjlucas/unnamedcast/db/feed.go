@@ -101,10 +101,12 @@ func (c ItemCollection) Create(item *Item) error {
 	if item.FeedID == emptyID {
 		return errors.New("feed id not set")
 	}
-	item.ID = NewID()
+	if item.ID == emptyID {
+		item.ID = NewID()
+	}
 	item.CreationTime = utctime.Now()
 	item.ModificationTime = utctime.Now()
-	return c.insert(item)
+	return c.upsert(M{"guid": item.GUID, "feed_id": item.FeedID}, item)
 }
 
 func (c ItemCollection) Update(item *Item) error {
