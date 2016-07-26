@@ -84,6 +84,11 @@ func (c collection) insert(model interface{}) error {
 	return c.c.Insert(model)
 }
 
+func (c collection) upsert(selector M, model interface{}) error {
+	_, err := c.c.Upsert(selector, model)
+	return err
+}
+
 // filterCond builds the "cond" value of a $filter operation from a Query.
 // More specifically, it converts the specified query.Filter into the expression
 // format required by the aggregation. varName is the variable name specified

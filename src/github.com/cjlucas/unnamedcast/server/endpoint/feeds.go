@@ -10,17 +10,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func validateFeed(feed *db.Feed) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if len(feed.Items) > 0 {
-			c.JSON(http.StatusConflict, gin.H{
-				"reason": "items is a read-only property",
-			})
-			c.Abort()
-		}
-	}
-}
-
 type Interface interface {
 	Bind() []gin.HandlerFunc
 	Handle(c *gin.Context)
@@ -83,7 +72,6 @@ type CreateFeed struct {
 func (e *CreateFeed) Bind() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
 		middleware.UnmarshalBody(&e.Feed),
-		validateFeed(&e.Feed),
 	}
 }
 
@@ -134,7 +122,6 @@ type UpdateFeed struct {
 func (e *UpdateFeed) Bind() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
 		middleware.UnmarshalBody(&e.Feed),
-		validateFeed(&e.Feed),
 		middleware.RequireExistingModel(&middleware.RequireExistingModelOpts{
 			Collection: e.DB.Feeds,
 			BoundName:  "id",
@@ -145,7 +132,6 @@ func (e *UpdateFeed) Bind() []gin.HandlerFunc {
 
 func (e *UpdateFeed) Handle(c *gin.Context) {
 	// Persist existing items
-	e.Feed.Items = e.ExistingFeed.Items
 
 	if err := e.DB.Feeds.Update(&e.Feed); err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
@@ -156,9 +142,9 @@ func (e *UpdateFeed) Handle(c *gin.Context) {
 }
 
 type GetFeedItems struct {
-	DB    *db.DB
-	Feed  db.Feed
-	Query db.Query
+	DB     *db.DB
+	FeedID db.ID
+	Query  db.Query
 
 	Params struct {
 		sortParams
@@ -174,14 +160,14 @@ func (e *GetFeedItems) Bind() []gin.HandlerFunc {
 		middleware.RequireExistingModel(&middleware.RequireExistingModelOpts{
 			Collection: e.DB.Feeds,
 			BoundName:  "id",
-			Result:     &e.Feed,
+			ID:         &e.FeedID,
 		}),
 	}
 }
 
 func (e *GetFeedItems) Handle(c *gin.Context) {
 	e.Query.Filter = db.M{
-		"_id": db.M{"$in": e.Feed.Items},
+		"feed_id": e.FeedID,
 	}
 
 	if !e.Params.ModifiedSince.IsZero() {
@@ -231,9 +217,9 @@ func (e *GetFeedUsers) Handle(c *gin.Context) {
 }
 
 type CreateFeedItem struct {
-	DB   *db.DB
-	Item db.Item
-	Feed db.Feed
+	DB     *db.DB
+	Item   db.Item
+	FeedID db.ID
 }
 
 func (e *CreateFeedItem) Bind() []gin.HandlerFunc {
@@ -241,13 +227,15 @@ func (e *CreateFeedItem) Bind() []gin.HandlerFunc {
 		middleware.RequireExistingModel(&middleware.RequireExistingModelOpts{
 			Collection: e.DB.Feeds,
 			BoundName:  "id",
-			Result:     &e.Feed,
+			ID:         &e.FeedID,
 		}),
 		middleware.UnmarshalBody(&e.Item),
 	}
 }
 
 func (e *CreateFeedItem) Handle(c *gin.Context) {
+	e.Item.FeedID = e.FeedID
+
 	if err := e.DB.Items.Create(&e.Item); err != nil {
 		if db.IsDup(err) {
 			c.JSON(http.StatusConflict, gin.H{
@@ -259,19 +247,12 @@ func (e *CreateFeedItem) Handle(c *gin.Context) {
 		return
 	}
 
-	e.Feed.Items = append(e.Feed.Items, e.Item.ID)
-
-	if err := e.DB.Feeds.Update(&e.Feed); err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
-		return
-	}
-
 	c.JSON(http.StatusOK, &e.Item)
 }
 
 type GetFeedItem struct {
 	DB     *db.DB
-	Feed   db.Feed
+	FeedID db.ID
 	ItemID db.ID
 }
 
@@ -280,7 +261,7 @@ func (e *GetFeedItem) Bind() []gin.HandlerFunc {
 		middleware.RequireExistingModel(&middleware.RequireExistingModelOpts{
 			Collection: e.DB.Feeds,
 			BoundName:  "id",
-			Result:     &e.Feed,
+			ID:         &e.FeedID,
 		}),
 		middleware.RequireExistingModel(&middleware.RequireExistingModelOpts{
 			Collection: e.DB.Items,
@@ -291,9 +272,12 @@ func (e *GetFeedItem) Bind() []gin.HandlerFunc {
 }
 
 func (e *GetFeedItem) Handle(c *gin.Context) {
-	// TODO: HasItemWithID should be a method on FeedCollection.
-	// Fetching the entire feed object is overkill
-	if !e.Feed.HasItemWithID(e.ItemID) {
+	n, err := e.DB.Items.ItemsWithFeedID(e.FeedID).Count()
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+	if n == 0 {
 		c.AbortWithError(http.StatusNotFound, errors.New("item does not belong to feed"))
 		return
 	}
@@ -309,7 +293,7 @@ func (e *GetFeedItem) Handle(c *gin.Context) {
 
 type UpdateFeedItem struct {
 	DB     *db.DB
-	Feed   db.Feed
+	FeedID db.ID
 	ItemID db.ID
 	Item   db.Item
 }
@@ -319,7 +303,7 @@ func (e *UpdateFeedItem) Bind() []gin.HandlerFunc {
 		middleware.RequireExistingModel(&middleware.RequireExistingModelOpts{
 			Collection: e.DB.Feeds,
 			BoundName:  "id",
-			Result:     &e.Feed,
+			ID:         &e.FeedID,
 		}),
 		middleware.RequireExistingModel(&middleware.RequireExistingModelOpts{
 			Collection: e.DB.Items,
@@ -332,8 +316,14 @@ func (e *UpdateFeedItem) Bind() []gin.HandlerFunc {
 
 func (e *UpdateFeedItem) Handle(c *gin.Context) {
 	e.Item.ID = e.ItemID
+	e.Item.FeedID = e.FeedID
 
-	if !e.Feed.HasItemWithID(e.Item.ID) {
+	n, err := e.DB.Items.ItemsWithFeedID(e.FeedID).Count()
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+	if n == 0 {
 		c.AbortWithError(http.StatusNotFound, errors.New("item does not belong to feed"))
 		return
 	}

@@ -1,6 +1,7 @@
 package db
 
 import (
+	"errors"
 	"time"
 
 	"github.com/cjlucas/unnamedcast/db/utctime"
@@ -11,7 +12,6 @@ type Feed struct {
 	Title             string       `json:"title" bson:"title" index:",text"`
 	URL               string       `json:"url" bson:"url" index:",unique"`
 	Author            string       `json:"author" bson:"author"`
-	Items             []ID         `json:"items" bson:"items"`
 	CreationTime      utctime.Time `json:"creation_time" bson:"creation_time"`
 	ModificationTime  utctime.Time `json:"modification_time" bson:"modification_time" index:"modification_time"`
 	ImageURL          string       `json:"image_url" bson:"image_url"`
@@ -25,19 +25,10 @@ type Feed struct {
 	} `json:"category"`
 }
 
-func (f *Feed) HasItemWithID(id ID) bool {
-	for i := range f.Items {
-		if f.Items[i] == id {
-			return true
-		}
-	}
-
-	return false
-}
-
 type Item struct {
 	ID               ID            `json:"id" bson:"_id,omitempty"`
-	GUID             string        `json:"guid" bson:"guid"`
+	FeedID           ID            `json:"-" bson:"feed_id" index:"feed_id"`
+	GUID             string        `json:"guid" bson:"guid" index:"guid"`
 	Link             string        `json:"link" bson:"link"`
 	Title            string        `json:"title" bson:"title"`
 	URL              string        `json:"url" bson:"url"`
@@ -105,10 +96,17 @@ type ItemCollection struct {
 }
 
 func (c ItemCollection) Create(item *Item) error {
-	item.ID = NewID()
+	// Put a method on ID to check for empty ID
+	var emptyID ID
+	if item.FeedID == emptyID {
+		return errors.New("feed id not set")
+	}
+	if item.ID == emptyID {
+		item.ID = NewID()
+	}
 	item.CreationTime = utctime.Now()
 	item.ModificationTime = utctime.Now()
-	return c.insert(item)
+	return c.upsert(M{"guid": item.GUID, "feed_id": item.FeedID}, item)
 }
 
 func (c ItemCollection) Update(item *Item) error {
@@ -122,4 +120,10 @@ func (c ItemCollection) Update(item *Item) error {
 	}
 
 	return c.c.UpdateId(origItem.ID, &origItem)
+}
+
+func (c ItemCollection) ItemsWithFeedID(feedID ID) *Result {
+	return c.Find(&Query{
+		Filter: M{"feed_id": feedID},
+	})
 }
