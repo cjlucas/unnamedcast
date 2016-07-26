@@ -1,7 +1,6 @@
 package endpoint
 
 import (
-	"errors"
 	"net/http"
 	"time"
 
@@ -9,17 +8,6 @@ import (
 	"github.com/cjlucas/unnamedcast/server/middleware"
 	"github.com/gin-gonic/gin"
 )
-
-func validateFeed(feed *db.Feed) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if len(feed.Items) > 0 {
-			c.JSON(http.StatusConflict, gin.H{
-				"reason": "items is a read-only property",
-			})
-			c.Abort()
-		}
-	}
-}
 
 type Interface interface {
 	Bind() []gin.HandlerFunc
@@ -83,7 +71,6 @@ type CreateFeed struct {
 func (e *CreateFeed) Bind() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
 		middleware.UnmarshalBody(&e.Feed),
-		validateFeed(&e.Feed),
 	}
 }
 
@@ -134,7 +121,6 @@ type UpdateFeed struct {
 func (e *UpdateFeed) Bind() []gin.HandlerFunc {
 	return []gin.HandlerFunc{
 		middleware.UnmarshalBody(&e.Feed),
-		validateFeed(&e.Feed),
 		middleware.RequireExistingModel(&middleware.RequireExistingModelOpts{
 			Collection: e.DB.Feeds,
 			BoundName:  "id",
@@ -145,7 +131,6 @@ func (e *UpdateFeed) Bind() []gin.HandlerFunc {
 
 func (e *UpdateFeed) Handle(c *gin.Context) {
 	// Persist existing items
-	e.Feed.Items = e.ExistingFeed.Items
 
 	if err := e.DB.Feeds.Update(&e.Feed); err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
@@ -181,7 +166,7 @@ func (e *GetFeedItems) Bind() []gin.HandlerFunc {
 
 func (e *GetFeedItems) Handle(c *gin.Context) {
 	e.Query.Filter = db.M{
-		"_id": db.M{"$in": e.Feed.Items},
+		"_id": db.M{"$in": []db.ID{}},
 	}
 
 	if !e.Params.ModifiedSince.IsZero() {
@@ -231,9 +216,9 @@ func (e *GetFeedUsers) Handle(c *gin.Context) {
 }
 
 type CreateFeedItem struct {
-	DB   *db.DB
-	Item db.Item
-	Feed db.Feed
+	DB     *db.DB
+	Item   db.Item
+	FeedID db.ID
 }
 
 func (e *CreateFeedItem) Bind() []gin.HandlerFunc {
@@ -241,13 +226,15 @@ func (e *CreateFeedItem) Bind() []gin.HandlerFunc {
 		middleware.RequireExistingModel(&middleware.RequireExistingModelOpts{
 			Collection: e.DB.Feeds,
 			BoundName:  "id",
-			Result:     &e.Feed,
+			ID:         &e.FeedID,
 		}),
 		middleware.UnmarshalBody(&e.Item),
 	}
 }
 
 func (e *CreateFeedItem) Handle(c *gin.Context) {
+	e.Item.FeedID = e.FeedID
+
 	if err := e.DB.Items.Create(&e.Item); err != nil {
 		if db.IsDup(err) {
 			c.JSON(http.StatusConflict, gin.H{
@@ -256,13 +243,6 @@ func (e *CreateFeedItem) Handle(c *gin.Context) {
 		} else {
 			c.AbortWithError(http.StatusBadRequest, err)
 		}
-		return
-	}
-
-	e.Feed.Items = append(e.Feed.Items, e.Item.ID)
-
-	if err := e.DB.Feeds.Update(&e.Feed); err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
 
@@ -293,10 +273,10 @@ func (e *GetFeedItem) Bind() []gin.HandlerFunc {
 func (e *GetFeedItem) Handle(c *gin.Context) {
 	// TODO: HasItemWithID should be a method on FeedCollection.
 	// Fetching the entire feed object is overkill
-	if !e.Feed.HasItemWithID(e.ItemID) {
-		c.AbortWithError(http.StatusNotFound, errors.New("item does not belong to feed"))
-		return
-	}
+	// if !e.Feed.HasItemWithID(e.ItemID) {
+	// 	c.AbortWithError(http.StatusNotFound, errors.New("item does not belong to feed"))
+	// 	return
+	// }
 
 	var item db.Item
 	if err := e.DB.Items.FindByID(e.ItemID).One(&item); err != nil {
@@ -333,10 +313,10 @@ func (e *UpdateFeedItem) Bind() []gin.HandlerFunc {
 func (e *UpdateFeedItem) Handle(c *gin.Context) {
 	e.Item.ID = e.ItemID
 
-	if !e.Feed.HasItemWithID(e.Item.ID) {
-		c.AbortWithError(http.StatusNotFound, errors.New("item does not belong to feed"))
-		return
-	}
+	// if !e.Feed.HasItemWithID(e.Item.ID) {
+	// 	c.AbortWithError(http.StatusNotFound, errors.New("item does not belong to feed"))
+	// 	return
+	// }
 
 	if err := e.DB.Items.Update(&e.Item); err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)

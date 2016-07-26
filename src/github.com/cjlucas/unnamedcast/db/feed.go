@@ -11,7 +11,6 @@ type Feed struct {
 	Title             string       `json:"title" bson:"title" index:",text"`
 	URL               string       `json:"url" bson:"url" index:",unique"`
 	Author            string       `json:"author" bson:"author"`
-	Items             []ID         `json:"items" bson:"items"`
 	CreationTime      utctime.Time `json:"creation_time" bson:"creation_time"`
 	ModificationTime  utctime.Time `json:"modification_time" bson:"modification_time" index:"modification_time"`
 	ImageURL          string       `json:"image_url" bson:"image_url"`
@@ -25,18 +24,9 @@ type Feed struct {
 	} `json:"category"`
 }
 
-func (f *Feed) HasItemWithID(id ID) bool {
-	for i := range f.Items {
-		if f.Items[i] == id {
-			return true
-		}
-	}
-
-	return false
-}
-
 type Item struct {
 	ID               ID            `json:"id" bson:"_id,omitempty"`
+	FeedID           ID            `json:"-" bson:"feed_id" index:"feed_id"`
 	GUID             string        `json:"guid" bson:"guid"`
 	Link             string        `json:"link" bson:"link"`
 	Title            string        `json:"title" bson:"title"`
