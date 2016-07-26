@@ -1,6 +1,7 @@
 package endpoint
 
 import (
+	"errors"
 	"net/http"
 	"time"
 
@@ -251,7 +252,7 @@ func (e *CreateFeedItem) Handle(c *gin.Context) {
 
 type GetFeedItem struct {
 	DB     *db.DB
-	Feed   db.Feed
+	FeedID db.ID
 	ItemID db.ID
 }
 
@@ -260,7 +261,7 @@ func (e *GetFeedItem) Bind() []gin.HandlerFunc {
 		middleware.RequireExistingModel(&middleware.RequireExistingModelOpts{
 			Collection: e.DB.Feeds,
 			BoundName:  "id",
-			Result:     &e.Feed,
+			ID:         &e.FeedID,
 		}),
 		middleware.RequireExistingModel(&middleware.RequireExistingModelOpts{
 			Collection: e.DB.Items,
@@ -271,12 +272,15 @@ func (e *GetFeedItem) Bind() []gin.HandlerFunc {
 }
 
 func (e *GetFeedItem) Handle(c *gin.Context) {
-	// TODO: HasItemWithID should be a method on FeedCollection.
-	// Fetching the entire feed object is overkill
-	// if !e.Feed.HasItemWithID(e.ItemID) {
-	// 	c.AbortWithError(http.StatusNotFound, errors.New("item does not belong to feed"))
-	// 	return
-	// }
+	n, err := e.DB.Items.ItemsWithFeedID(e.FeedID).Count()
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+	if n == 0 {
+		c.AbortWithError(http.StatusNotFound, errors.New("item does not belong to feed"))
+		return
+	}
 
 	var item db.Item
 	if err := e.DB.Items.FindByID(e.ItemID).One(&item); err != nil {
@@ -314,10 +318,15 @@ func (e *UpdateFeedItem) Handle(c *gin.Context) {
 	e.Item.ID = e.ItemID
 	e.Item.FeedID = e.FeedID
 
-	// if !e.Feed.HasItemWithID(e.Item.ID) {
-	// 	c.AbortWithError(http.StatusNotFound, errors.New("item does not belong to feed"))
-	// 	return
-	// }
+	n, err := e.DB.Items.ItemsWithFeedID(e.FeedID).Count()
+	if err != nil {
+		c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+	if n == 0 {
+		c.AbortWithError(http.StatusNotFound, errors.New("item does not belong to feed"))
+		return
+	}
 
 	if err := e.DB.Items.Update(&e.Item); err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
