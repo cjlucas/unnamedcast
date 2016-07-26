@@ -90,11 +90,17 @@ func LogRequest(logs db.LogCollection, endpointCtxKey string) gin.HandlerFunc {
 		c.Next()
 		executionTime := float32(time.Now().Sub(start)) / float32(time.Second)
 
+		params := make(map[string]string)
+		for _, param := range c.Params {
+			params[param.Key] = param.Value
+		}
+
 		logs.Create(&db.Log{
 			Method:        c.Request.Method,
 			RequestHeader: c.Request.Header,
 			RequestBody:   string(body),
 			Endpoint:      c.MustGet(endpointCtxKey).(string),
+			Params:        params,
 			Query:         c.Request.URL.RawQuery,
 			StatusCode:    c.Writer.Status(),
 			RemoteAddr:    c.ClientIP(),
