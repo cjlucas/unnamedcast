@@ -275,6 +275,7 @@ func (w *UpdateFeedWorker) Work(j *Job) error {
 	feed.URL = origFeed.URL
 	feed.ITunesRatingCount = origFeed.ITunesRatingCount
 	feed.ITunesReviewCount = origFeed.ITunesReviewCount
+	feed.LastScrapedTime = time.Now()
 	if err := w.API.UpdateFeed(feed); err != nil {
 		return err
 	}
@@ -282,6 +283,11 @@ func (w *UpdateFeedWorker) Work(j *Job) error {
 	users, err := w.API.GetFeedsUsers(payload.FeedID)
 	if err != nil {
 		return fmt.Errorf("Failed to get users' feeds: %s", err)
+	}
+
+	// Don't update user feeds on initial scrape
+	if origFeed.LastScrapedTime.IsZero() {
+		return nil
 	}
 
 	for i := range users {
