@@ -233,9 +233,13 @@ func (w *UpdateFeedWorker) Work(j *Job) error {
 		lastModifiedTime, err = time.Parse(time.RFC1123, val)
 		if err != nil {
 			j.Logf("Failed to parse Last-Modified header: %s", err)
-		} else if lastModifiedTime.Equal(origFeed.SourceLastModified) {
-			j.Logf("Last-Modified has not changed since last scrape, will not update")
-			return nil
+		} else {
+			t1 := lastModifiedTime.Truncate(time.Second)
+			t2 := origFeed.SourceLastModified.Truncate(time.Second)
+			if t1.Equal(t2) {
+				j.Logf("Last-Modified has not changed since last scrape, will not update")
+				return nil
+			}
 		}
 	}
 
