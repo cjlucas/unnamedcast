@@ -5,7 +5,7 @@
 			"importpath": "github.com/cjlucas/koda-go",
 			"repository": "https://github.com/cjlucas/koda-go",
 			"vcs": "git",
-			"revision": "564e187f754ed1fa54e6425edbfdf98be4efe7ee",
+			"revision": "ed9c6d1906f11a00758778583d86ea46a2628725",
 			"branch": "master",
 			"notests": true
 		},
