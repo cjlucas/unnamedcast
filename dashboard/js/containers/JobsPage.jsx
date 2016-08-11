@@ -157,26 +157,13 @@ JobEntry.propTypes = {
 };
 
 class JobsTable extends React.Component {
-  constructor(props) {
-    super(props);
-    this.state = {
-      activeRowKey: null,
-    };
-  }
-  onRowClicked(key) {
-    this.setState({
-      activeRowKey: key,
-    })
-    this.refs.modal.activate();
-  }
   render() {
-    console.log('JobsTable.render', this.state);
     var jobs = this.props.jobs.map(job => {
       return (
         <JobEntry
           key={job.id}
           id={job.id}
-          onClick={this.onRowClicked.bind(this)}
+          onClick={this.props.onRowClicked}
           queue={job.queue}
           state={job.state}
           payload={job.payload}
@@ -186,11 +173,6 @@ class JobsTable extends React.Component {
 
     return (
       <div>
-        <Modal
-          ref="modal"
-          header={`Job ${this.state.activeRowKey}`}
-          content={<div>Hello world</div>}>
-        </Modal>
         <table className="ui celled table">
           <thead>
             <tr>
@@ -212,6 +194,7 @@ class JobsTable extends React.Component {
 
 JobsTable.propTypes = {
   jobs: React.PropTypes.array.isRequired,
+  onRowClicked: React.PropTypes.func,
 };
 
 class JobsPage extends React.Component {
@@ -226,9 +209,16 @@ class JobsPage extends React.Component {
   }
 
   render() {
-    const { selectedStateFilter, queueStats, jobs } = this.props;
+    const { selectedStateFilter, queueStats, jobs, displayedJobEntry} = this.props;
     return (
       <div>
+        <Modal
+          isOpened={this.props.displayedJobEntry != null}
+          onClose={this.props.modalDismissed}
+          ref="modal"
+          header={`Job ${this.props.displayedJobEntry}`}
+          content={<div>Hello world</div>}>
+        </Modal>
         <div className="ui container">
           <h1 className="ui header">Queues</h1>
           <QueueList stats={queueStats}/>
@@ -238,7 +228,7 @@ class JobsPage extends React.Component {
           <QueueFilterButtons
             selectedButton={selectedStateFilter}
             onFilterSelected={filter => this.props.selectedFilter(filter)} />
-          <JobsTable jobs={jobs} />
+          <JobsTable jobs={jobs} onRowClicked={this.props.displayJobEntry}/>
         </div>
       </div>
     );
@@ -259,11 +249,13 @@ function mapStateToProps(state) {
     selectedStateFilter: state.selectedStateFilter,
     queueStats: state.queueStats,
     jobs: state.jobs,
+    displayedJobEntry: state.displayedJobEntry,
   };
 }
 
 function mapDispatchToProps(dispatch) {
-  return Object.assign(bindActionCreators(Actions, dispatch), {
+  var actions = bindActionCreators(Actions, dispatch);
+  return Object.assign(actions, {
     selectedFilter: filter => {
       dispatch(Actions.selectedFilter(filter));
       dispatch(Actions.requestJobs());

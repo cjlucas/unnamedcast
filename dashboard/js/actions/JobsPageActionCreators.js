@@ -31,3 +31,15 @@ export function fetchQueueStats(times) {
       .then(data => dispatch(receivedQueueStats(data)));
   };
 }
+
+export function displayJobEntry(jobId) {
+  return {
+    type: "DISPLAY_JOB_ENTRY",
+    jobId: jobId,
+  };
+}
+
+export function modalDismissed() {
+  return { type: "MODAL_DISMISSED" };
+}
+

@@ -17,7 +17,6 @@ export default class Modal extends React.Component {
 
   render() {
     const { header, content, actions } = this.props;
-    console.log('Modal.render', header);
 
     var actionsElem;
     if (actions) {
@@ -26,12 +25,14 @@ export default class Modal extends React.Component {
 
     return (
       <Portal
+        isOpened={this.props.isOpened}
         closeOnEsc
         closeOnOutsideClick
         ref="portal"
         beforeClose={(node, removeFromNode) => {
           this._hide();
           removeFromNode();
+          if (this.props.onClose) this.props.onClose();
         }}
         onOpen={this._show.bind(this)}>
         <div className="ui modal" ref="modal">
@@ -50,6 +51,8 @@ export default class Modal extends React.Component {
 }
 
 Modal.propTypes = {
+  isOpened: React.PropTypes.bool.isRequired,
+  onClose: React.PropTypes.func,
   header: React.PropTypes.string,
   content: React.PropTypes.element,
   actions: React.PropTypes.array,

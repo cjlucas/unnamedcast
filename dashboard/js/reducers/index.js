@@ -26,8 +26,20 @@ function queueStats(state = [], action) {
   return state;
 }
 
+function displayedJobEntry(state = null, action) {
+  switch (action.type) {
+  case "DISPLAY_JOB_ENTRY":
+    return action.jobId;
+  case "MODAL_DISMISSED":
+    return null;
+  default:
+    return state;
+  }
+}
+
 export default combineReducers({
   selectedStateFilter,
   jobs,
   queueStats,
+  displayedJobEntry,
 });
