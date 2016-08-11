@@ -32,10 +32,10 @@ export function fetchQueueStats(times) {
   };
 }
 
-export function displayJobEntry(jobId) {
+export function displayJobEntry(job) {
   return {
-    type: "DISPLAY_JOB_ENTRY",
-    jobId: jobId,
+    type: "DISPLAY_JOB_MODAL",
+    job: job,
   };
 }
 

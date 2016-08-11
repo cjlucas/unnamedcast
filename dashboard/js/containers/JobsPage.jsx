@@ -197,10 +197,65 @@ JobsTable.propTypes = {
   onRowClicked: React.PropTypes.func,
 };
 
+class JobModal extends React.Component {
+  render() {
+    const { job, onClose } = this.props;
+
+    var header;
+    var content;
+    if (job) {
+			const logEntries = job.log.map(log => `${log.time} ${log.line}`).join("\n");
+
+      header = `Job ${job.id}`;
+      content = (
+				<div>
+					<h4 className="ui horizontal divider header">
+						<i className="gift icon"></i>
+						Payload
+					</h4>
+					<div className="ui inverted segment mono">
+						<pre>{JSON.stringify(job.payload, undefined, 2)}</pre>
+					</div>
+					<h4 className="ui horizontal divider header">
+						<i className="browser icon"></i>
+						Log
+					</h4>
+					<div className="ui inverted segment mono">
+						<pre>{logEntries}</pre>
+					</div>
+				</div>
+      )
+    }
+
+    return (
+      <Modal
+        isOpened={job != null}
+        onClose={onClose}
+        header={header}
+        content={content}>
+      </Modal>
+    );
+  } 
+}
+
+JobModal.propTypes = {
+  job: React.PropTypes.object,
+  onClose: React.PropTypes.func,
+};
+
 class JobsPage extends React.Component {
   fetchData() {
     this.props.requestJobs();
     this.props.fetchQueueStats();
+  }
+
+  displayJobModal(id) {
+    var job;
+    this.props.jobs.forEach(function(job2) {
+      if (job2.id == id) job = job2;
+    });
+
+    this.props.displayJobEntry(job);
   }
 
   componentWillMount() {
@@ -209,16 +264,10 @@ class JobsPage extends React.Component {
   }
 
   render() {
-    const { selectedStateFilter, queueStats, jobs, displayedJobEntry} = this.props;
+    const { selectedStateFilter, queueStats, jobs, displayedJob} = this.props;
     return (
       <div>
-        <Modal
-          isOpened={this.props.displayedJobEntry != null}
-          onClose={this.props.modalDismissed}
-          ref="modal"
-          header={`Job ${this.props.displayedJobEntry}`}
-          content={<div>Hello world</div>}>
-        </Modal>
+        <JobModal job={displayedJob} onClose={this.props.modalDismissed} />
         <div className="ui container">
           <h1 className="ui header">Queues</h1>
           <QueueList stats={queueStats}/>
@@ -228,7 +277,9 @@ class JobsPage extends React.Component {
           <QueueFilterButtons
             selectedButton={selectedStateFilter}
             onFilterSelected={filter => this.props.selectedFilter(filter)} />
-          <JobsTable jobs={jobs} onRowClicked={this.props.displayJobEntry}/>
+          <JobsTable
+            jobs={jobs}
+            onRowClicked={this.displayJobModal.bind(this)}/>
         </div>
       </div>
     );
@@ -249,7 +300,7 @@ function mapStateToProps(state) {
     selectedStateFilter: state.selectedStateFilter,
     queueStats: state.queueStats,
     jobs: state.jobs,
-    displayedJobEntry: state.displayedJobEntry,
+    displayedJob: state.displayedJob,
   };
 }
 
