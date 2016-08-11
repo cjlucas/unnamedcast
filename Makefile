@@ -54,7 +54,7 @@ dev: devBuild
 
 watch:
 	@$(DC_DEV) build --no-cache watcher
-	@$(DC_DEV) run watcher webpack --watch --watch-poll
+	@$(DC_DEV) run watcher npm run watch
 
 docker: buildContext
 	@echo "Building docker image..."

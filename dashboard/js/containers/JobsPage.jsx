@@ -4,7 +4,9 @@ import _ from "lodash";
 import { bindActionCreators } from "redux";
 import { connect } from "react-redux";
 
+import Portal from "react-portal";
 import Button from "../components/Button.jsx";
+import Modal from "../components/Modal.jsx";
 
 import * as Actions from "../actions/JobsPageActionCreators";
 import {shortDuration} from "../util/time";
@@ -196,8 +198,40 @@ class JobsPage extends React.Component {
 
   render() {
     const { selectedStateFilter, queueStats, jobs } = this.props;
+    const btn = <button>Click Me</button>;
+
+    const n = Math.random()
+
     return (
       <div>
+        <Portal
+          closeOnEsc
+          openByClickOn={btn}
+          closeOnOutsideClick
+          beforeClose={(node, removeFromNode) => {
+            this.refs.modal.hide();
+            removeFromNode();
+          }}
+          onOpen={() => this.refs.modal.show() }>
+          <Modal ref="modal">
+            <i className="close icon"></i>
+            <div className="header">
+              Modal Title {n}
+            </div>
+            <div className="image content">
+              <div className="image">
+                An image can appear on left or an icon
+              </div>
+              <div className="description">
+                A description can appear on the right
+              </div>
+            </div>
+            <div className="actions">
+              <div className="ui button">Cancel</div>
+              <div className="ui button">OK</div>
+            </div>
+          </Modal>
+        </Portal>
         <div className="ui container">
           <h1 className="ui header">Queues</h1>
           <QueueList stats={queueStats}/>
