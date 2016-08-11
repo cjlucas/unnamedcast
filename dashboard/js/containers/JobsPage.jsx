@@ -1,10 +1,10 @@
 import React from "react";
+import ReactDOM from "react-dom";
 import {Bar as BarChart} from "react-chartjs";
 import _ from "lodash";
 import { bindActionCreators } from "redux";
 import { connect } from "react-redux";
 
-import Portal from "react-portal";
 import Button from "../components/Button.jsx";
 import Modal from "../components/Modal.jsx";
 
@@ -99,6 +99,13 @@ QueueFilterButtons.propTypes = {
 };
 
 class JobEntry extends React.Component {
+  onClick() {
+    const { onClick, id } = this.props;
+    if (onClick) {
+      onClick(id);
+    }
+  }
+
   render() {
     var title;
     var icon;
@@ -127,7 +134,7 @@ class JobEntry extends React.Component {
     icon += " icon";
 
     return (
-      <tr>
+      <tr onClick={this.onClick.bind(this)}>
         <td style={{textAlign: "center"}} className="collapsing">
           <i title={title} className={icon}></i>
         </td>
@@ -146,15 +153,30 @@ JobEntry.propTypes = {
   payload: React.PropTypes.object,
   modificationTime: React.PropTypes.string,
   state: React.PropTypes.string,
+  onClick: React.PropTypes.func,
 };
 
 class JobsTable extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = {
+      activeRowKey: null,
+    };
+  }
+  onRowClicked(key) {
+    this.setState({
+      activeRowKey: key,
+    })
+    this.refs.modal.activate();
+  }
   render() {
+    console.log('JobsTable.render', this.state);
     var jobs = this.props.jobs.map(job => {
       return (
         <JobEntry
           key={job.id}
           id={job.id}
+          onClick={this.onRowClicked.bind(this)}
           queue={job.queue}
           state={job.state}
           payload={job.payload}
@@ -163,20 +185,27 @@ class JobsTable extends React.Component {
     });
 
     return (
-      <table className="ui celled table">
-        <thead>
-          <tr>
-            <th>State</th>
-            <th>Job ID</th>
-            <th>Queue</th>
-            <th>Payload</th>
-            <th>Modification Time</th>
-          </tr>
-        </thead>
-        <tbody>
-          {jobs}
-        </tbody>
-      </table>
+      <div>
+        <Modal
+          ref="modal"
+          header={`Job ${this.state.activeRowKey}`}
+          content={<div>Hello world</div>}>
+        </Modal>
+        <table className="ui celled table">
+          <thead>
+            <tr>
+              <th>State</th>
+              <th>Job ID</th>
+              <th>Queue</th>
+              <th>Payload</th>
+              <th>Modification Time</th>
+            </tr>
+          </thead>
+          <tbody>
+            {jobs}
+          </tbody>
+        </table>
+      </div>
     );
   }
 }
@@ -198,40 +227,8 @@ class JobsPage extends React.Component {
 
   render() {
     const { selectedStateFilter, queueStats, jobs } = this.props;
-    const btn = <button>Click Me</button>;
-
-    const n = Math.random()
-
     return (
       <div>
-        <Portal
-          closeOnEsc
-          openByClickOn={btn}
-          closeOnOutsideClick
-          beforeClose={(node, removeFromNode) => {
-            this.refs.modal.hide();
-            removeFromNode();
-          }}
-          onOpen={() => this.refs.modal.show() }>
-          <Modal ref="modal">
-            <i className="close icon"></i>
-            <div className="header">
-              Modal Title {n}
-            </div>
-            <div className="image content">
-              <div className="image">
-                An image can appear on left or an icon
-              </div>
-              <div className="description">
-                A description can appear on the right
-              </div>
-            </div>
-            <div className="actions">
-              <div className="ui button">Cancel</div>
-              <div className="ui button">OK</div>
-            </div>
-          </Modal>
-        </Portal>
         <div className="ui container">
           <h1 className="ui header">Queues</h1>
           <QueueList stats={queueStats}/>

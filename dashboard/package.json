@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
+    "prewatch": "npm i",
     "watch": "node_modules/.bin/webpack --watch --watch-poll"
   },
   "author": "",
