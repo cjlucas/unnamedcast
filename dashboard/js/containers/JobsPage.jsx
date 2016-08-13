@@ -263,7 +263,7 @@ class JobsPage extends React.Component {
     const { selectedStateFilter, queueStats, jobs, displayedJob} = this.props;
     return (
       <div>
-        <JobModal job={displayedJob} onClose={this.props.onModalDismissed} />
+        <JobModal job={displayedJob} onClose={this.props.modalDismissed} />
         <div className="ui container">
           <h1 className="ui header">Queues</h1>
           <QueueList stats={queueStats}/>
@@ -283,9 +283,12 @@ class JobsPage extends React.Component {
 }
 
 JobsPage.propTypes = {
+  // State
   selectedStateFilter: React.PropTypes.string,
   queueStats: React.PropTypes.array,
   jobs: React.PropTypes.array,
+  
+  // Actions
   requestJobs: React.PropTypes.func,
   fetchQueueStats: React.PropTypes.func,
   selectedFilter: React.PropTypes.func,
