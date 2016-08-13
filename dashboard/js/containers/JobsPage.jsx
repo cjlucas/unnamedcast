@@ -172,22 +172,20 @@ class JobsTable extends React.Component {
     });
 
     return (
-      <div>
-        <table className="ui celled table">
-          <thead>
-            <tr>
-              <th>State</th>
-              <th>Job ID</th>
-              <th>Queue</th>
-              <th>Payload</th>
-              <th>Modification Time</th>
-            </tr>
-          </thead>
-          <tbody>
-            {jobs}
-          </tbody>
-        </table>
-      </div>
+      <table className="ui celled table">
+        <thead>
+          <tr>
+            <th>State</th>
+            <th>Job ID</th>
+            <th>Queue</th>
+            <th>Payload</th>
+            <th>Modification Time</th>
+          </tr>
+        </thead>
+        <tbody>
+          {jobs}
+        </tbody>
+      </table>
     );
   }
 }
