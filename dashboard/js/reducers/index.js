@@ -13,7 +13,17 @@ function selectedStateFilter(state = null, action) {
 
 function jobs(state = [], action) {
   if (action.type == "RECEIVED_JOBS") {
-    return action.jobs || [];
+    var jobs = action.jobs || [];
+    jobs.forEach(job => {
+      job.modification_time = new Date(job.modification_time);
+
+      job.log = job.log || [];
+      job.log.forEach(log => {
+        log.time = new Date(log.time);
+      });
+    });
+
+    return jobs;
   }
 
   return state;
@@ -26,8 +36,20 @@ function queueStats(state = [], action) {
   return state;
 }
 
+function displayedJob(state = null, action) {
+  switch (action.type) {
+  case "DISPLAY_JOB_MODAL":
+    return action.job;
+  case "MODAL_DISMISSED":
+    return null;
+  default:
+    return state;
+  }
+}
+
 export default combineReducers({
   selectedStateFilter,
   jobs,
   queueStats,
+  displayedJob,
 });

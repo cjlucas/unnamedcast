@@ -3,6 +3,7 @@ import ReactDOM from "react-dom";
 import { Router, Link } from "react-router";
 import {createStore, applyMiddleware} from "redux";
 import thunk from "redux-thunk";
+import createLogger from "redux-logger";
 
 import classNames from "classnames";
 import _ from "lodash";
@@ -10,7 +11,10 @@ import _ from "lodash";
 import reducers from "./reducers";
 import JobsPage from "./containers/JobsPage.jsx";
 
-const store = createStore(reducers, applyMiddleware(thunk));
+const store = createStore(
+  reducers,
+  applyMiddleware(thunk, createLogger())
+);
 
 class JobsPageWrapper extends React.Component {
   render() {

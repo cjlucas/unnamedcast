@@ -4,7 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "prewatch": "npm i",
+    "watch": "node_modules/.bin/webpack --watch --watch-poll"
   },
   "author": "",
   "license": "ISC",
@@ -21,9 +23,11 @@
     "react": "^15.2.0",
     "react-chartjs": "^0.7.3",
     "react-dom": "^15.2.0",
+    "react-portal": "^2.2.1",
     "react-redux": "^4.4.5",
     "react-router": "^2.5.2",
     "redux": "^3.5.2",
+    "redux-logger": "^2.6.1",
     "redux-thunk": "^2.1.0",
     "webpack": "^1.13.1"
   },

@@ -1,10 +1,12 @@
 import React from "react";
+import ReactDOM from "react-dom";
 import {Bar as BarChart} from "react-chartjs";
 import _ from "lodash";
 import { bindActionCreators } from "redux";
 import { connect } from "react-redux";
 
 import Button from "../components/Button.jsx";
+import Modal from "../components/Modal.jsx";
 
 import * as Actions from "../actions/JobsPageActionCreators";
 import {shortDuration} from "../util/time";
@@ -97,6 +99,11 @@ QueueFilterButtons.propTypes = {
 };
 
 class JobEntry extends React.Component {
+  onClick() {
+    const { onClick, id } = this.props;
+    if (onClick) onClick(id);
+  }
+
   render() {
     var title;
     var icon;
@@ -125,14 +132,14 @@ class JobEntry extends React.Component {
     icon += " icon";
 
     return (
-      <tr>
+      <tr onClick={this.onClick.bind(this)}>
         <td style={{textAlign: "center"}} className="collapsing">
           <i title={title} className={icon}></i>
         </td>
         <td className="collapsing">{this.props.id}</td>
         <td className="collapsing">{this.props.queue}</td>
         <td className="mono">{JSON.stringify(this.props.payload)}</td>
-        <td className="collapsing">{this.props.modificationTime}</td>
+        <td className="collapsing">{this.props.modificationTime.toISOString()}</td>
       </tr>
     );
   }
@@ -142,8 +149,9 @@ JobEntry.propTypes = {
   id: React.PropTypes.string,
   queue: React.PropTypes.string,
   payload: React.PropTypes.object,
-  modificationTime: React.PropTypes.string,
+  modificationTime: React.PropTypes.instanceOf(Date),
   state: React.PropTypes.string,
+  onClick: React.PropTypes.func,
 };
 
 class JobsTable extends React.Component {
@@ -153,6 +161,7 @@ class JobsTable extends React.Component {
         <JobEntry
           key={job.id}
           id={job.id}
+          onClick={this.props.onRowClicked}
           queue={job.queue}
           state={job.state}
           payload={job.payload}
@@ -181,6 +190,53 @@ class JobsTable extends React.Component {
 
 JobsTable.propTypes = {
   jobs: React.PropTypes.array.isRequired,
+  onRowClicked: React.PropTypes.func,
+};
+
+class JobModal extends React.Component {
+  render() {
+    const { job, onClose } = this.props;
+
+    var header;
+    var content;
+    if (job) {
+      const logEntries = job.log.map(log => `${log.time.toISOString()} ${log.line}`).join("\n");
+
+      header = `Job ${job.id}`;
+      content = (
+				<div>
+					<h4 className="ui horizontal divider header">
+						<i className="gift icon"></i>
+						Payload
+					</h4>
+					<div className="ui inverted segment mono">
+						<pre>{JSON.stringify(job.payload, undefined, 2)}</pre>
+					</div>
+					<h4 className="ui horizontal divider header">
+						<i className="browser icon"></i>
+						Log
+					</h4>
+					<div className="ui inverted segment mono">
+						<pre>{logEntries}</pre>
+					</div>
+				</div>
+      )
+    }
+
+    return (
+      <Modal
+        isOpened={job != null}
+        onClose={onClose}
+        header={header}
+        content={content}>
+      </Modal>
+    );
+  } 
+}
+
+JobModal.propTypes = {
+  job: React.PropTypes.object,
+  onClose: React.PropTypes.func,
 };
 
 class JobsPage extends React.Component {
@@ -189,15 +245,25 @@ class JobsPage extends React.Component {
     this.props.fetchQueueStats();
   }
 
+  displayJobModal(id) {
+    var job;
+    this.props.jobs.forEach(function(job2) {
+      if (job2.id == id) job = job2;
+    });
+
+    this.props.displayJobEntry(job);
+  }
+
   componentWillMount() {
     this.fetchData();
     setInterval(this.fetchData.bind(this), 2000);
   }
 
   render() {
-    const { selectedStateFilter, queueStats, jobs } = this.props;
+    const { selectedStateFilter, queueStats, jobs, displayedJob} = this.props;
     return (
       <div>
+        <JobModal job={displayedJob} onClose={this.props.modalDismissed} />
         <div className="ui container">
           <h1 className="ui header">Queues</h1>
           <QueueList stats={queueStats}/>
@@ -207,7 +273,9 @@ class JobsPage extends React.Component {
           <QueueFilterButtons
             selectedButton={selectedStateFilter}
             onFilterSelected={filter => this.props.selectedFilter(filter)} />
-          <JobsTable jobs={jobs} />
+          <JobsTable
+            jobs={jobs}
+            onRowClicked={this.displayJobModal.bind(this)}/>
         </div>
       </div>
     );
@@ -215,9 +283,12 @@ class JobsPage extends React.Component {
 }
 
 JobsPage.propTypes = {
+  // State
   selectedStateFilter: React.PropTypes.string,
   queueStats: React.PropTypes.array,
   jobs: React.PropTypes.array,
+  
+  // Actions
   requestJobs: React.PropTypes.func,
   fetchQueueStats: React.PropTypes.func,
   selectedFilter: React.PropTypes.func,
@@ -228,11 +299,13 @@ function mapStateToProps(state) {
     selectedStateFilter: state.selectedStateFilter,
     queueStats: state.queueStats,
     jobs: state.jobs,
+    displayedJob: state.displayedJob,
   };
 }
 
 function mapDispatchToProps(dispatch) {
-  return Object.assign(bindActionCreators(Actions, dispatch), {
+  var actions = bindActionCreators(Actions, dispatch);
+  return Object.assign(actions, {
     selectedFilter: filter => {
       dispatch(Actions.selectedFilter(filter));
       dispatch(Actions.requestJobs());

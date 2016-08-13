@@ -2,9 +2,4 @@ FROM node
 MAINTAINER Chris Lucas
 
 # Install dependencies for watcher
-RUN npm install
-RUN npm install webpack -g
-# # webpack is installed here
-# ENV PATH $PATH:/app/node_modules/.bin
-
 WORKDIR /app
