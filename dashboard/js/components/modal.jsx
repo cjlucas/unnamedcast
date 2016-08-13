@@ -36,7 +36,6 @@ export default class Modal extends React.Component {
         }}
         onOpen={this._show.bind(this)}>
         <div className="ui modal" ref="modal">
-          <i className="close icon"></i>
           <div className="header">
             {header}
           </div>
