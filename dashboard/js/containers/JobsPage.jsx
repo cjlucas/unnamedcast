@@ -141,7 +141,7 @@ class JobEntry extends React.Component {
         <td className="collapsing">{this.props.id}</td>
         <td className="collapsing">{this.props.queue}</td>
         <td className="mono">{JSON.stringify(this.props.payload)}</td>
-        <td className="collapsing">{this.props.modificationTime}</td>
+        <td className="collapsing">{this.props.modificationTime.toISOString()}</td>
       </tr>
     );
   }
@@ -204,7 +204,7 @@ class JobModal extends React.Component {
     var header;
     var content;
     if (job) {
-			const logEntries = job.log.map(log => `${log.time} ${log.line}`).join("\n");
+      const logEntries = job.log.map(log => `${log.time.toISOString()} ${log.line}`).join("\n");
 
       header = `Job ${job.id}`;
       content = (
