@@ -151,7 +151,7 @@ JobEntry.propTypes = {
   id: React.PropTypes.string,
   queue: React.PropTypes.string,
   payload: React.PropTypes.object,
-  modificationTime: React.PropTypes.string,
+  modificationTime: React.PropTypes.instanceOf(Date),
   state: React.PropTypes.string,
   onClick: React.PropTypes.func,
 };

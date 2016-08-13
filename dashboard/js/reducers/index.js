@@ -23,7 +23,7 @@ function jobs(state = [], action) {
       });
     });
 
-    return action.jobs;
+    return jobs;
   }
 
   return state;
