@@ -48,7 +48,7 @@ test: buildContext
 
 deploy: prodBuild
 	$(DC_PROD) stop web worker
-	$(DC_PROD) start web worker
+	$(DC_PROD) up -d
 
 dev: devBuild
 	$(DC_DEV) up
