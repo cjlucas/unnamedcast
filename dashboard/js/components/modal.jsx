@@ -3,16 +3,16 @@ import ReactDOM from "react-dom";
 import Portal from "react-portal";
 
 export default class Modal extends React.Component {
-  activate() {
-    this.refs.portal.openPortal();
+  _modal(action) {
+    $(this.refs.modal).modal(action);
   }
 
   _show() {
-    $(this.refs.modal).modal('show');
+    this._modal('show');
   }
   
   _hide() {
-    $(this.refs.modal).modal('hide');
+    this._modal('hide');
   }
 
   render() {

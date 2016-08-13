@@ -101,9 +101,7 @@ QueueFilterButtons.propTypes = {
 class JobEntry extends React.Component {
   onClick() {
     const { onClick, id } = this.props;
-    if (onClick) {
-      onClick(id);
-    }
+    if (onClick) onClick(id);
   }
 
   render() {
@@ -265,7 +263,7 @@ class JobsPage extends React.Component {
     const { selectedStateFilter, queueStats, jobs, displayedJob} = this.props;
     return (
       <div>
-        <JobModal job={displayedJob} onClose={this.props.modalDismissed} />
+        <JobModal job={displayedJob} onClose={this.props.onModalDismissed} />
         <div className="ui container">
           <h1 className="ui header">Queues</h1>
           <QueueList stats={queueStats}/>
