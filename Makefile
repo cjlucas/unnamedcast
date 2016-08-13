@@ -47,7 +47,8 @@ test: buildContext
 	@${DC_DEV} run -e DB_URL=mongodb://db/casttest web make localTest
 
 deploy: prodBuild
-	$(DC_PROD) restart web worker
+	$(DC_PROD) stop web worker
+	$(DC_PROD) start web worker
 
 dev: devBuild
 	$(DC_DEV) up
