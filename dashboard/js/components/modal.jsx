@@ -1,18 +1,17 @@
 import React from "react";
-import ReactDOM from "react-dom";
 import Portal from "react-portal";
 
 export default class Modal extends React.Component {
   _modal(action) {
-    $(this.refs.modal).modal(action);
+    $(this.refs.modal).modal(action); // eslint-disable-line
   }
 
   _show() {
-    this._modal('show');
+    this._modal("show");
   }
   
   _hide() {
-    this._modal('hide');
+    this._modal("hide");
   }
 
   render() {
@@ -55,4 +54,4 @@ Modal.propTypes = {
   header: React.PropTypes.string,
   content: React.PropTypes.element,
   actions: React.PropTypes.array,
-}
+};

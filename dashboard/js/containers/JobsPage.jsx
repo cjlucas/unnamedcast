@@ -1,5 +1,4 @@
 import React from "react";
-import ReactDOM from "react-dom";
 import {Bar as BarChart} from "react-chartjs";
 import _ from "lodash";
 import { bindActionCreators } from "redux";
@@ -220,7 +219,7 @@ class JobModal extends React.Component {
 						<pre>{logEntries}</pre>
 					</div>
 				</div>
-      )
+      );
     }
 
     return (
@@ -287,11 +286,14 @@ JobsPage.propTypes = {
   selectedStateFilter: React.PropTypes.string,
   queueStats: React.PropTypes.array,
   jobs: React.PropTypes.array,
+  displayedJob: React.PropTypes.object,
   
   // Actions
   requestJobs: React.PropTypes.func,
   fetchQueueStats: React.PropTypes.func,
   selectedFilter: React.PropTypes.func,
+  displayJobEntry: React.PropTypes.func,
+  modalDismissed: React.PropTypes.func,
 };
 
 function mapStateToProps(state) {
