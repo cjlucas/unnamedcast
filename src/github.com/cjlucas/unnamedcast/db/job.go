@@ -13,7 +13,7 @@ type JobLogEntry struct {
 
 type Job struct {
 	ID       ID          `json:"id" bson:"_id,omitempty"`
-	KodaID   int         `json:"koda_id" bson:"koda_id" index:",unique"`
+	KodaID   int         `json:"koda_id" bson:"koda_id" index:"koda_id"`
 	Priority int         `json:"priority" bson:"priority"`
 	Queue    string      `json:"queue" bson:"queue" index:"queue"`
 	State    string      `json:"state" bson:"state" index:"state"`

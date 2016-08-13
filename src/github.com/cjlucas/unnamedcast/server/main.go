@@ -154,7 +154,8 @@ func main() {
 	}
 
 	dbConn, err := db.New(db.Config{
-		URL: getenv("DB_URL", "mongodb://localhost/cast"),
+		URL:                getenv("DB_URL", "mongodb://localhost/cast"),
+		ForceIndexCreation: true,
 	})
 	if err != nil {
 		panic(fmt.Errorf("Failed to connect to DB: %s", err))
