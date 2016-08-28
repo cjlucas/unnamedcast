@@ -13,7 +13,6 @@ import (
 	"github.com/cjlucas/unnamedcast/api"
 	"github.com/cjlucas/unnamedcast/worker/itunes"
 	"github.com/cjlucas/unnamedcast/worker/rss"
-	"github.com/nfnt/resize"
 
 	_ "image/jpeg"
 	_ "image/png"
@@ -241,19 +240,26 @@ func (s colorSlice) Less(i, j int) bool { return s[i].Count < s[j].Count }
 
 // detectImageColors returns a slice of colors sorted from most frequent to least
 func (w *UpdateFeedWorker) detectImageColors(img image.Image) []api.RGB {
-	img = resize.Resize(200, 200, img, resize.Lanczos3)
+	//img = resize.Resize(200, 200, img, resize.Lanczos3)
+
+	const factor float32 = (math.MaxUint8 * 1.0) / math.MaxUint16
+	const compressFactor float32 = 0.1 // compress range by
+
+	// TODO: next thing to do, store actual freqMap along with
+	// compressedFreqMap. After the counts are taken with the compressed
+	// colors, iterate through the actual freqMap to find its compressed color
+	// In the array, replaced the compressed color with the actual color
 
 	b := img.Bounds()
 	freqMap := make(map[api.RGB]int)
 	for i := b.Min.X; i < b.Max.X; i++ {
 		for j := b.Min.Y; j < b.Max.Y; j++ {
 			r, g, b, _ := img.At(i, j).RGBA()
-			const factor float32 = (math.MaxUint8 * 1.0) / math.MaxUint16
 
 			rgb := api.RGB{
-				Red:   int(float32(r) * factor),
-				Green: int(float32(g) * factor),
-				Blue:  int(float32(b) * factor),
+				Red:   int(float32(r) * factor * compressFactor),
+				Green: int(float32(g) * factor * compressFactor),
+				Blue:  int(float32(b) * factor * compressFactor),
 			}
 			freqMap[rgb] = freqMap[rgb] + 1
 		}
@@ -262,7 +268,11 @@ func (w *UpdateFeedWorker) detectImageColors(img image.Image) []api.RGB {
 	var colors colorSlice
 	for rgb, freq := range freqMap {
 		colors = append(colors, colorSliceEntry{
-			RGB:   rgb,
+			RGB: api.RGB{
+				Red:   int(float32(rgb.Red) / compressFactor),
+				Green: int(float32(rgb.Green) / compressFactor),
+				Blue:  int(float32(rgb.Blue) / compressFactor),
+			},
 			Count: freq,
 		})
 
