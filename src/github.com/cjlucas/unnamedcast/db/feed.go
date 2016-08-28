@@ -7,6 +7,12 @@ import (
 	"github.com/cjlucas/unnamedcast/db/utctime"
 )
 
+type RGB struct {
+	Red   int `json:"red" bson:"red"`
+	Green int `json:"green" bson:"green"`
+	Blue  int `json:"blue" bson:"blue"`
+}
+
 type Feed struct {
 	ID                 ID           `bson:"_id,omitempty" json:"id"`
 	Title              string       `json:"title" bson:"title" index:",text"`
@@ -26,6 +32,8 @@ type Feed struct {
 		Name          string   `json:"name" bson:"name"`
 		Subcategories []string `json:"subcategories" bson:"subcategories"`
 	} `json:"category"`
+
+	ImageColors []RGB `json:"image_colors" bson:"image_colors"`
 }
 
 type Item struct {

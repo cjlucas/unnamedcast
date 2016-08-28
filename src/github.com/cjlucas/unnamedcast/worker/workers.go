@@ -2,14 +2,21 @@ package main
 
 import (
 	"fmt"
+	"image"
+	"math"
 	"net/http"
 	"regexp"
+	"sort"
 	"strconv"
 	"time"
 
 	"github.com/cjlucas/unnamedcast/api"
 	"github.com/cjlucas/unnamedcast/worker/itunes"
 	"github.com/cjlucas/unnamedcast/worker/rss"
+	"github.com/nfnt/resize"
+
+	_ "image/jpeg"
+	_ "image/png"
 )
 
 var iTunesIDRegexp = regexp.MustCompile(`/id(\d+)`)
@@ -205,6 +212,78 @@ func (w *UpdateFeedWorker) guidItemsMap(items []api.Item) map[string]api.Item {
 	return guidMap
 }
 
+func (w *UpdateFeedWorker) fetchImage(url string) (image.Image, error) {
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, err
+	}
+
+	defer resp.Body.Close()
+
+	img, _, err := image.Decode(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	return img, nil
+}
+
+type colorSliceEntry struct {
+	RGB   api.RGB
+	Count int
+}
+
+type colorSlice []colorSliceEntry
+
+func (s colorSlice) Len() int           { return len(s) }
+func (s colorSlice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+func (s colorSlice) Less(i, j int) bool { return s[i].Count < s[j].Count }
+
+// detectImageColors returns a slice of colors sorted from most frequent to least
+func (w *UpdateFeedWorker) detectImageColors(img image.Image) []api.RGB {
+	img = resize.Resize(200, 200, img, resize.Lanczos3)
+
+	b := img.Bounds()
+	freqMap := make(map[api.RGB]int)
+	for i := b.Min.X; i < b.Max.X; i++ {
+		for j := b.Min.Y; j < b.Max.Y; j++ {
+			r, g, b, _ := img.At(i, j).RGBA()
+			const factor float32 = (math.MaxUint8 * 1.0) / math.MaxUint16
+
+			rgb := api.RGB{
+				Red:   int(float32(r) * factor),
+				Green: int(float32(g) * factor),
+				Blue:  int(float32(b) * factor),
+			}
+			freqMap[rgb] = freqMap[rgb] + 1
+		}
+	}
+
+	var colors colorSlice
+	for rgb, freq := range freqMap {
+		colors = append(colors, colorSliceEntry{
+			RGB:   rgb,
+			Count: freq,
+		})
+
+	}
+
+	sort.Sort(sort.Reverse(colors))
+
+	outLen := len(colors)
+	outLenMax := 50
+	if outLen > outLenMax {
+		outLen = outLenMax
+	}
+
+	out := make([]api.RGB, outLen)
+	for i := 0; i < outLen; i++ {
+		out[i] = colors[i].RGB
+	}
+
+	return out
+}
+
 func (w *UpdateFeedWorker) Work(j *Job) error {
 	var payload UpdateFeedPayload
 	if err := j.KodaJob.UnmarshalPayload(&payload); err != nil {
@@ -292,6 +371,15 @@ func (w *UpdateFeedWorker) Work(j *Job) error {
 	// }
 
 	feed := feedFromRSS(doc)
+
+	if feed.ImageURL != "" {
+		img, err := w.fetchImage(feed.ImageURL)
+		j.Logf("Fetched image with error: %v", err)
+		if err == nil {
+			feed.ImageColors = w.detectImageColors(img)
+		}
+	}
+
 	feed.ID = payload.FeedID
 	feed.URL = origFeed.URL
 	feed.ITunesRatingCount = origFeed.ITunesRatingCount
