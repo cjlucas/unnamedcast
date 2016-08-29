@@ -321,8 +321,6 @@ func (l *colorFrequencyList) SortedColors() []api.RGB {
 
 // detectImageColors returns a slice of colors sorted from most frequent to least
 func (w *UpdateFeedWorker) detectImageColors(img image.Image) []api.RGB {
-	//img = resize.Resize(200, 200, img, resize.Lanczos3)
-
 	freqList := colorFrequencyList{CompressionFactor: 0.1}
 
 	b := img.Bounds()
