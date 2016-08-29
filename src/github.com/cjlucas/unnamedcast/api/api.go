@@ -37,6 +37,12 @@ type ItemState struct {
 	ModificationTime time.Time `json:"modification_time"`
 }
 
+type RGB struct {
+	Red   int `json:"red"`
+	Green int `json:'green'`
+	Blue  int `json:"blue"`
+}
+
 type Feed struct {
 	ID                 string    `json:"id,omitempty"`
 	Title              string    `json:"title"`
@@ -57,6 +63,8 @@ type Feed struct {
 		Name          string   `json:"name"`
 		Subcategories []string `json:"subcategories"`
 	} `json:"category"`
+
+	ImageColors []RGB `json:"image_colors"`
 }
 
 type Item struct {

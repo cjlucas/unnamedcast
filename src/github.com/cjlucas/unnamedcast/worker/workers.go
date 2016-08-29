@@ -2,14 +2,21 @@ package main
 
 import (
 	"fmt"
+	"image"
+	"math"
 	"net/http"
 	"regexp"
+	"sort"
 	"strconv"
 	"time"
 
 	"github.com/cjlucas/unnamedcast/api"
 	"github.com/cjlucas/unnamedcast/worker/itunes"
 	"github.com/cjlucas/unnamedcast/worker/rss"
+
+	"image/color"
+	_ "image/jpeg"
+	_ "image/png"
 )
 
 var iTunesIDRegexp = regexp.MustCompile(`/id(\d+)`)
@@ -205,6 +212,133 @@ func (w *UpdateFeedWorker) guidItemsMap(items []api.Item) map[string]api.Item {
 	return guidMap
 }
 
+func (w *UpdateFeedWorker) fetchImage(url string) (image.Image, error) {
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, err
+	}
+
+	defer resp.Body.Close()
+
+	img, _, err := image.Decode(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	return img, nil
+}
+
+type colorSliceEntry struct {
+	RGB   api.RGB
+	Count int
+}
+
+type colorSlice []colorSliceEntry
+
+func (s colorSlice) Len() int           { return len(s) }
+func (s colorSlice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+func (s colorSlice) Less(i, j int) bool { return s[i].Count < s[j].Count }
+
+type colorFrequencyList struct {
+	CompressionFactor float64
+
+	initialized     bool
+	freqMap         map[api.RGB]int
+	compressFreqMap map[api.RGB]int
+}
+
+func (l *colorFrequencyList) init() {
+	l.freqMap = make(map[api.RGB]int)
+	l.compressFreqMap = make(map[api.RGB]int)
+}
+
+func (l *colorFrequencyList) compressRGB(rgb api.RGB) api.RGB {
+	return api.RGB{
+		Red:   int(float64(rgb.Red) * l.CompressionFactor),
+		Green: int(float64(rgb.Green) * l.CompressionFactor),
+		Blue:  int(float64(rgb.Blue) * l.CompressionFactor),
+	}
+}
+
+func (l *colorFrequencyList) Add(c color.Color) {
+	if !l.initialized {
+		l.init()
+		l.initialized = true
+	}
+
+	const factor float64 = (math.MaxUint8 * 1.0) / math.MaxUint16
+
+	r, g, b, _ := c.RGBA()
+	rgb := api.RGB{
+		Red:   int(float64(r) * factor),
+		Green: int(float64(g) * factor),
+		Blue:  int(float64(b) * factor),
+	}
+	compressedRGB := l.compressRGB(rgb)
+
+	l.freqMap[rgb] = l.freqMap[rgb] + 1
+	l.compressFreqMap[compressedRGB] = l.compressFreqMap[compressedRGB] + 1
+}
+
+func (l *colorFrequencyList) colorSlice(freqMap map[api.RGB]int) colorSlice {
+	var colors colorSlice
+	for rgb, freq := range freqMap {
+		colors = append(colors, colorSliceEntry{RGB: rgb, Count: freq})
+	}
+
+	return colors
+}
+
+// SortColors returns the array of colors, most common color first.
+func (l *colorFrequencyList) SortedColors() []api.RGB {
+	normalizedFreqMap := make(map[api.RGB]int)
+	for k, v := range l.compressFreqMap {
+		normalizedFreqMap[k] = v
+	}
+
+	colors := l.colorSlice(l.freqMap)
+	for _, entry := range colors {
+		rgb := l.compressRGB(entry.RGB)
+		cnt, ok := normalizedFreqMap[rgb]
+		if !ok {
+			continue
+		}
+
+		delete(normalizedFreqMap, rgb)
+		normalizedFreqMap[entry.RGB] = cnt
+	}
+
+	colors = l.colorSlice(normalizedFreqMap)
+	sort.Sort(sort.Reverse(colors))
+
+	out := make([]api.RGB, len(colors))
+	for i := range colors {
+		out[i] = colors[i].RGB
+	}
+
+	return out
+}
+
+// detectImageColors returns a slice of colors sorted from most frequent to least
+func (w *UpdateFeedWorker) detectImageColors(img image.Image) []api.RGB {
+	freqList := colorFrequencyList{CompressionFactor: 0.1}
+
+	b := img.Bounds()
+	for i := b.Min.X; i < b.Max.X; i++ {
+		for j := b.Min.Y; j < b.Max.Y; j++ {
+			freqList.Add(img.At(i, j))
+		}
+	}
+
+	colors := freqList.SortedColors()
+	max := 50
+	if len(colors) < max {
+		max = len(colors)
+	}
+
+	return colors[:max]
+}
+
 func (w *UpdateFeedWorker) Work(j *Job) error {
 	var payload UpdateFeedPayload
 	if err := j.KodaJob.UnmarshalPayload(&payload); err != nil {
@@ -292,6 +426,15 @@ func (w *UpdateFeedWorker) Work(j *Job) error {
 	// }
 
 	feed := feedFromRSS(doc)
+
+	if feed.ImageURL != "" {
+		img, err := w.fetchImage(feed.ImageURL)
+		j.Logf("Fetched image with error: %v", err)
+		if err == nil {
+			feed.ImageColors = w.detectImageColors(img)
+		}
+	}
+
 	feed.ID = payload.FeedID
 	feed.URL = origFeed.URL
 	feed.ITunesRatingCount = origFeed.ITunesRatingCount
