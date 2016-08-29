@@ -200,6 +200,7 @@ type UpdateFeedWorker struct {
 
 type UpdateFeedPayload struct {
 	FeedID string `json:"feed_id"`
+	Force  bool   `json:"force"`
 }
 
 func (w *UpdateFeedWorker) guidItemsMap(items []api.Item) map[string]api.Item {
@@ -357,13 +358,13 @@ func (w *UpdateFeedWorker) Work(j *Job) error {
 	defer resp.Body.Close()
 
 	etag := resp.Header.Get("ETag")
-	if etag != "" && etag == origFeed.SourceETag {
+	if !payload.Force && etag != "" && etag == origFeed.SourceETag {
 		j.Logf("ETag has not changed since last scrape, will not update")
 		return nil
 	}
 
 	var lastModifiedTime time.Time
-	if val := resp.Header.Get("Last-Modified"); val != "" {
+	if val := resp.Header.Get("Last-Modified"); !payload.Force && val != "" {
 		lastModifiedTime, err = time.Parse(time.RFC1123, val)
 		if err != nil {
 			j.Logf("Failed to parse Last-Modified header: %s", err)
