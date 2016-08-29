@@ -29,7 +29,11 @@ func main() {
 	}
 
 	fmt.Println(feed)
-	koda.Submit("update-feed", 100, map[string]string{
-		"feed_id": feed.ID,
+	apiTransport.CreateJob(&api.Job{
+		Queue:    "update-feed",
+		Priority: 100,
+		Payload: map[string]string{
+			"feed_id": feed.ID,
+		},
 	})
 }
