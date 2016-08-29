@@ -250,7 +250,6 @@ type colorFrequencyList struct {
 func (l *colorFrequencyList) init() {
 	l.freqMap = make(map[api.RGB]int)
 	l.compressFreqMap = make(map[api.RGB]int)
-	l.initialized = true
 }
 
 func (l *colorFrequencyList) compressRGB(rgb api.RGB) api.RGB {
@@ -264,6 +263,7 @@ func (l *colorFrequencyList) compressRGB(rgb api.RGB) api.RGB {
 func (l *colorFrequencyList) Add(c color.Color) {
 	if !l.initialized {
 		l.init()
+		l.initialized = true
 	}
 
 	const factor float64 = (math.MaxUint8 * 1.0) / math.MaxUint16
