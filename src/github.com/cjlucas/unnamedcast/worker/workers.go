@@ -14,6 +14,7 @@ import (
 	"github.com/cjlucas/unnamedcast/worker/itunes"
 	"github.com/cjlucas/unnamedcast/worker/rss"
 
+	"image/color"
 	_ "image/jpeg"
 	_ "image/png"
 )
@@ -238,60 +239,106 @@ func (s colorSlice) Len() int           { return len(s) }
 func (s colorSlice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 func (s colorSlice) Less(i, j int) bool { return s[i].Count < s[j].Count }
 
-// detectImageColors returns a slice of colors sorted from most frequent to least
-func (w *UpdateFeedWorker) detectImageColors(img image.Image) []api.RGB {
-	//img = resize.Resize(200, 200, img, resize.Lanczos3)
+type colorFrequencyList struct {
+	CompressionFactor float64
 
-	const factor float32 = (math.MaxUint8 * 1.0) / math.MaxUint16
-	const compressFactor float32 = 0.1 // compress range by
+	initialized     bool
+	freqMap         map[api.RGB]int
+	compressFreqMap map[api.RGB]int
+}
 
-	// TODO: next thing to do, store actual freqMap along with
-	// compressedFreqMap. After the counts are taken with the compressed
-	// colors, iterate through the actual freqMap to find its compressed color
-	// In the array, replaced the compressed color with the actual color
+func (l *colorFrequencyList) init() {
+	l.freqMap = make(map[api.RGB]int)
+	l.compressFreqMap = make(map[api.RGB]int)
+	l.initialized = true
+}
 
-	b := img.Bounds()
-	freqMap := make(map[api.RGB]int)
-	for i := b.Min.X; i < b.Max.X; i++ {
-		for j := b.Min.Y; j < b.Max.Y; j++ {
-			r, g, b, _ := img.At(i, j).RGBA()
+func (l *colorFrequencyList) compressRGB(rgb api.RGB) api.RGB {
+	return api.RGB{
+		Red:   int(float64(rgb.Red) * l.CompressionFactor),
+		Green: int(float64(rgb.Green) * l.CompressionFactor),
+		Blue:  int(float64(rgb.Blue) * l.CompressionFactor),
+	}
+}
 
-			rgb := api.RGB{
-				Red:   int(float32(r) * factor * compressFactor),
-				Green: int(float32(g) * factor * compressFactor),
-				Blue:  int(float32(b) * factor * compressFactor),
-			}
-			freqMap[rgb] = freqMap[rgb] + 1
-		}
+func (l *colorFrequencyList) Add(c color.Color) {
+	if !l.initialized {
+		l.init()
 	}
 
+	const factor float64 = (math.MaxUint8 * 1.0) / math.MaxUint16
+
+	r, g, b, _ := c.RGBA()
+	rgb := api.RGB{
+		Red:   int(float64(r) * factor),
+		Green: int(float64(g) * factor),
+		Blue:  int(float64(b) * factor),
+	}
+	compressedRGB := l.compressRGB(rgb)
+
+	l.freqMap[rgb] = l.freqMap[rgb] + 1
+	l.compressFreqMap[compressedRGB] = l.compressFreqMap[compressedRGB] + 1
+}
+
+func (l *colorFrequencyList) colorSlice(freqMap map[api.RGB]int) colorSlice {
 	var colors colorSlice
 	for rgb, freq := range freqMap {
-		colors = append(colors, colorSliceEntry{
-			RGB: api.RGB{
-				Red:   int(float32(rgb.Red) / compressFactor),
-				Green: int(float32(rgb.Green) / compressFactor),
-				Blue:  int(float32(rgb.Blue) / compressFactor),
-			},
-			Count: freq,
-		})
-
+		colors = append(colors, colorSliceEntry{RGB: rgb, Count: freq})
 	}
 
+	return colors
+}
+
+// SortColors returns the array of colors, most common color first.
+func (l *colorFrequencyList) SortedColors() []api.RGB {
+	normalizedFreqMap := make(map[api.RGB]int)
+	for k, v := range l.compressFreqMap {
+		normalizedFreqMap[k] = v
+	}
+
+	colors := l.colorSlice(l.freqMap)
+	for _, entry := range colors {
+		rgb := l.compressRGB(entry.RGB)
+		cnt, ok := normalizedFreqMap[rgb]
+		if !ok {
+			continue
+		}
+
+		delete(normalizedFreqMap, rgb)
+		normalizedFreqMap[entry.RGB] = cnt
+	}
+
+	colors = l.colorSlice(normalizedFreqMap)
 	sort.Sort(sort.Reverse(colors))
 
-	outLen := len(colors)
-	outLenMax := 50
-	if outLen > outLenMax {
-		outLen = outLenMax
-	}
-
-	out := make([]api.RGB, outLen)
-	for i := 0; i < outLen; i++ {
+	out := make([]api.RGB, len(colors))
+	for i := range colors {
 		out[i] = colors[i].RGB
 	}
 
 	return out
+}
+
+// detectImageColors returns a slice of colors sorted from most frequent to least
+func (w *UpdateFeedWorker) detectImageColors(img image.Image) []api.RGB {
+	//img = resize.Resize(200, 200, img, resize.Lanczos3)
+
+	freqList := colorFrequencyList{CompressionFactor: 0.1}
+
+	b := img.Bounds()
+	for i := b.Min.X; i < b.Max.X; i++ {
+		for j := b.Min.Y; j < b.Max.Y; j++ {
+			freqList.Add(img.At(i, j))
+		}
+	}
+
+	colors := freqList.SortedColors()
+	max := 50
+	if len(colors) < max {
+		max = len(colors)
+	}
+
+	return colors[:max]
 }
 
 func (w *UpdateFeedWorker) Work(j *Job) error {
