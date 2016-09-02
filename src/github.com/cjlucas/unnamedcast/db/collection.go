@@ -59,11 +59,21 @@ func (c collection) FindByID(id ID) *Result {
 }
 
 func (c collection) createIndex(index Index, force bool) error {
-	if force {
-		c.c.DropIndexName(index.Name)
+	idx := mgoIndexForIndex(index)
+
+	// EnsureIndex will return an error if the index already exists.
+	err := c.c.EnsureIndex(idx)
+	if err == nil {
+		return nil
 	}
 
-	return c.c.EnsureIndex(mgoIndexForIndex(index))
+	if force {
+		c.c.DropIndexName(index.Name)
+	} else {
+		return err
+	}
+
+	return c.c.EnsureIndex(idx)
 }
 
 // CreateIndexes creates all indexes in ModelInfo. If force is set, the existing
