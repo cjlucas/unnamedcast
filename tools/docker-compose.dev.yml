@@ -45,6 +45,7 @@ services:
     image: redis
     ports:
       - "12101:6379"
+    command: redis-server --appendonly yes
   mongodb:
     image: mongo
     ports:
